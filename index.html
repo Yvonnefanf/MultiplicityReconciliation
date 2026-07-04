@@ -496,14 +496,14 @@
     .proxy-moves { display: grid; gap: 4px; margin-top: 8px; }
     .history { align-content: start; display: grid; flex: 1 1 auto; gap: 8px; min-height: 0; overflow: auto; padding-right: 2px; }
     .history-item { border-radius: 12px; padding: 9px 10px; font-size: 12px; line-height: 1.35; max-width: 92%; }
-    .history-item.proxy.actionable { background: #f7f2ea; border-color: #d8cfbf; color: #2d271f; }
-    .history-item.proxy .primary-button { background: var(--brown); border-color: var(--brown); color: #fff; }
-    .history-item.proxy .primary-button:hover { background: var(--brown); border-color: var(--brown); color: #fff; }
+    .history-item.proxy.actionable { background: #edf4ea; border-color: #cbdcc7; color: #2d271f; }
+    .history-item.proxy .primary-button { background: var(--green); border-color: var(--green); color: #fff; }
+    .history-item.proxy .primary-button:hover { background: var(--green); border-color: var(--green); color: #fff; }
     .history-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
-    .history-item.user { justify-self: end; background: #ece4d7; border: 1px solid #d6c8b7; }
-    .history-item.proxy { justify-self: start; background: #f7f2ea; border: 1px solid #d8cfbf; }
+    .history-item.user { justify-self: end; background: #eaf1f6; border: 1px solid #c7d7e4; }
+    .history-item.proxy { justify-self: start; background: #edf4ea; border: 1px solid #cbdcc7; }
     .history-item.system { justify-self: center; background: #eee7dc; border: 1px solid var(--line); color: var(--muted); }
-    .history-item.thinking { justify-self: start; background: #f7f2ea; border: 1px dashed #b9ac9a; color: var(--muted); }
+    .history-item.thinking { justify-self: start; background: #edf4ea; border: 1px dashed #a9c3a7; color: var(--muted); }
     .thinking-dots::after { content: ""; animation: dots 1.2s steps(4, end) infinite; }
     @keyframes dots { 0% { content: ""; } 25% { content: "."; } 50% { content: ".."; } 75%, 100% { content: "..."; } }
     .history-title { font-weight: 850; margin-bottom: 3px; }
@@ -1799,10 +1799,22 @@
       renderHistory();
     }
 
+    function scrollHistoryToBottom() {
+      if (!negotiationHistory) return;
+      const scroll = () => {
+        negotiationHistory.scrollTop = negotiationHistory.scrollHeight;
+      };
+      requestAnimationFrame(() => {
+        scroll();
+        setTimeout(scroll, 40);
+      });
+    }
+
     function renderHistory() {
       if (!negotiationHistory) return;
       if (!negotiationEvents.length) {
         negotiationHistory.innerHTML = `<div class="empty-history">No history</div>`;
+        scrollHistoryToBottom();
         return;
       }
       negotiationHistory.innerHTML = negotiationEvents.map((event, index) => `
@@ -1812,10 +1824,7 @@
           ${event.weights ? `<div class="history-weights">${shortWeights(event.weights)}</div>` : ""}
         </div>
       `).join("");
-      requestAnimationFrame(() => {
-        const scrollTarget = chatWindow || negotiationHistory;
-        scrollTarget.scrollTop = scrollTarget.scrollHeight;
-      });
+      scrollHistoryToBottom();
     }
 
     function showProxyThinking() {
