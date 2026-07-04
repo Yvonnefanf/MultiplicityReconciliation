@@ -775,6 +775,13 @@
       local_consistency: "Individual Fairness",
       counterfactual_fairness: "CF Fairness"
     };
+    const DEFAULT_OPENAI_PROXY_URL = "https://multiplicity-reconciliation-proxy.yifan-multiplicity.workers.dev/negotiate";
+    const OPENAI_PROXY_URL_STORAGE_KEY = "OPENAI_PROXY_URL";
+    const configuredProxyUrl = new URLSearchParams(window.location.search).get("proxy");
+    if (configuredProxyUrl) {
+      localStorage.setItem(OPENAI_PROXY_URL_STORAGE_KEY, configuredProxyUrl);
+    }
+    const OPENAI_PROXY_URL = window.OPENAI_PROXY_URL || configuredProxyUrl || localStorage.getItem(OPENAI_PROXY_URL_STORAGE_KEY) || DEFAULT_OPENAI_PROXY_URL;
     const criteriaShortLabels = {
       accuracy: "Acc",
       tpr: "TPR",
@@ -2150,7 +2157,7 @@
         .sort((a, b) => Math.abs(b.delta) - Math.abs(a.delta));
     }
 
-    async function negotiateWithProxy(offerWeights) {
+    async function negotiateWithStaticProxy(offerWeights, fallbackReason = null) {
       const offer = decisionEffectiveWeights(offerWeights);
       const ideal = decisionEffectiveWeights(proxyIdealWeights());
       const distance = weightDistance(offer, ideal);
@@ -2167,6 +2174,9 @@
           : normalizeWeights(Object.fromEntries(criteriaOrder.map((key) => [key, 0.55 * (offer[key] || 0) + 0.45 * (ideal[key] || 0)])));
         explanationText = describeProxyInitialOffer(target, offer);
       }
+      if (fallbackReason) {
+        explanationText = `${explanationText}<br><br><span class="muted">OpenAI proxy fallback: ${escapeHtml(fallbackReason)}</span>`;
+      }
 
       const expandedTarget = expandEffectiveWeights(target, proxyWeights);
       const moves = staticMoves(offer, target);
@@ -2176,8 +2186,98 @@
         counterWeights: expandedTarget,
         moves,
         explanation: { source: "static", text: explanationText },
-        control: { source: "static_export", distance_from_proxy: distance, same_decision: sameDecision },
+        control: { source: "static_export", distance_from_proxy: distance, same_decision: sameDecision, fallback_reason: fallbackReason },
       };
+    }
+
+    function compactHistoryForProxy() {
+      return negotiationEvents.slice(-8).map((event) => ({
+        role: event.role,
+        title: event.title,
+        text: String(event.text || "").replace(/<[^>]*>/g, " ").replace(/\s+/g, " ").trim().slice(0, 700),
+        weights: event.weights ? decisionEffectiveWeights(event.weights) : null,
+      }));
+    }
+
+    function compactGroupsForProxy(rowWeights) {
+      if (!activeData?.reconciliation?.groups) return [];
+      return activeData.reconciliation.groups.map((group) => ({
+        class_id: group.class_id,
+        label: group.label,
+        count: group.count,
+        criteria: group.criteria,
+        user_reliability: computeReliability(group, rowWeights),
+        proxy_reliability: computeReliability(group, proxyIdealWeights()),
+        fairness_components: group.fairness_components || null,
+      })).sort((a, b) => a.class_id - b.class_id);
+    }
+
+    function buildProxyPayload(offerWeights) {
+      const offer = decisionEffectiveWeights(offerWeights);
+      const datasetMetaItem = datasetMeta.find((item) => item.key === datasetSelect.value) || {};
+      return {
+        dataset: datasetSelect.value,
+        dataset_label: datasetMetaItem.label || activeData?.dataset_label || datasetSelect.value,
+        case_index: Number(caseSelect.value),
+        round: negotiationRound + 1,
+        user_role: personaTitle(currentPersona || { label: "User" }),
+        proxy_role: personaTitle(proxyPersona || { label: "Proxy" }),
+        criteria_labels: criteriaLabels,
+        user_weights: offer,
+        proxy_weights: decisionEffectiveWeights(proxyIdealWeights()),
+        groups: compactGroupsForProxy(offer),
+        case_features: activeData?.case?.features || {},
+        history: compactHistoryForProxy(),
+      };
+    }
+
+    function normalizeProxyResponse(raw, offerWeights) {
+      const offer = decisionEffectiveWeights(offerWeights);
+      const rawWeights = raw?.counter_weights || raw?.counterWeights || offer;
+      const effectiveCounter = normalizeWeights(rawWeights);
+      const expandedCounter = expandEffectiveWeights(effectiveCounter, proxyWeights);
+      const moves = Array.isArray(raw?.moves) && raw.moves.length
+        ? raw.moves.map((move) => ({
+            key: move.key,
+            label: move.label || criteriaLabels[move.key] || move.key,
+            from: Number.isFinite(Number(move.from)) ? Number(move.from) : offer[move.key],
+            to: Number.isFinite(Number(move.to)) ? Number(move.to) : effectiveCounter[move.key],
+            delta: Number.isFinite(Number(move.delta)) ? Number(move.delta) : (effectiveCounter[move.key] || 0) - (offer[move.key] || 0),
+          })).filter((move) => criteriaOrder.includes(move.key))
+        : staticMoves(offer, effectiveCounter);
+      return {
+        accepted: Boolean(raw?.accepted),
+        counterWeights: expandedCounter,
+        moves,
+        explanation: {
+          source: raw?.explanation?.source || "openai",
+          text: raw?.explanation?.text || "I generated a prompt-based counter-offer from the proxy role's priorities.",
+        },
+        control: { ...(raw?.control || {}), source: raw?.control?.source || "cloudflare_worker" },
+      };
+    }
+
+    async function negotiateWithProxy(offerWeights) {
+      if (!OPENAI_PROXY_URL) {
+        return negotiateWithStaticProxy(offerWeights, "Worker URL is not configured. Add ?proxy=https://<worker>.workers.dev/negotiate once deployed.");
+      }
+      try {
+        const response = await fetch(OPENAI_PROXY_URL, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(buildProxyPayload(offerWeights)),
+        });
+        if (!response.ok) {
+          const errorText = await response.text().catch(() => "");
+          throw new Error(`${response.status} ${response.statusText}${errorText ? `: ${errorText.slice(0, 160)}` : ""}`);
+        }
+        const raw = await response.json();
+        const result = normalizeProxyResponse(raw, offerWeights);
+        negotiationRound += 1;
+        return result;
+      } catch (error) {
+        return negotiateWithStaticProxy(offerWeights, error.message);
+      }
     }
 
     function deactivateChatActions() {

@@ -1,0 +1,16 @@
+{
+  "private": true,
+  "name": "multiplicity-reconciliation-proxy",
+  "type": "module",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy",
+    "secret:openai": "wrangler secret put OPENAI_API_KEY"
+  },
+  "devDependencies": {
+    "wrangler": "4.107.0"
+  }
+}
