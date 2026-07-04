@@ -1,0 +1,2578 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Negotiated Rashomon Reconciliation</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --bg: #f4efe7;
+      --panel: rgba(255, 253, 249, .74);
+      --ink: #2d271f;
+      --muted: #796b58;
+      --line: #ddd5c9;
+      --soft-line: #ebe3d8;
+      --paper: #f4efe7;
+      --paper-card: rgba(255, 253, 249, .74);
+      --brown: #49351d;
+      --blue: #56718f;
+      --orange: #b06e36;
+      --green: #52785e;
+      --purple: #49351d;
+      --red: #a24a42;
+      --font-ui: Arial, Helvetica, sans-serif;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--ink);
+      font-family: var(--font-ui);
+    }
+    main { width: min(1500px, calc(100vw - 96px)); margin: 30px auto 44px; }
+    h1 { margin: 0 0 18px; font-size: 26px; font-weight: 780; }
+    .toolbar {
+      display: grid;
+      grid-template-columns: minmax(180px, 260px) minmax(180px, 260px) 1fr;
+      gap: 14px;
+      align-items: end;
+      background: var(--paper-card);
+      border: 1.5px solid var(--line);
+      border-radius: 18px;
+      padding: 16px 18px;
+    }
+    label { display: block; margin-bottom: 6px; color: var(--muted); font-size: 13px; font-weight: 650; }
+    select { width: 100%; }
+    select {
+      height: 38px;
+      border: 1.5px solid #d8cfbf;
+      border-radius: 10px;
+      background: rgba(255, 253, 249, .86);
+      color: var(--ink);
+      font-size: 14px;
+      padding: 0 10px;
+    }
+    button {
+      border: 1.5px solid #d8cfbf;
+      border-radius: 12px;
+      background: rgba(255, 253, 249, .86);
+      color: var(--ink);
+      cursor: pointer;
+      font-weight: 750;
+      padding: 8px 10px;
+    }
+    button:hover { border-color: var(--brown); color: var(--brown); }
+    .primary-button { background: var(--brown); border-color: var(--brown); color: #fff; }
+    .primary-button:hover { background: var(--brown); color: #fff; }
+    .chevron { border-color: currentColor; border-style: solid; border-width: 0 2px 2px 0; display: inline-block; height: .52em; margin: 0 .12em; transform: rotate(-45deg); vertical-align: .02em; width: .52em; }
+    .chevron.left { transform: rotate(135deg); }
+    .chevron.right { transform: rotate(-45deg); }
+    .hint, .panel-note { color: var(--muted); font-size: 13px; line-height: 1.35; }
+    .hint { padding-bottom: 2px; }
+    .panel-note { margin: -4px 0 14px; }
+    .wizard-panel { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; margin-top: 16px; padding: 18px; }
+    body.reconcile-mode main { width: min(1500px, calc(100vw - 120px)); }
+    body.reconcile-mode { background: var(--paper); }
+    .wizard-panel.persona-mode,
+    .wizard-panel.elicitation-mode {
+      background: #f4efe7;
+      border: 0;
+      border-radius: 0;
+      box-shadow: 0 -8px 0 #282725;
+      margin: -24px calc(50% - 50vw) 0;
+      min-height: 100vh;
+      padding: 34px max(72px, calc((100vw - 1120px) / 2)) 42px;
+    }
+    .wizard-panel.persona-mode .wizard-topline,
+    .wizard-panel.elicitation-mode .wizard-topline { display: none; }
+    .wizard-topline { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 14px; }
+    .wizard-kicker { color: var(--muted); font-size: 11px; font-weight: 850; letter-spacing: 0; text-transform: none; }
+    .wizard-title { font-size: 22px; font-weight: 850; line-height: 1.2; margin-top: 4px; }
+    .wizard-subtitle { color: var(--muted); font-size: 14px; line-height: 1.45; margin-top: 6px; max-width: 860px; }
+    .wizard-progress { display: inline-flex; align-items: center; border: 1px solid var(--line); border-radius: 999px; color: var(--muted); font-size: 12px; font-weight: 800; padding: 5px 10px; white-space: nowrap; }
+    .wizard-body { display: grid; grid-template-columns: minmax(280px, 420px) 1fr; gap: 18px; align-items: start; }
+    .wizard-card { border: 1px solid var(--line); border-radius: 8px; background: #fbfcfd; padding: 14px; }
+    .wizard-actions { display: flex; flex-wrap: wrap; gap: 8px; justify-content: flex-end; margin-top: 16px; }
+    .persona-intro { color: #2d271f; display: grid; gap: 26px; margin: 0 auto; max-width: 1040px; }
+    .persona-hero { max-width: 860px; }
+    .persona-hero-title {
+      font-family: var(--font-ui);
+      font-size: clamp(24px, 4.8vw, 32px);
+      font-weight: 800;
+      letter-spacing: 0;
+      line-height: .98;
+      margin: 0 0 26px;
+    }
+    .persona-hero-title em { font-style: italic; font-weight: 500; }
+    .persona-hero-copy { color: #796b58; font-size: clamp(15px, 1.6vw, 18px); font-weight: 650; line-height: 1.45; margin: 0; }
+    .persona-reading-card {
+      background: rgba(255, 253, 249, .72);
+      border: 2px solid #ddd5c9;
+      border-radius: 24px;
+      margin-top: 20px;
+      padding: clamp(26px, 3.5vw, 42px);
+    }
+    .persona-reading-title {
+      font-family: var(--font-ui);
+      font-size: clamp(20px, 3vw, 24px);
+      font-weight: 800;
+      line-height: 1.15;
+      margin: 0 0 28px;
+      text-align: center;
+    }
+    .persona-reading-copy { display: grid; gap: 18px; margin: 0 auto; max-width: 1100px; }
+    .persona-reading-copy p { font-size: clamp(15px, 1.7vw, 18px); line-height: 1.55; margin: 0; }
+    .persona-reading-copy strong { font-weight: 850; }
+    .persona-meta-row { align-items: center; color: #796b58; display: flex; flex-wrap: wrap; gap: 38px; font-size: 22px; font-weight: 700; margin: 2px 8px 0; }
+    .persona-meta-item { align-items: center; display: inline-flex; gap: 10px; }
+    .persona-meta-icon { color: #796b58; height: 24px; width: 24px; }
+    .persona-consent-card {
+      background: rgba(255, 253, 249, .72);
+      border: 2px solid #ddd5c9;
+      border-radius: 24px;
+      display: grid;
+      gap: 28px;
+      padding: clamp(22px, 3vw, 34px) clamp(24px, 3vw, 38px);
+    }
+    .persona-consent-row {
+      align-items: start;
+      color: #2d271f;
+      cursor: pointer;
+      display: grid;
+      font-size: clamp(15px, 1.6vw, 18px);
+      font-weight: 800;
+      gap: 22px;
+      grid-template-columns: 42px 1fr;
+      line-height: 1.45;
+      margin: 0;
+    }
+    .persona-consent-row input {
+      appearance: none;
+      background: #f7f1ea;
+      border: 2px solid #d9d0c3;
+      border-radius: 8px;
+      cursor: pointer;
+      height: 38px;
+      margin: 2px 0 0;
+      width: 38px;
+    }
+    .persona-consent-row input:checked {
+      background: #2d271f;
+      border-color: #2d271f;
+      box-shadow: inset 0 0 0 8px #f7f1ea;
+    }
+    .persona-begin-button {
+      align-items: center;
+      background: #2d271f;
+      border: 0;
+      border-radius: 18px;
+      color: #fff;
+      display: inline-flex;
+      font-size: clamp(17px, 1.8vw, 22px);
+      gap: 18px;
+      justify-content: center;
+      min-height: 64px;
+      width: 100%;
+    }
+    .persona-begin-button:hover { background: #2d271f; color: #fff; }
+    .persona-begin-button:disabled {
+      background: #b8b0a5;
+      color: #fff;
+      cursor: not-allowed;
+    }
+    .persona-contact { color: #796b58; font-size: clamp(18px, 1.8vw, 24px); font-weight: 650; line-height: 1.25; margin: 18px auto 0; max-width: 720px; text-align: center; }
+    .persona-contact a { color: inherit; text-decoration-thickness: 1px; text-underline-offset: 4px; }
+    .pairwise-page { color: #2d271f; display: grid; gap: 22px; margin: 0 auto; max-width: 1080px; width: 100%; }
+    .pairwise-page.review-mode { max-width: 920px; margin: 0 auto; width: 100%; }
+    .pairwise-title { font-family: var(--font-ui); font-size: clamp(24px, 4.2vw, 32px); font-weight: 850; letter-spacing: 0; line-height: 1.02; margin: 0; }
+    .pairwise-title em { display: block; font-style: italic; font-weight: 500; }
+    .pairwise-subtitle { color: #796b58; font-size: clamp(16px, 1.7vw, 21px); font-weight: 650; line-height: 1.45; margin: 18px 0 0;}
+    .pairwise-progress { display: grid; grid-template-columns: repeat(5, 1fr); gap: 10px; margin: 28px 0 20px; }
+    .pairwise-progress span { background: #d8d0c5; border-radius: 999px; height: 9px; }
+    .pairwise-progress span.active { background: #49351d; }
+    .pairwise-card { background: rgba(255, 253, 249, .72); border: 2px solid #ddd5c9; border-radius: 24px; padding: clamp(26px, 3.2vw, 40px); }
+    .pairwise-card.ranking-card, .pairwise-card.review-card { background: transparent; border: 0; border-radius: 0; padding: 0; }
+    .ranking-list { display: grid; gap: 12px; }
+    .ranking-row { align-items: center; background: rgba(255, 253, 249, .72); border: 2px solid #ddd5c9; border-radius: 18px; cursor: grab; display: grid; grid-template-columns: 28px 48px 1fr auto; gap: 16px; min-height: 88px; padding: 16px 28px; }
+    .ranking-row.dragging { opacity: .45; }
+    .ranking-row:active { cursor: grabbing; }
+    .ranking-grip { color: #8a7d68; font-size: 20px; letter-spacing: 1px; line-height: .6; white-space: pre-line; }
+    .ranking-index { align-items: center; background: #49351d; border-radius: 999px; color: #fff; display: inline-flex; font-size: 18px; font-weight: 850; height: 42px; justify-content: center; width: 42px; }
+    .ranking-name { font-family: var(--font-ui); font-size: 21px; font-weight: 850; line-height: 1.1; }
+    .ranking-desc { color: #796b58; font-size: 16px; font-weight: 650; line-height: 1.25; margin-top: 6px; }
+    .ranking-pill { background: #f0e9dc; border-radius: 999px; color: #c0a062; font-size: 15px; font-weight: 850; padding: 6px 14px; white-space: nowrap; }
+    .pair-cards { align-items: center; display: grid; grid-template-columns: 1fr auto 1fr; gap: 22px; margin-bottom: 38px; }
+    .criterion-card { background: #e9dfce; border-radius: 18px; min-height: 126px; padding: 22px 22px; text-align: center; }
+    .criterion-rank { color: #796b58; font-size: 15px; font-weight: 800; }
+    .criterion-name { font-family: var(--font-ui); font-size: clamp(22px, 2.4vw, 28px); font-weight: 850; margin-top: 14px; }
+    .criterion-description { color: #796b58; font-size: clamp(14px, 1.5vw, 17px); font-weight: 650; line-height: 1.25; margin-top: 14px; }
+    .pair-versus { color: #796b58; font-size: 24px; font-weight: 850; }
+    .pair-question { font-size: clamp(18px, 2vw, 23px); font-weight: 650; line-height: 1.35; margin: 0 0 34px; text-align: center; }
+    .intensity-options { display: grid; gap: 14px; }
+    .intensity-option { align-items: center; border: 1.5px solid #ddd5c9; border-radius: 14px; cursor: pointer; display: grid; font-size: clamp(16px, 1.7vw, 21px); font-weight: 850; gap: 20px; grid-template-columns: 36px 1fr; padding: 15px 24px; }
+    .intensity-option input { appearance: none; border: 3px solid #81745f; border-radius: 50%; height: 24px; margin: 0; width: 24px; }
+    .intensity-option:has(input:checked) { background: #e9dfce; border-color: #2d271f; box-shadow: 0 0 0 3px rgba(45, 39, 31, .25); }
+    .intensity-option input:checked { background: #81745f; box-shadow: inset 0 0 0 7px #e9dfce; }
+    .pairwise-nav { align-items: center; color: #796b58; display: grid; grid-template-columns: 1fr auto 1fr; font-size: 17px; font-weight: 850; margin-top: 16px; }
+    .pairwise-nav button { background: transparent; border: 0; color: #796b58; font-size: inherit; padding: 8px; text-align:left}
+    .pairwise-nav button:disabled { color: #d0c8bc; cursor: not-allowed; }
+    .pairwise-nav button:last-child { justify-self: end; }
+    .pairwise-counter { justify-self: center; }
+    .rerank-button { align-items: center; background: transparent; border: 0; color: #796b58; display: inline-flex; font-size: 16px; font-weight: 850; justify-content: center; margin: 18px auto 0; padding: 8px 10px; }
+    .rerank-button:hover { color: #49351d; }
+    .pairwise-submit { align-items: center; background: #49351d; border: 0; border-radius: 18px; color: #fff; display: inline-flex; font-size: clamp(17px, 1.8vw, 22px); gap: 18px; justify-content: center; min-height: 64px; width: 100%; }
+    .pairwise-submit:hover, .pairwise-submit:focus-visible { background: #49351d; border-color: #49351d; color: #fff; }
+    .pairwise-submit:disabled { background: #b8b0a5; color: #fff; cursor: not-allowed; }
+    .computed-card { background: rgba(255, 253, 249, .72); border: 1.5px solid #ddd5c9; border-radius: 24px; padding: 32px 42px; }
+    .computed-list { display: grid; gap: 20px; }
+    .computed-row { display: grid; grid-template-columns: 24px 1fr 56px; gap: 18px; align-items: start; }
+    .computed-rank { color: #796b58; font-size: 17px; font-weight: 750; text-align: right; }
+    .computed-name { font-family: var(--font-ui); font-size: 20px; font-weight: 850; }
+    .computed-desc { color: #796b58; font-family: var(--font-ui); font-size: 16px; font-weight: 650; margin-left: 8px; }
+    .computed-pct { font-size: 20px; font-weight: 850; text-align: right; }
+    .computed-track { background: #e7decf; border-radius: 999px; grid-column: 2 / 4; height: 10px; overflow: hidden; }
+    .computed-fill { background: #49351d; border-radius: 999px; height: 100%; min-width: 2px; }
+    .computed-note { border-top: 1px solid #ddd5c9; color: #796b58; font-size: 16px; font-weight: 700; line-height: 1.4; margin: 28px 0 0; padding-top: 22px; }
+    .review-actions { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 16px; margin-top: 14px; }
+    .review-button { align-items: center; border-radius: 16px; display: inline-flex; font-size: 18px; font-weight: 850; justify-content: center; min-height: 58px; }
+    .review-button.secondary { background: rgba(255, 253, 249, .72); border: 1.5px solid #ddd5c9; color: #2d271f; }
+    .review-button.primary { background: #49351d; border-color: #49351d; color: #fff; }
+    .review-button.primary:hover { background: #49351d; color: #fff; }
+    .weight-preview { display: grid; gap: 7px; margin-top: 10px; }
+    .weight-preview-row { display: grid; grid-template-columns: 142px 1fr 44px; gap: 8px; align-items: center; font-size: 12px; }
+    .preview-track { height: 10px; background: #edf1f5; border-radius: 999px; overflow: hidden; }
+    .preview-fill { height: 100%; background: var(--blue); border-radius: 999px; }
+    .reconciliation-shell { color: #2d271f; display: grid; gap: 22px; }
+    .reconcile-hero { display: grid; gap: 10px; max-width: 980px; }
+    .reconcile-title { font-family: var(--font-ui); font-size: clamp(34px, 4vw, 50px); font-weight: 850; line-height: 1.03; margin: 0; }
+    .reconcile-subtitle { color: #796b58; font-size: clamp(15px, 1.5vw, 18px); font-weight: 650; line-height: 1.45; margin: 0; max-width: 860px; }
+    .grid { align-items: stretch; display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 18px; margin-top: 4px; }
+    .grid > .panel, .grid > .left-stack { height: 100%; }
+    .left-stack { display: grid; gap: 18px; min-width: 0; }
+    .left-stack > .panel { height: 100%; }
+    .panel { background: var(--paper-card); border: 1.5px solid var(--line); border-radius: 20px; padding: 18px; min-width: 0; }
+    .panel h2 { font-family: var(--font-ui); font-size: 20px; font-weight: 850; line-height: 1.15; margin: 0 0 12px; }
+    .negotiation-panel { padding: 18px; }
+    .negotiation-panel > h2, .negotiation-panel > .panel-note { margin-left: 0; margin-right: 0; }
+    .negotiation-panel .trace-step { border: 0; background: transparent; padding: 0; }
+    .case-prediction-panel { display: grid; gap: 14px; }
+    .case-section { border-bottom: 1.5px solid var(--line); padding-bottom: 14px; }
+    .case-section h2 { font-size: 17px; margin-bottom: 8px; }
+    .prediction-section { min-width: 0; position: relative; }
+    .prediction-header { align-items: center; display: flex; gap: 12px; justify-content: space-between; margin-bottom: 10px; position: relative; }
+    .prediction-header h2 { margin: 0; }
+    .details-popover { position: relative; }
+    .details-trigger { background: rgba(255, 253, 249, .78); border-radius: 999px; color: var(--muted); font-size: 12px; padding: 6px 10px; white-space: nowrap; }
+    .details-popover .table-wrap { background: #fffdf9; border: 1.5px solid var(--line); border-radius: 14px; box-shadow: 0 18px 42px rgba(45, 39, 31, .16); display: none; left: 0; max-height: min(480px, 72vh); min-width: min(600px, calc(100vw - 96px)); overflow: auto; padding: 10px; position: absolute; right: auto; top: calc(100% + 8px); width: min(680px, calc(100vw - 96px)); z-index: 40; }
+    .details-popover:hover .table-wrap, .details-popover:focus-within .table-wrap { display: block; }
+    .details-popover table { min-width: 560px; width: 100%; }
+    .details-popover th, .details-popover td { font-size: 11px; padding: 6px 8px; white-space: nowrap; }
+    .features { overflow-x: auto; }
+    .case-pattern-table { border: 1.5px solid var(--line); border-radius: 14px; border-spacing: 0; font-size: 11px; overflow: hidden; width: 100%; }
+    .case-pattern-table th, .case-pattern-table td { background: rgba(255, 253, 249, .66); border-bottom: 1px solid var(--soft-line); padding: 6px 7px; text-align: left; vertical-align: middle; white-space: nowrap; }
+    .case-pattern-table th { background: #f3ecdf; color: var(--muted); font-size: 10px; font-weight: 850; position: static; text-transform: none; }
+    .case-pattern-title { display: block; font-size: 12px; font-weight: 900; line-height: 1.15; text-align: center; }
+    .case-pattern-table .header-pred-bar { margin-top: 6px; }
+    .case-pattern-table tr:last-child td { border-bottom: 0; }
+    .case-pattern-table .attr-cell { color: var(--ink); font-weight: 850; max-width: 116px; overflow: hidden; text-overflow: ellipsis; }
+    .case-pattern-table .value-cell { color: var(--muted); font-weight: 750; max-width: 90px; overflow: hidden; text-overflow: ellipsis; }
+    .pattern-cell { min-width: 92px; width: 18%; }
+    .criteria-link-cell { min-width: 92px; width: 18%; }
+    .criteria-link { color: var(--muted); display: inline-flex; font-size: 10px; font-weight: 850; gap: 4px; white-space: nowrap; }
+    .criteria-link.positive { color: #8f453d; }
+    .criteria-link.negative { color: #2f6f73; }
+    .criteria-empty { color: #c4bbae; font-weight: 750; }
+    .pattern-viz { align-items: center; display: grid; }
+    .pattern-track { background: #e7decf; height: 9px; overflow: hidden; position: relative; }
+    .pattern-track::before { background: rgba(45, 39, 31, .24); content: ""; height: 100%; left: 50%; position: absolute; top: 0; width: 1px; z-index: 2; }
+    .pattern-fill { background: #49351d; height: 100%; position: absolute; top: 0; }
+    .pattern-fill.high { background: #b64b43; left: 50%; }
+    .pattern-fill.low { background: #2f6f73; right: 50%; }
+    .pattern-track.muted { opacity: .28; }
+    .pattern-empty { color: #c4bbae; font-style: italic; font-weight: 750; }
+    .case-pattern-note { color: var(--muted); font-size: 10px; line-height: 1.35; margin-top: 6px; }
+    .feature { background: rgba(255, 253, 249, .54); border: 1px solid var(--soft-line); border-radius: 10px; display: grid; gap: 2px; min-width: 0; padding: 6px 8px; font-size: 11px; }
+    .feature span:first-child { color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .feature span:last-child { font-weight: 750; overflow: hidden; text-align: left; text-overflow: ellipsis; white-space: nowrap; }
+    .summary-cards, .group-cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 12px; }
+    .summary-table-wrap { overflow-x: auto; border: 1px solid var(--line); border-radius: 16px; max-width: 100%; }
+    .summary-table { min-width: 760px; width: 100%; border-collapse: separate; border-spacing: 0; font-size: 12px; }
+    .summary-table th, .summary-table td { background: rgba(255, 253, 249, .82); padding: 3px 5px; border-bottom: 1px solid var(--soft-line); line-height: 1.15; text-align: center; white-space: nowrap; }
+    .summary-table th { color: var(--muted); font-size: 12px; font-weight: 850; text-transform: none; letter-spacing: 0; background: #f3ecdf; border-right: 1px solid var(--soft-line); }
+    .summary-table .corner-cell { background: #f3ecdf; border-bottom: 1px solid var(--soft-line); border-right: 1px solid var(--soft-line); min-width: 96px; width: 96px; }
+    .summary-table .row-head { position: sticky; left: 0; z-index: 4; min-width: 96px; white-space: pre-wrap; width: 96px; background: #f3ecdf; color: var(--muted); border-right: 1px solid var(--soft-line); text-align: left; font-weight: 850; text-transform: none; letter-spacing: 0; }
+    .summary-table th.row-head { z-index: 6; }
+    .summary-table .pred-col { min-width: 92px; width: 92px; }
+    .summary-table .weight-col { min-width: 86px; width: 86px; }
+    .summary-table .conflict-col { min-width: 34px; width: 34px; }
+    .summary-table .matrix-solution-col { min-width: 118px; width: 118px; }
+    .summary-table .matrix-criterion-col { min-width: 84px; width: 84px; }
+    .summary-table .matrix-benefit-col { min-width: 132px; width: 132px; }
+    .matrix-criterion-label { display: block; font-size: 10px; line-height: 1.1; white-space: normal; }
+    .matrix-subnote { color: #c4bbae; display: block; font-size: 8px; font-weight: 800; margin-top: 1px; }
+    .matrix-cell { font-variant-numeric: tabular-nums; font-weight: 800; }
+    .matrix-cell.inactive { color: #c4bbae; }
+
+    .matrix-weight-row.user th, .matrix-weight-row.user td { background: #ece4d7; }
+    .matrix-weight-row.proxy th, .matrix-weight-row.proxy td { background: #f7f2ea; }
+    .summary-table td.user-benefit-col, .summary-table th.user-benefit-col, .matrix-weight-row.user th, .matrix-weight-row.user td { background: #eaf1f6; }
+    .summary-table td.proxy-benefit-col, .summary-table th.proxy-benefit-col, .matrix-weight-row.proxy th, .matrix-weight-row.proxy td { background: #edf4ea; }
+    .matrix-weight-label { display: block; font-weight: 900; }
+    .prediction-label-cell { display: grid; gap: 2px; }
+    .prediction-label-cell strong { font-size: 11px; line-height: 1.05; }
+    .prediction-label-cell .summary-pred-bar { margin-top: 0; }
+    .summary-table .bar-track { height: 6px; }
+    .summary-table .header-pred-bar { font-size: 9px; grid-template-columns: 32px minmax(42px, 1fr); }
+    .benefit-cell { font-variant-numeric: tabular-nums; font-weight: 900; }
+    .benefit-cell.user { color: var(--blue); }
+    .benefit-cell.proxy { color: var(--green); }
+    .benefit-cell.best::after { content: " 👍"; font-size: 10px; font-weight: 850; }
+    .weight-bar-cell { min-width: 84px; position: relative; }
+    .weight-mini { align-items: center; display: grid; gap: 3px; grid-template-columns: 28px 1fr; }
+    .weight-mini span { font-variant-numeric: tabular-nums; font-weight: 900; text-align: right; }
+    .weight-mini-track { background: #e7decf; border-radius: 999px; height: 5px; overflow: hidden; }
+    .weight-mini-fill { border-radius: 999px; height: 100%; }
+    .weight-mini-fill.user { background: var(--blue); }
+    .weight-mini-fill.proxy { background: var(--green); }
+    .conflict-marker { align-items: center; background: #f7f2ea; border: 1.5px solid #d8cfbf; border-radius: 999px; color: var(--brown); cursor: help; display: inline-flex; font-size: 10px; font-weight: 900; height: 18px; justify-content: center; position: absolute; right: 3px; top: -8px; width: 18px; z-index: 12; }
+    .conflict-tooltip { background: #fffdf9; border: 1.5px solid var(--line); border-radius: 10px; box-shadow: 0 12px 28px rgba(45, 39, 31, .14); color: var(--ink); display: none; font-size: 11px; font-weight: 650; left: 50%; line-height: 1.35; max-width: 220px; min-width: 180px; overflow-wrap: anywhere; padding: 8px 10px; position: absolute; text-align: left; top: calc(100% + 8px); transform: translateX(-50%); white-space: normal; width: max-content; z-index: 30; }
+    .conflict-marker:hover .conflict-tooltip, .conflict-marker:focus-within .conflict-tooltip { display: block; }
+    .summary-pred-bar { display: grid; grid-template-columns: 38px minmax(50px, 1fr); gap: 5px; align-items: center; }
+    .header-pred-bar { margin-top: 2px; color: var(--muted); font-size: 10px; font-weight: 700; text-transform: none; letter-spacing: 0; }
+    .summary-empty { color: var(--muted); }
+    .summary-table .same-cell { color: #c4bbae; font-style: italic; font-weight: 750; text-transform: lowercase; }
+    .summary-table .inactive-row th, .summary-table .inactive-row td { background: rgba(247, 242, 234, .52); color: #c4bbae; }
+    .summary-table .inactive-row .weight-display { color: #c4bbae; }
+    .summary-table.criteria-first { min-width: 620px; font-size: 11px; }
+    .summary-table.criteria-first th, .summary-table.criteria-first td { padding: 5px 7px; line-height: 1.1; }
+    .summary-table.criteria-first .criterion-name-cell { min-width: 168px; width: 168px; }
+    .summary-table.criteria-first .pred-col { min-width: 94px; width: 94px; }
+    .summary-table.criteria-first .weight-col { min-width: 92px; width: 92px; }
+    .summary-table.criteria-first .conflict-col { min-width: 24px; width: 24px; padding-left: 0; padding-right: 0; }
+    .summary-table.criteria-first .row-head { white-space: normal; }
+    .summary-table.criteria-first .user-weight-col { background: #eaf1f6; }
+    .summary-table.criteria-first .proxy-weight-col { background: #edf4ea; }
+    .summary-table.criteria-first .benefit-summary-row th, .summary-table.criteria-first .benefit-summary-row td { border-top: 1.5px solid var(--line); }
+    .summary-table.criteria-first .benefit-summary-row.user th, .summary-table.criteria-first .benefit-summary-row.user td { background: #eaf1f6; }
+    .summary-table.criteria-first .benefit-summary-row.proxy th, .summary-table.criteria-first .benefit-summary-row.proxy td { background: #edf4ea; }
+    .prediction-header-title { display: block; font-weight: 900; color: var(--ink); }
+    .prediction-header-meta { color: var(--muted); display: block; font-size: 9px; font-weight: 800; margin-top: 1px; }
+    .criteria-first .conflict-cell { position: relative; }
+    .criteria-first .conflict-marker { position: relative; right: auto; top: auto; }
+    .summary-table.comparison-matrix { min-width: 640px; font-size: 10px; }
+    .summary-table.comparison-matrix th, .summary-table.comparison-matrix td { padding: 4px 5px; line-height: 1.05; }
+    .summary-table.comparison-matrix .corner-cell { background: transparent; border-bottom: 0; min-width: 86px; width: 86px; }
+    .summary-table.comparison-matrix .matrix-solution-col { min-width: 86px; width: 86px; }
+    .summary-table.comparison-matrix .matrix-criterion-col { min-width: 86px; width: 86px; }
+    .summary-table.comparison-matrix .matrix-benefit-col { min-width: 58px; width: 58px; white-space: normal; }
+    .summary-table.comparison-matrix .benefit-role { color: var(--muted); display: block; font-size: 8px; font-weight: 800; margin-top: 2px; overflow-wrap: anywhere; }
+    .summary-table.comparison-matrix .row-head { min-width: 86px; width: 86px; white-space: normal; }
+    .summary-table.comparison-matrix .matrix-criterion-label { font-size: 11px; line-height: 1.05; }
+    .summary-table.comparison-matrix .matrix-subnote { font-size: 8px; }
+    .summary-table.comparison-matrix .prediction-matrix-row th,
+    .summary-table.comparison-matrix .prediction-matrix-row td { height: 32px; }
+    .summary-table.comparison-matrix .matrix-weight-row th,
+    .summary-table.comparison-matrix .matrix-weight-row td { height: 22px; padding-bottom: 3px; padding-top: 3px; }
+    .summary-table.comparison-matrix .matrix-weight-row.user th,
+    .summary-table.comparison-matrix .matrix-weight-row.user td:not(.benefit-empty) { background: #eaf1f6; }
+    .summary-table.comparison-matrix .matrix-weight-row.proxy th,
+    .summary-table.comparison-matrix .matrix-weight-row.proxy td:not(.benefit-empty) { background: #edf4ea; }
+    .summary-table.comparison-matrix .benefit-empty { background: transparent; border: 0;}
+    .summary-table.comparison-matrix .weight-bar-cell { min-width: 54px; }
+    .row-head .sparse-label { display: block; }
+    .row-head .sparse-note { color: #c4bbae; display: block; font-size: 9px; font-weight: 800; letter-spacing: 0; margin-top: 2px; text-transform: none; }
+    .weight-row.user td { background: #ece4d7; border-bottom: 1px solid #d6c8b7; }
+    .weight-row.proxy td { background: #f7f2ea; border-bottom: 1px solid #d8cfbf; }
+    .weight-row .weight-label { font-weight: 850; }
+    .weight-row.user .weight-label, .weight-display.user { color: var(--blue); }
+    .weight-row.proxy .weight-label, .weight-display.proxy { color: var(--green); }
+    .weight-display { font-weight: 850; font-variant-numeric: tabular-nums; }
+    .weight-role { color: #9b907f; display: block; font-size: 8px; font-weight: 800; letter-spacing: 0; margin-top: 1px; text-transform: none; }
+    .dual-reliability { display: grid; gap: 4px; justify-items: center; }
+    .rel-line { display: flex; align-items: center; gap: 4px; font-variant-numeric: tabular-nums; }
+    .rel-line.user { color: var(--blue); }
+    .rel-line.proxy { color: var(--green); }
+    .rel-line.best { font-weight: 900; }
+    .rel-tag { border-radius: 999px; color: #fff; font-size: 10px; font-weight: 850; padding: 1px 5px; }
+    .rel-tag.user { background: var(--blue); }
+    .rel-tag.proxy { background: var(--green); }
+    .chat-window { align-items: stretch; background: rgba(255, 253, 249, .58); border: 1.5px solid var(--line); border-radius: 16px; display: flex; flex-direction: column; gap: 10px; max-height: calc(100vh - 430px); min-height: 500px; overflow: hidden; padding: 12px; }
+    .composer { background: transparent; border: 0; display: grid; flex: 0 0 auto; justify-items: end; margin-top: auto; padding: 0; }
+    .composer.locked { background: transparent; }
+    .composer-bubble { background: #ece4d7; border: 1.5px solid #d6c8b7; border-radius: 16px 16px 6px 16px; box-shadow: 0 8px 18px rgba(45, 39, 31, .08); max-width: 100%; padding: 7px; position: relative; width: min(100%, 720px); }
+    .composer-bubble::after { border-left: 9px solid #d6c8b7; border-top: 9px solid transparent; bottom: 8px; content: ""; position: absolute; right: -9px; }
+    .composer.locked .composer-bubble { background: #eee7dc; }
+    .composer-title { align-items: center; color: var(--muted); display: inline; font-size: 11px; font-weight: 850; gap: 7px; justify-content: space-between; letter-spacing: 0; margin-bottom: 5px; text-transform: none; }
+    .composer-speaker { align-items: center; display: inline-flex; gap: 7px; }
+    .composer-avatar { align-items: center; background: var(--brown); border-radius: 999px; color: #fff; display: inline-flex; font-size: 9px; font-weight: 900; height: 20px; justify-content: center; width: 20px; }
+    .composer-send-row { align-items: center; display: flex; gap: 8px; justify-content: space-between; margin-top: 6px; }
+    .composer-send-row .degree-summary { border-top: 0; margin-top: 0; padding-top: 0; }
+    .composer-send-row .composer-actions { margin-top: 0; }
+    .composer-help { align-items: center; border: 1.5px solid #d8cfbf; border-radius: 50%; color: #796b58; cursor: help; display: inline-flex; font-size: 10px; height: 18px; justify-content: center; position: relative; width: 18px; }
+    .composer-help-text { background: #fffdf9; border: 1.5px solid var(--line); border-radius: 10px; box-shadow: 0 12px 28px rgba(45, 39, 31, .14); color: var(--ink); display: none; font-size: 12px; font-weight: 650; left: 22px; line-height: 1.35; min-width: 230px; padding: 8px 10px; position: absolute; top: -8px; z-index: 30; }
+    .composer-help:hover .composer-help-text, .composer-help:focus-within .composer-help-text { display: block; }
+    .empty-history { align-items: center; color: #b8afa2; display: flex; font-size: 16px; font-weight: 850; justify-content: center; min-height: 100%; text-align: center; }
+    .composer-sliders, .degree-adjustments { background: rgba(255, 253, 249, .54); border: 1px solid #d6c8b7; border-radius: 12px; display: grid; grid-template-columns: minmax(52px, .46fr) repeat(5, minmax(34px, .48fr)) minmax(34px, .34fr); overflow: hidden; }
+    .degree-matrix-header, .degree-row-header, .degree-option, .inactive-note, .degree-value-cell { align-items: center; display: flex; min-height: 22px; padding: 2px 4px; }
+    .degree-matrix-header { background: #e6dccb; color: var(--muted); font-size: 9px; font-weight: 850; justify-content: center; line-height: 1; text-align: center; }
+    .degree-row-header { align-items: center; background: rgba(255, 253, 249, .56); flex-wrap: wrap; gap: 1px 4px; justify-content: space-between; min-width: 0; }
+    .degree-row-header.inactive, .degree-option.inactive, .inactive-note, .degree-value-cell.inactive { background: rgba(247, 242, 234, .44); color: #b8afa2; }
+    .inactive-note { grid-column: span 5; justify-content: center; font-size: 9px; font-weight: 750; line-height: 1.05; text-align: center; }
+    .degree-value-cell { background: rgba(255, 253, 249, .56); color: var(--muted); font-size: 10px; font-weight: 850; font-variant-numeric: tabular-nums; justify-content: center; }
+    .degree-name { font-size: 11px; font-weight: 900; line-height: 1; }
+    .degree-preview { color: var(--muted); font-size: 8px; font-variant-numeric: tabular-nums; font-weight: 750; white-space: nowrap; }
+    .degree-option { background: rgba(255, 253, 249, .56); cursor: pointer; justify-content: center; position: relative; }
+    .degree-option input { appearance: none; background: rgba(255, 253, 249, .9); border: 2px solid #d8cfbf; border-radius: 50%; cursor: pointer; height: 14px; margin: 0; width: 14px; }
+    .degree-option input:checked { background: #2fb8b4; border-color: #d8cfbf; box-shadow: inset 0 0 0 3px rgba(255, 253, 249, .95); }
+    .degree-option:has(input:disabled) { cursor: not-allowed; opacity: .58; }
+    .degree-summary { color: var(--muted); display: grid; flex: 1; gap: 4px; font-size: 11px; line-height: 1.2; min-width: 0; }
+    .composer-row span:last-child { color: var(--muted); font-variant-numeric: tabular-nums; text-align: right; }
+    .composer-row input { accent-color: var(--brown); }
+    .composer-row input:disabled { cursor: not-allowed; opacity: .55; }
+    .composer-actions { display: flex; flex-wrap: wrap; gap: 8px; justify-content: flex-end; margin-top: 8px; }
+    .composer-actions .primary-button { font-size: 11px; min-height: 30px; padding: 5px 10px; }
+    .foresight-prompt { color: var(--ink); font-size: 12px; font-weight: 750; line-height: 1.25; margin: 2px 0 7px;display: inline;}
+    .foresight-list { display: grid; gap: 5px; margin-top: 5px;}
+    .foresight-card { align-items: center; background: rgba(255, 253, 249, .58); border: 1px solid #d6c8b7; border-radius: 12px; display: grid; gap: 7px; grid-template-columns: minmax(92px, .7fr) minmax(0, 1.3fr) auto; padding: 5px 7px; }
+    .foresight-card.inactive { background: rgba(247, 242, 234, .48); color: #b8afa2; grid-template-columns: minmax(92px, .7fr) minmax(0, 1fr) auto; }
+    .foresight-question { align-items: baseline; display: flex; flex-wrap: wrap; gap: 4px 6px; min-width: 0; }
+    .foresight-key { color: var(--ink); font-size: 13px; font-weight: 950; line-height: 1; }
+    .foresight-card.inactive .foresight-key { color: #b8afa2; }
+    .foresight-copy { color: var(--muted); font-size: 10px; font-weight: 800; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .foresight-meta, .foresight-offer { color: var(--muted); font-size: 10px; font-variant-numeric: tabular-nums; font-weight: 850; white-space: nowrap; }
+    .foresight-offer { min-width: 34px; text-align: right; }
+    .foresight-options { display: flex; gap: 4px; min-width: 0; overflow-x: auto; padding-bottom: 1px; }
+    .foresight-chip { align-items: center; background: rgba(255, 253, 249, .84); border: 1.5px solid #d8cfbf; border-radius: 999px; color: var(--muted); cursor: pointer; display: inline-flex; flex: 0 0 auto; font-size: 10px; font-weight: 850; min-height: 22px; padding: 2px 7px; }
+    .foresight-chip input { appearance: none; height: 0; margin: 0; position: absolute; width: 0; }
+    .foresight-chip:has(input:checked) { background: var(--brown); border-color: var(--brown); color: #fff; }
+    .foresight-chip:has(input:disabled) { cursor: not-allowed; opacity: .56; }
+    @media (max-width: 900px) { .foresight-card { grid-template-columns: 1fr; } .foresight-offer { text-align: left; } }
+    .reliability-cell strong { color: var(--green); font-size: 18px; }
+    .details-header { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 10px; }
+    .details-header h2 { margin: 0; }
+    .hidden { display: none; }
+    .summary-card, .group-card, .trace-step {
+      border: 1.5px solid var(--line);
+      border-radius: 16px;
+      background: rgba(255, 253, 249, .64);
+      padding: 12px;
+      min-width: 0;
+    }
+    .summary-title, .group-title {
+      display: flex;
+      gap: 10px;
+      justify-content: space-between;
+      align-items: baseline;
+      margin-bottom: 10px;
+      font-weight: 800;
+    }
+    .summary-title span:last-child, .group-title span:last-child { color: var(--muted); font-size: 12px; font-weight: 700; }
+    .metric-section { color: var(--muted); font-size: 11px; font-weight: 850; letter-spacing: 0; margin-top: 12px; text-transform: none; }
+    .metric-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-top: 8px; }
+    .metric { border-top: 1px solid var(--soft-line); padding-top: 8px; min-width: 0; }
+    .metric strong { display: block; font-size: 16px; font-variant-numeric: tabular-nums; }
+    .metric span { color: var(--muted); display: block; font-size: 10px; font-weight: 800; letter-spacing: 0; margin-top: 2px; overflow-wrap: anywhere; text-transform: none; }
+    .bar-track { height: 10px; background: #e7decf; border-radius: 999px; overflow: hidden; width: 100%; }
+    .bar { height: 100%; border-radius: 999px; }
+    .bar.class-0 { background: var(--blue); }
+    .bar.class-1 { background: var(--orange); }
+    .bar.reliability-bar { background: var(--green); }
+    .trace-grid { display: grid; grid-template-columns: 1fr; gap: 14px; align-items: stretch; }
+    .step-title { color: var(--muted); font-size: 12px; font-weight: 850; letter-spacing: 0; margin-bottom: 10px; text-transform: none; }
+    .persona-card { border: 1px solid var(--line); border-radius: 8px; background: #fbfcfd; padding: 10px; margin-bottom: 10px; }
+    .persona-header { display: flex; align-items: start; justify-content: space-between; gap: 10px; margin-bottom: 8px; }
+    .persona-kicker { color: var(--muted); font-size: 10px; font-weight: 850; letter-spacing: 0; text-transform: none; }
+    .persona-name { font-size: 15px; font-weight: 850; line-height: 1.25; margin-top: 2px; }
+    .persona-role { color: var(--muted); font-size: 12px; line-height: 1.35; margin-top: 2px; }
+    .persona-grid { display: grid; gap: 7px; margin-top: 8px; }
+    .persona-field { border-top: 1px solid var(--soft-line); padding-top: 7px; }
+    .persona-field span { display: block; color: var(--muted); font-size: 10px; font-weight: 850; letter-spacing: 0; text-transform: none; }
+    .persona-field strong { display: block; font-size: 12px; line-height: 1.35; margin-top: 2px; }
+    .persona-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 9px; }
+    .sliders { display: grid; gap: 9px; }
+    .slider-row { display: grid; grid-template-columns: 128px 1fr 46px; gap: 8px; align-items: center; font-size: 13px; }
+    .slider-row span:last-child { color: var(--muted); font-variant-numeric: tabular-nums; text-align: right; }
+    .proxy-moves { display: grid; gap: 4px; margin-top: 8px; }
+    .history { align-content: start; display: grid; flex: 1 1 auto; gap: 8px; min-height: 0; overflow: auto; padding-right: 2px; }
+    .history-item { border-radius: 12px; padding: 9px 10px; font-size: 12px; line-height: 1.35; max-width: 92%; }
+    .history-item.proxy.actionable { background: #f7f2ea; border-color: #d8cfbf; color: #2d271f; }
+    .history-item.proxy .primary-button { background: var(--brown); border-color: var(--brown); color: #fff; }
+    .history-item.proxy .primary-button:hover { background: var(--brown); border-color: var(--brown); color: #fff; }
+    .history-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
+    .history-item.user { justify-self: end; background: #ece4d7; border: 1px solid #d6c8b7; }
+    .history-item.proxy { justify-self: start; background: #f7f2ea; border: 1px solid #d8cfbf; }
+    .history-item.system { justify-self: center; background: #eee7dc; border: 1px solid var(--line); color: var(--muted); }
+    .history-item.thinking { justify-self: start; background: #f7f2ea; border: 1px dashed #b9ac9a; color: var(--muted); }
+    .thinking-dots::after { content: ""; animation: dots 1.2s steps(4, end) infinite; }
+    @keyframes dots { 0% { content: ""; } 25% { content: "."; } 50% { content: ".."; } 75%, 100% { content: "..."; } }
+    .history-title { font-weight: 850; margin-bottom: 3px; }
+    .history-weights { color: var(--muted); font-variant-numeric: tabular-nums; }
+    .group-card { background: rgba(255, 253, 249, .74); }
+    .group-card.winner { border-color: var(--brown); box-shadow: 0 0 0 2px rgba(73, 53, 29, .12); }
+    .reliability { display: flex; align-items: baseline; gap: 8px; margin: 8px 0 10px; }
+    .reliability strong { font-size: 28px; }
+    .reliability span { color: var(--muted); font-size: 12px; font-weight: 700; }
+    .criteria-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; margin-top: 10px; }
+    .criterion { border-top: 1px solid var(--soft-line); padding-top: 7px; min-width: 0; }
+    .criterion strong { display: block; font-size: 15px; font-variant-numeric: tabular-nums; }
+    .criterion span { color: var(--muted); display: block; font-size: 10px; font-weight: 800; letter-spacing: 0; margin-top: 2px; overflow-wrap: anywhere; text-transform: none; }
+    .contributor { color: var(--muted); font-size: 12px; line-height: 1.35; margin-top: 10px; }
+    .consensus-hint { border: 1.5px solid var(--line); border-left: 4px solid var(--green); border-radius: 16px; background: rgba(255, 253, 249, .64); margin-top: 12px; padding: 12px 14px; }
+    .final-decision-panel { display: grid; gap: 14px; margin-top: 0; }
+    .final-decision-header { align-items: center; display: flex; gap: 10px; justify-content: space-between; }
+    .final-decision-header h2 { font-size: 18px; margin: 0; }
+    .final-decision-next { background: var(--brown); border-color: var(--brown); border-radius: 999px; color: #fff; font-size: 12px; padding: 6px 11px; white-space: nowrap; }
+    .final-decision-next:hover { background: var(--brown); color: #fff; }
+    .final-decision-next:disabled { background: #b8b0a5; border-color: #b8b0a5; color: #fff; cursor: not-allowed; }
+    .final-decision-options { display: grid; gap: 8px; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .final-decision-option { align-items: center; background: rgba(255, 253, 249, .58); border: 1.5px solid #d8cfbf; border-radius: 12px; cursor: pointer; display: flex; gap: 10px; justify-content: center; min-height: 42px; padding: 8px 10px; font-weight: 850; }
+    .final-decision-option input { appearance: none; background: rgba(255, 253, 249, .9); border: 2px solid #d8cfbf; border-radius: 50%; height: 18px; margin: 0; width: 18px; }
+    .final-decision-option:has(input:checked) { background: #49351d; border-color: #49351d; color: #fff; }
+    .final-decision-option input:checked { background: #2fb8b4; box-shadow: inset 0 0 0 4px rgba(255, 253, 249, .95); }
+    .consensus-hint.disagreement { border-left-color: var(--red); }
+    .decision-label { color: var(--green); font-size: 14px; font-weight: 850; line-height: 1.2; margin-bottom: 4px; overflow-wrap: anywhere; }
+    .decision-label.disagreement { color: var(--red); }
+    .decision-reason { color: var(--muted); font-size: 12px; line-height: 1.35; }
+    table { width: 100%; border-collapse: collapse; font-size: 13px; }
+    th, td { padding: 9px 8px; border-bottom: 1px solid var(--soft-line); text-align: right; white-space: nowrap; }
+    th:first-child, td:first-child { text-align: left; }
+    th { color: var(--muted); font-size: 12px; font-weight: 750; background: #f3ecdf; position: sticky; top: 0; z-index: 1; }
+    .table-wrap { max-height: 560px; overflow: auto; border: 1.5px solid var(--line); border-radius: 16px; }
+    .badge { display: inline-flex; align-items: center; min-width: 72px; justify-content: center; border-radius: 999px; padding: 3px 8px; color: #fff; font-size: 12px; font-weight: 750; }
+    .badge.class-0 { background: var(--blue); }
+    .badge.class-1 { background: var(--orange); }
+    .status { color: var(--muted); font-size: 14px; padding: 18px 0; }
+    @media (max-width: 1180px) {
+      body.reconcile-mode main { width: min(1200px, calc(100vw - 56px)); }
+      .toolbar, .grid, .trace-grid, .summary-cards, .group-cards, .wizard-body { grid-template-columns: 1fr; }
+      .criteria-grid, .metric-grid { grid-template-columns: repeat(2, 1fr); }
+      .hint { padding-top: 4px; }
+    }
+    @media (max-width: 720px) {
+      main, body.reconcile-mode main { width: min(100vw - 28px, 1500px); margin-top: 18px; }
+      .wizard-panel.persona-mode, .wizard-panel.elicitation-mode { padding: 28px 18px 34px; }
+      .persona-intro { gap: 24px; }
+      .persona-reading-card, .persona-consent-card { border-radius: 18px; }
+      .persona-meta-row { align-items: flex-start; flex-direction: column; gap: 12px; font-size: 16px; }
+      .persona-consent-row { grid-template-columns: 32px 1fr; gap: 14px; }
+      .persona-consent-row input { border-radius: 7px; height: 28px; width: 28px; }
+      .persona-begin-button { min-height: 64px; }
+      .ranking-layout, .pair-cards { grid-template-columns: 1fr; }
+      .pair-versus { text-align: center; }
+      .pairwise-progress { gap: 6px; margin: 24px 0 18px; }
+      .pairwise-nav { font-size: 16px; }
+      .ranking-row { grid-template-columns: 32px 1fr; }
+      .ranking-controls { grid-column: 2; }
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <!-- <h1>Negotiated Rashomon Reconciliation</h1> -->
+    <section class="toolbar hidden" id="topToolbar">
+      <div>
+        <label for="datasetSelect">Dataset</label>
+        <select id="datasetSelect"></select>
+      </div>
+      <div>
+        <label for="caseSelect">Case Index</label>
+        <select id="caseSelect"></select>
+      </div>
+      <div class="hint" id="datasetHint">Loading datasets...</div>
+    </section>
+
+    <section class="wizard-panel persona-mode" id="wizardPanel">
+      <div class="wizard-topline">
+        <div>
+          <div class="wizard-kicker" id="wizardKicker">Stage 1 of 3</div>
+          <div class="wizard-title" id="wizardTitle">Read the stakeholder persona</div>
+          <div class="wizard-subtitle" id="wizardSubtitle">Read the study scenario and step into the stakeholder persona. The next page will ask concrete preference questions before reconciliation begins.</div>
+        </div>
+        <div class="wizard-progress" id="wizardProgress">Persona</div>
+      </div>
+
+      <div class="wizard-page" id="personaStage">
+        <div class="persona-intro">
+          <div class="persona-hero">
+            <h1 class="persona-hero-title">Before we begin, <em> please read the following.</em></h1>
+            <p class="persona-hero-copy">Your persona defines how you will participate in this experiment. Read it carefully before proceeding.</p>
+          </div>
+
+          <div class="persona-reading-card" id="personaCard">
+            <div class="status">Generating random stakeholder persona...</div>
+          </div>
+
+          <!-- <div class="persona-meta-row" aria-label="Study information">
+            <span class="persona-meta-item">
+              <svg class="persona-meta-icon" viewBox="0 0 24 24" aria-hidden="true">
+                <circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" stroke-width="1.8"></circle>
+                <path d="M12 7v5l3 2" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8"></path>
+              </svg>
+              ~15 minutes
+            </span>
+            <span class="persona-meta-item">
+              <svg class="persona-meta-icon" viewBox="0 0 24 24" aria-hidden="true">
+                <path d="M12 3l7 3v5c0 4.6-2.8 8-7 10-4.2-2-7-5.4-7-10V6l7-3z" fill="none" stroke="currentColor" stroke-linejoin="round" stroke-width="1.8"></path>
+              </svg>
+              Anonymous &amp; confidential
+            </span>
+          </div> -->
+
+          <div class="persona-consent-card">
+            <label class="persona-consent-row" for="personaConsentCheckbox">
+              <input id="personaConsentCheckbox" type="checkbox">
+              <span>I have read and understood my persona. I agree to participate voluntarily and will express my role's values throughout the deliberation.</span>
+            </label>
+            <button id="personaNextButton" type="button" class="persona-begin-button" disabled>Begin Experiment <span class="chevron right" aria-hidden="true"></span></button>
+          </div>
+
+          <!-- <p class="persona-contact">If you have questions about this study, contact the research team at <a href="mailto:research@university.edu">research@university.edu</a></p> -->
+        </div>
+      </div>
+
+      <div class="wizard-page hidden" id="preferenceStage">
+        <div class="pairwise-page">
+          <div>
+            <h1 class="pairwise-title" id="pairwiseTitle">Rank the criteria</h1>
+            <p class="pairwise-subtitle" id="pairwiseSubtitle">Order the criteria from most to least important for your role.</p>
+            <div class="pairwise-progress" id="pairwiseProgress"></div>
+          </div>
+
+          <div class="pairwise-card" id="pairwiseContent"></div>
+
+          <div class="pairwise-nav">
+            <button id="preferenceBackButton" type="button"><span class="chevron left" aria-hidden="true"></span> Back to persona</button>
+            <span class="pairwise-counter" id="pairwiseCounter">Ranking</span>
+            <button id="pairwiseNextButton" type="button">Start comparisons <span class="chevron right" aria-hidden="true"></span></button>
+          </div>
+
+          <button id="startReconciliationButton" type="button" class="pairwise-submit" disabled>0 / 5 answered <span class="chevron right" aria-hidden="true"></span></button>
+        </div>
+      </div>
+    </section>
+
+    <section class="reconciliation-shell hidden" id="reconciliationGrid">
+      <div class="reconcile-hero">
+        <!-- <h1 class="reconcile-title">Negotiate a shared decision rule</h1> -->
+        <!-- <p class="reconcile-subtitle">Review how each prediction group performs, adjust your criteria weights, and exchange offers with the proxy until both sides agree on the most reliable group.</p> -->
+      </div>
+
+      <div class="grid">
+        <section class="left-stack">
+          <div class="panel case-prediction-panel">
+            <section class="case-section">
+              <div class="features" id="features"></div>
+            </section>
+
+            <section class="prediction-section">
+              <div class="prediction-header">
+                <h2>Prediction Distribution & Reliability</h2>
+                <div class="details-popover">
+                  <button id="toggleDetailsButton" type="button" class="details-trigger">Model details</button>
+                  <div class="table-wrap" id="modelDetailsWrap">
+                    <table>
+                      <thead>
+                        <tr>
+                          <th>Model</th>
+                          <th>Predicted class</th>
+                          <th>P(class 1)</th>
+                          <th>Local consistency</th>
+                          <th>CF fairness</th>
+                          <th>Race check</th>
+                          <th>Gender check</th>
+                          <th>Sensitive check</th>
+                          <th>Test accuracy</th>
+                          <th>TPR</th>
+                          <th>TNR</th>
+                        </tr>
+                      </thead>
+                      <tbody id="modelRows">
+                        <tr><td colspan="11" class="status">Loading...</td></tr>
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              </div>
+              <div class="summary-table-wrap" id="summaryTableWrap"></div>
+              <div class="consensus-hint" id="consensusHint">
+                <div class="decision-label" id="decisionLabel">-</div>
+                <div class="decision-reason" id="decisionReason">Loading...</div>
+              </div>
+
+            </section>
+          </div>
+        </section>
+
+        <section class="panel negotiation-panel">
+          <h2>User–Proxy Negotiation</h2>
+          <p class="panel-note"></p>
+          <div class="trace-grid">
+            <div class="trace-step">
+              <div class="chat-window">
+                <div class="history" id="negotiationHistory"></div>
+                <div class="composer" id="offerComposer"></div>
+              </div>
+            </div>
+          </div>
+      </section>
+      </div>
+
+      <section class="panel final-decision-panel">
+        <div class="final-decision-header">
+          <h2>Your final decision</h2>
+          <button id="nextCaseButton" type="button" class="final-decision-next" disabled>Next case</button>
+        </div>
+        <div class="final-decision-options" id="finalDecisionOptions"></div>
+      </section>
+    </section>
+  </main>
+
+  <script>
+    const datasetSelect = document.getElementById("datasetSelect");
+    const caseSelect = document.getElementById("caseSelect");
+    const datasetHint = document.getElementById("datasetHint");
+    const topToolbar = document.getElementById("topToolbar");
+    const features = document.getElementById("features");
+    const finalDecisionOptions = document.getElementById("finalDecisionOptions");
+    const nextCaseButton = document.getElementById("nextCaseButton");
+    const summaryTableWrap = document.getElementById("summaryTableWrap");
+    const modelRows = document.getElementById("modelRows");
+    const decisionLabel = document.getElementById("decisionLabel");
+    const decisionReason = document.getElementById("decisionReason");
+    const consensusHint = document.getElementById("consensusHint");
+    const offerComposer = document.getElementById("offerComposer");
+    const negotiationHistory = document.getElementById("negotiationHistory");
+    const chatWindow = document.querySelector(".chat-window");
+    const toggleDetailsButton = document.getElementById("toggleDetailsButton");
+    const modelDetailsWrap = document.getElementById("modelDetailsWrap");
+    const wizardPanel = document.getElementById("wizardPanel");
+    const wizardKicker = document.getElementById("wizardKicker");
+    const wizardTitle = document.getElementById("wizardTitle");
+    const wizardSubtitle = document.getElementById("wizardSubtitle");
+    const wizardProgress = document.getElementById("wizardProgress");
+    const personaStage = document.getElementById("personaStage");
+    const preferenceStage = document.getElementById("preferenceStage");
+    const reconciliationGrid = document.getElementById("reconciliationGrid");
+    const personaCard = document.getElementById("personaCard");
+    const pairwiseTitle = document.getElementById("pairwiseTitle");
+    const pairwiseSubtitle = document.getElementById("pairwiseSubtitle");
+    const pairwiseProgress = document.getElementById("pairwiseProgress");
+    const pairwiseContent = document.getElementById("pairwiseContent");
+    const pairwiseNav = document.querySelector(".pairwise-nav");
+    const pairwiseCounter = document.getElementById("pairwiseCounter");
+    const pairwiseNextButton = document.getElementById("pairwiseNextButton");
+    const personaNextButton = document.getElementById("personaNextButton");
+    const personaConsentCheckbox = document.getElementById("personaConsentCheckbox");
+    const preferenceBackButton = document.getElementById("preferenceBackButton");
+    const startReconciliationButton = document.getElementById("startReconciliationButton");
+
+    const criteriaOrder = ["accuracy", "tpr", "tnr", "local_consistency", "counterfactual_fairness"];
+    const criteriaLabels = {
+      accuracy: "Accuracy",
+      tpr: "Catch Truly High-Risk",
+      tnr: "Avoid False High-Risk",
+      local_consistency: "Individual Fairness",
+      counterfactual_fairness: "CF Fairness"
+    };
+    const criteriaShortLabels = {
+      accuracy: "Acc",
+      tpr: "TPR",
+      tnr: "TNR",
+      local_consistency: "Individual fairness",
+      counterfactual_fairness: "CF fairness"
+    };
+    const criteriaFullLabels = {
+      accuracy: "Accuracy",
+      tpr: "True Positive Rate / Catch Truly High-Risk Cases",
+      tnr: "True Negative Rate / Avoid False High-Risk Labels",
+      local_consistency: "Individual Fairness",
+      counterfactual_fairness: "CF Fairness"
+    };
+    let datasetMeta = [];
+    let activeData = null;
+    let weights = { accuracy: 1/5, tpr: 1/5, tnr: 1/5, local_consistency: 1/5, counterfactual_fairness: 1/5 };
+    let userWeights = { ...weights };
+    let proxyWeights = { ...weights };
+    let composerWeights = { ...weights };
+    let composerBaseWeights = { ...weights };
+    let composerAdjustments = {};
+    let composerLocked = false;
+    let composerNote = "Adjust the weights, then send the offer.";
+    let offerSource = "User offer";
+    let negotiationEvents = [];
+    let pendingProxyCounter = null;
+    let actionCounter = 0;
+    let negotiationRound = 0;
+    let currentPersona = null;
+    let proxyPersona = null;
+    let personaInitialWeights = null;
+    let rankedCriteria = [];
+    let pairwiseAnswers = [];
+    let pairwiseIndex = -1;
+    let elicitedWeights = null;
+    let activeStage = "persona";
+    let finalDecision = null;
+
+    const SAME_CRITERIA_THRESHOLD = 0.02;
+    const fmtPct = (value) => value == null ? "-" : `${(value * 100).toFixed(1)}%`;
+    const fmtProb = (value) => value == null ? "-" : Number(value).toFixed(3);
+
+    const degreeAdjustmentOptions = [
+      { key: "decrease", label: "Decrease", shortLabel: "Dec", delta: -0.06, phrase: "decreases" },
+      { key: "keep", label: "Keep same", shortLabel: "Same", delta: 0, phrase: "keeps" },
+      { key: "slightly", label: "Slightly increase", shortLabel: "Slight", delta: 0.03, phrase: "slightly increases" },
+      { key: "moderately", label: "Moderately increase", shortLabel: "Mod", delta: 0.06, phrase: "moderately increases" },
+      { key: "strongly", label: "Strongly increase", shortLabel: "Strong", delta: 0.10, phrase: "strongly increases" }
+    ];
+
+    const personaTypes = {
+      judges: {
+        key: "judges",
+        label: "Judges",
+        role: "Judges",
+        priority: "increasing Accuracy",
+        metricLabel: "Accuracy",
+        context: "Judges might want to prioritize increasing Accuracy when considering the design of a recidivism prediction system.",
+        concern: "They are responsible for weighing evidence and may prefer a system that is correct as often as possible across cases.",
+        boundary: "Accuracy matters most for this role, while fairness and error asymmetry should still be considered during deliberation.",
+        preferenceKey: "accuracy_first",
+        defaultSelections: { harm: "overall", fairness: "mixed", tradeoff: "performance_guardrail" },
+        weights: { accuracy: 36, tpr: 18, tnr: 18, local_consistency: 13, counterfactual_fairness: 15 }
+      },
+      defendants: {
+        key: "defendants",
+        label: "Defendants",
+        role: "Defendants",
+        priority: "decreasing False Positive Rate (Specificity)",
+        metricLabel: "False Positive Rate (Specificity)",
+        context: "Defendants might want to prioritize decreasing False Positive Rate (Specificity) because they are worried about being falsely predicted as will offend again.",
+        concern: "They are most concerned about being incorrectly assigned a high-risk label when they would not offend again.",
+        boundary: "Specificity and false-positive protection matter most for this role, while overall accuracy and fairness should still be discussed.",
+        preferenceKey: "tnr_protection",
+        defaultSelections: { harm: "false_positive", fairness: "local", tradeoff: "moderate" },
+        weights: { accuracy: 18, tpr: 10, tnr: 34, local_consistency: 18, counterfactual_fairness: 20 }
+      },
+      community_members: {
+        key: "community_members",
+        label: "Community Members",
+        role: "Community Members",
+        priority: "decreasing False Negative Rate (Sensitivity)",
+        metricLabel: "False Negative Rate (Sensitivity)",
+        context: "Community Members might want to prioritize decreasing False Negative Rate (Sensitivity) because they are mostly concerned about the safety of the community.",
+        concern: "They are most concerned about missing people who may truly require intervention.",
+        boundary: "Sensitivity and community safety matter most for this role, while false-positive harm and fairness should still be respected.",
+        preferenceKey: "sensitivity_protection",
+        defaultSelections: { harm: "false_negative", fairness: "mixed", tradeoff: "moderate" },
+        weights: { accuracy: 20, tpr: 34, tnr: 12, local_consistency: 15, counterfactual_fairness: 19 }
+      },
+      fairness_advocates: {
+        key: "fairness_advocates",
+        label: "Fairness Advocates",
+        role: "Fairness Advocates",
+        priority: "increasing CF Fairness",
+        metricLabel: "CF Fairness",
+        context: "Fairness Advocates might want to prioritize CF fairness, meaning predictions should stay stable when race or gender information changes.",
+        concern: "They are most concerned about unequal treatment tied to protected attributes and inconsistent treatment of similar people.",
+        boundary: "CF fairness and individual fairness matter most for this role, while predictive performance and safety concerns should still be part of the negotiation.",
+        preferenceKey: "fairness_guardian",
+        defaultSelections: { harm: "balanced_harm", fairness: "group", tradeoff: "fairness_priority" },
+        weights: { accuracy: 12, tpr: 12, tnr: 18, local_consistency: 25, counterfactual_fairness: 33 }
+      }
+    };
+    const personaKeys = Object.keys(personaTypes);
+
+    const preferenceArchetypes = {
+      accuracy_first: {
+        label: "Performance-oriented preference",
+        note: "This stakeholder starts by emphasizing overall correctness.",
+        weights: personaTypes.judges.weights
+      },
+      tnr_protection: {
+        label: "False-positive harm protection",
+        note: "This stakeholder is especially cautious about being falsely labeled high risk.",
+        weights: personaTypes.defendants.weights
+      },
+      sensitivity_protection: {
+        label: "False-negative harm protection",
+        note: "This stakeholder is especially concerned about missed high-risk cases.",
+        weights: personaTypes.community_members.weights
+      },
+      fairness_guardian: {
+        label: "Fairness-oriented preference",
+        note: "This stakeholder gives more room to individual fairness and CF fairness.",
+        weights: personaTypes.fairness_advocates.weights
+      }
+    };
+
+    const criteriaDescriptions = {
+      accuracy: "Overall fraction of correct predictions",
+      tpr: "Correctly identify people who are likely to re-offend.",
+      tnr: "Protect low-risk people from being wrongly labeled as high risk.",
+      local_consistency: "Individual fairness: similar nearby cases should receive the same kind of prediction.",
+      counterfactual_fairness: "CF fairness: the prediction changes little when race or gender information is switched."
+    };
+
+    const personaRankDefaults = {
+      judges: ["accuracy", "tpr", "tnr", "local_consistency", "counterfactual_fairness"],
+      defendants: ["tnr", "counterfactual_fairness", "local_consistency", "accuracy", "tpr"],
+      community_members: ["tpr", "accuracy", "counterfactual_fairness", "local_consistency", "tnr"],
+      fairness_advocates: ["counterfactual_fairness", "local_consistency", "tnr", "tpr", "accuracy"]
+    };
+
+    const intensityOptions = [
+      { key: "same", label: "About the same", ratio: 1 },
+      { key: "slightly", label: "Slightly more", ratio: 3 },
+      { key: "moderately", label: "Moderately more", ratio: 5 },
+      { key: "much", label: "Much more", ratio: 7 },
+      { key: "critically", label: "Critically more", ratio: 9 }
+    ];
+
+    function staticApiUrl(url) {
+      if (url === "/api/datasets") return "data/datasets.json";
+      let match = url.match(/^\/api\/([^/]+)\/cases$/);
+      if (match) return `data/${match[1]}/cases.json`;
+      match = url.match(/^\/api\/([^/]+)\/cases\/(\d+)$/);
+      if (match) return `data/${match[1]}/cases/${match[2]}.json`;
+      return url;
+    }
+
+    async function fetchJson(url) {
+      const staticUrl = staticApiUrl(url);
+      try {
+        const response = await fetch(staticUrl);
+        if (!response.ok) throw new Error(`${response.status} ${response.statusText}`);
+        return response.json();
+      } catch (error) {
+        if (location.protocol === "file:") {
+          throw new Error("This static export needs to be opened through GitHub Pages or a local static server, not directly as a file:// URL.");
+        }
+        throw error;
+      }
+    }
+
+    function setLoading(message) {
+      modelRows.innerHTML = `<tr><td colspan="7" class="status">${message}</td></tr>`;
+      summaryTableWrap.innerHTML = `<div class="status">${message}</div>`;
+      decisionLabel.textContent = "-";
+      decisionReason.textContent = message;
+    }
+
+    function normalizeWeights(raw) {
+      const clipped = {};
+      criteriaOrder.forEach((key) => { clipped[key] = Math.max(0, Number(raw[key]) || 0); });
+      const total = criteriaOrder.reduce((sum, key) => sum + clipped[key], 0);
+      if (total <= 0) {
+        const equal = {};
+        criteriaOrder.forEach((key) => { equal[key] = 1 / criteriaOrder.length; });
+        return equal;
+      }
+      const normalized = {};
+      criteriaOrder.forEach((key) => { normalized[key] = clipped[key] / total; });
+      return normalized;
+    }
+
+    function shortWeights(w) {
+      return criteriaOrder.map((key) => `${criteriaLabels[key]} ${Math.round((w[key] || 0) * 100)}%`).join(" · ");
+    }
+
+    function escapeHtml(value) {
+      return String(value)
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#039;");
+    }
+
+    function humanizeFeatureName(name) {
+      return String(name || "")
+        .replace(/_/g, " ")
+        .replace(/\b\w/g, (char) => char.toUpperCase());
+    }
+
+    function formatFeatureValue(name, value) {
+      if (value == null || value === "") return "Unknown";
+      const numeric = Number(value);
+      if (Number.isFinite(numeric)) {
+        const lower = String(name).toLowerCase();
+        if (lower.includes("income") || lower.includes("amount") || lower.includes("assets")) {
+          return numeric.toLocaleString("en-US");
+        }
+        if (lower.includes("month")) return `${numeric} months`;
+        return Number.isInteger(numeric) ? String(numeric) : numeric.toFixed(2);
+      }
+      return String(value);
+    }
+
+    function readableCaseFeatures(dataset, rawFeatures) {
+      const raw = rawFeatures || {};
+      if (dataset === "compas") {
+        const raceKeys = ["African American", "Asian", "Hispanic", "Native American", "Other race"];
+        const race = raceKeys.find((key) => Number(raw[key]) === 1) || "White";
+        const age = Number(raw["Age below 25"]) === 1 ? "< 25" : Number(raw["Age above 45"]) === 1 ? "> 45" : "25-45";
+        const sex = Number(raw.Female) === 1 ? "Female" : "Male";
+        const charge = Number(raw.Misdemeanor) === 1 ? "Misdemeanor" : "Felony";
+        const priors = raw["Number of priors"] ?? "Unknown";
+        const scoreFactor = Number(raw["Score factor"]) === 1 ? "Present" : "Not present";
+        return [
+          { label: "Age", value: age },
+          { label: "Race", value: race },
+          { label: "Sex", value: sex },
+          { label: "Charge", value: charge },
+          { label: "Prior offenses", value: formatFeatureValue("Number of priors", priors) },
+          { label: "Risk score factor", value: scoreFactor }
+        ];
+      }
+      return Object.entries(raw).map(([name, value]) => ({
+        label: humanizeFeatureName(name),
+        value: formatFeatureValue(name, value)
+      }));
+    }
+
+    function compactShap(value) {
+      const numeric = Number(value);
+      if (!Number.isFinite(numeric)) return "-";
+      if (Math.abs(numeric) < 0.005) return "0.00";
+      return `${numeric > 0 ? "+" : ""}${numeric.toFixed(2)}`;
+    }
+
+    function shapValueFor(features, keys) {
+      return keys.reduce((sum, key) => sum + (Number(features?.[key]) || 0), 0);
+    }
+
+    function readableShapRows(dataset, rawFeatures, shapPatterns) {
+      const raw = rawFeatures || {};
+      if (dataset === "compas") {
+        const raceKeys = ["African American", "Asian", "Hispanic", "Native American", "Other race"];
+        const activeRace = raceKeys.find((key) => Number(raw[key]) === 1);
+        const race = activeRace || "White";
+        const raceShapKeys = activeRace ? [activeRace] : raceKeys;
+        const ageKeys = ["Age below 25", "Age above 45"];
+        const age = Number(raw["Age below 25"]) === 1 ? "< 25" : Number(raw["Age above 45"]) === 1 ? "> 45" : "25-45";
+        return [
+          { label: "Age", value: age, keys: ageKeys },
+          { label: "Race", value: race, keys: raceShapKeys },
+          { label: "Sex", value: Number(raw.Female) === 1 ? "Female" : "Male", keys: ["Female"] },
+          { label: "Charge", value: Number(raw.Misdemeanor) === 1 ? "Misdemeanor" : "Felony", keys: ["Misdemeanor"] },
+          { label: "Prior offenses", value: formatFeatureValue("Number of priors", raw["Number of priors"] ?? "Unknown"), keys: ["Number of priors"] },
+          { label: "Risk score factor", value: Number(raw["Score factor"]) === 1 ? "Present" : "Not present", keys: ["Score factor"] },
+        ];
+      }
+      return Object.entries(raw).map(([name, value]) => ({
+        label: humanizeFeatureName(name),
+        value: formatFeatureValue(name, value),
+        keys: [name],
+      }));
+    }
+
+    function classIdByRiskLabel(labelNames, riskWord, fallback) {
+      const entries = Object.entries(labelNames || {});
+      const found = entries.find(([, label]) => String(label).toLowerCase().includes(riskWord));
+      return found ? String(found[0]) : String(fallback);
+    }
+
+    function renderPatternCell(value, mode, maxAbs, label, count) {
+      if (!count) return `<span class="pattern-empty">No models</span>`;
+      const numeric = Number(value) || 0;
+      const threshold = Math.max(0.015, (Number(maxAbs) || 0) * 0.08);
+      const title = `${label}: average SHAP ${compactShap(numeric)} across ${count} models`;
+      if (Math.abs(numeric) < threshold) {
+        return `
+          <div class="pattern-viz" title="${escapeHtml(`${title}; too small to emphasize`)}">
+            <div class="pattern-track muted"></div>
+          </div>
+        `;
+      }
+      const width = maxAbs > 0 ? Math.min(50, Math.abs(numeric) / maxAbs * 50) : 0;
+      const fillClass = numeric >= 0 ? "high" : "low";
+      return `
+        <div class="pattern-viz" title="${escapeHtml(title)}">
+          <div class="pattern-track"><div class="pattern-fill ${fillClass}" style="width:${width}%"></div></div>
+        </div>
+      `;
+    }
+
+    function correlationForKeys(correlations, keys) {
+      const links = (keys || []).flatMap((key) => correlations?.[key] || []);
+      if (!links.length) return null;
+      return [...links].sort((a, b) => Math.abs(Number(b.correlation) || 0) - Math.abs(Number(a.correlation) || 0))[0];
+    }
+
+    function renderCriteriaLink(correlations, row, shapValue, maxAbs) {
+      const numeric = Number(shapValue) || 0;
+      const threshold = Math.max(0.015, (Number(maxAbs) || 0) * 0.08);
+      if (Math.abs(numeric) < threshold) return `<span class="criteria-empty">—</span>`;
+      const link = correlationForKeys(correlations, row.keys);
+      if (!link) return `<span class="criteria-empty">—</span>`;
+      const corr = Number(link.correlation) || 0;
+      const criterion = criteriaLabels[link.criterion] || link.criterion;
+      const direction = corr >= 0 ? "positive" : "negative";
+      const arrow = corr >= 0 ? "↑" : "↓";
+      const verb = corr >= 0 ? "increases with" : "decreases with";
+      const title = `Within this prediction group, this feature's SHAP values ${verb} ${criterion}.`;
+      return `<span class="criteria-link ${direction}" title="${escapeHtml(title)}"><span aria-hidden="true">${arrow}</span><span>${escapeHtml(criterion)}</span></span>`;
+    }
+
+    function renderCaseFeaturePatterns(dataset, rawFeatures, shapPatterns, labelNames, summary = []) {
+      if (!shapPatterns?.by_class) {
+        return readableCaseFeatures(dataset, rawFeatures).map((item) => `
+          <div class="feature" title="${escapeHtml(item.label)}: ${escapeHtml(item.value)}"><span>${escapeHtml(item.label)}</span><span>${escapeHtml(item.value)}</span></div>
+        `).join("");
+      }
+      const highId = classIdByRiskLabel(labelNames, "high", 1);
+      const lowId = classIdByRiskLabel(labelNames, "low", 0);
+      const summaryByClass = new Map((summary || []).map((item) => [String(item.class_id), item]));
+      const highSummary = summaryByClass.get(String(highId));
+      const lowSummary = summaryByClass.get(String(lowId));
+      const high = shapPatterns.by_class?.[highId] || {};
+      const low = shapPatterns.by_class?.[lowId] || {};
+      const rows = readableShapRows(dataset, rawFeatures, shapPatterns);
+      const maxAbs = Math.max(Number(shapPatterns.max_abs_value) || 0, ...rows.flatMap((row) => [
+        Math.abs(shapValueFor(high.features, row.keys)),
+        Math.abs(shapValueFor(low.features, row.keys)),
+      ]));
+      const patternHeader = (item, fallbackLabel, className) => {
+        const label = item?.label || fallbackLabel;
+        const count = Number(item?.count ?? 0);
+        const percent = Number(item?.percent ?? 0);
+        return `
+          <span class="case-pattern-title">${escapeHtml(label)}<br>${count}/100 models</span>
+     
+        `;
+      };
+      return `
+        <table class="case-pattern-table">
+          <thead>
+            <tr>
+              <th>Attribute</th>
+              <th>Value</th>
+              <th>${patternHeader(lowSummary, low.label || "Low Risk", "class-0")}</th>
+              <th>${patternHeader(highSummary, high.label || "High Risk", "class-1")}</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${rows.map((row) => {
+              const highValue = shapValueFor(high.features, row.keys);
+              const lowValue = shapValueFor(low.features, row.keys);
+              return `
+                <tr>
+                  <td class="attr-cell" title="${escapeHtml(row.label)}">${escapeHtml(row.label)}</td>
+                  <td class="value-cell" title="${escapeHtml(row.value)}">${escapeHtml(row.value)}</td>
+                  <td class="pattern-cell">${renderPatternCell(lowValue, "low", maxAbs, "Low-risk pattern", low.count)}</td>
+                  <td class="pattern-cell">${renderPatternCell(highValue, "high", maxAbs, "High-risk pattern", high.count)}</td>
+                </tr>
+              `;
+            }).join("")}
+          </tbody>
+        </table>
+        <div class="case-pattern-note">Signed SHAP patterns: red supports High Risk; teal supports Low Risk.</div>
+      `;
+    }
+
+    function randomItem(items) {
+      return items[Math.floor(Math.random() * items.length)];
+    }
+
+    function normalizePersonaKey(value) {
+      return String(value || "").trim().toLowerCase().replace(/-/g, "_");
+    }
+
+    function getUrlParams() {
+      return new URLSearchParams(window.location.search);
+    }
+
+    function replaceUrlParams(updates) {
+      const url = new URL(window.location.href);
+      Object.entries(updates).forEach(([key, value]) => {
+        if (value == null || value === "") {
+          url.searchParams.delete(key);
+        } else {
+          url.searchParams.set(key, String(value));
+        }
+      });
+      window.history.replaceState({}, "", url.toString());
+    }
+
+    function stageFromUrl() {
+      const value = String(getUrlParams().get("stage") || "1").toLowerCase();
+      return { "1": "persona", "2": "preference", "3": "reconcile", persona: "persona", preference: "preference", reconcile: "reconcile" }[value] || "persona";
+    }
+
+    function stageToUrlValue(stage) {
+      return { persona: "1", preference: "2", reconcile: "3" }[stage] || "1";
+    }
+
+    function currentStorageKey() {
+      const dataset = datasetSelect?.value || "dataset";
+      const caseIndex = caseSelect?.value || "case";
+      const persona = currentPersona?.key || currentPersonaKeyFromUrl() || "persona";
+      return `case-distribution:${dataset}:${caseIndex}:${persona}`;
+    }
+
+    function saveElicitationState() {
+      try {
+        sessionStorage.setItem(currentStorageKey(), JSON.stringify({
+          consent: Boolean(personaConsentCheckbox?.checked),
+          rankedCriteria,
+          pairwiseAnswers,
+          pairwiseIndex,
+          elicitedWeights,
+          updatedAt: Date.now()
+        }));
+      } catch (error) {
+        console.warn("Could not save elicitation state", error);
+      }
+    }
+
+    function restoreElicitationState() {
+      try {
+        const raw = sessionStorage.getItem(currentStorageKey());
+        if (!raw) return false;
+        const saved = JSON.parse(raw);
+        if (Array.isArray(saved.rankedCriteria)) {
+          const validRank = saved.rankedCriteria.filter((key) => criteriaOrder.includes(key));
+          rankedCriteria = [...validRank, ...criteriaOrder.filter((key) => !validRank.includes(key))].slice(0, criteriaOrder.length);
+        }
+        if (Array.isArray(saved.pairwiseAnswers)) {
+          const allowed = new Set(intensityOptions.map((option) => option.key));
+          pairwiseAnswers = Array.from({ length: Math.max(0, rankedCriteria.length - 1) }, (_, index) => {
+            const answer = saved.pairwiseAnswers[index];
+            return allowed.has(answer) ? answer : null;
+          });
+        }
+        pairwiseIndex = Number.isInteger(saved.pairwiseIndex)
+          ? Math.max(-1, Math.min(saved.pairwiseIndex, pairwiseAnswers.length))
+          : pairwiseIndex;
+        if (personaConsentCheckbox && personaNextButton) {
+          personaConsentCheckbox.checked = Boolean(saved.consent);
+          personaNextButton.disabled = !personaConsentCheckbox.checked;
+        }
+        updateElicitedWeights();
+        return true;
+      } catch (error) {
+        console.warn("Could not restore elicitation state", error);
+        return false;
+      }
+    }
+
+    function currentPersonaKeyFromUrl() {
+      const params = new URLSearchParams(window.location.search);
+      const value = normalizePersonaKey(params.get("persona"));
+      return personaTypes[value] ? value : null;
+    }
+
+    function setPersonaKeyInUrl(personaKey) {
+      replaceUrlParams({ persona: personaKey });
+    }
+
+    function ensurePersonaKey() {
+      const existing = currentPersonaKeyFromUrl();
+      if (existing) return existing;
+      const selected = randomItem(personaKeys);
+      setPersonaKeyInUrl(selected);
+      return selected;
+    }
+
+    function switchToNextRandomPersona() {
+      const current = currentPersonaKeyFromUrl();
+      const choices = personaKeys.filter((key) => key !== current);
+      const selected = randomItem(choices.length ? choices : personaKeys);
+      setPersonaKeyInUrl(selected);
+      return selected;
+    }
+
+    function personaPreferenceFromKey(personaKey) {
+      const persona = personaTypes[personaKey] || personaTypes.community_members;
+      const archetype = preferenceArchetypes[persona.preferenceKey] || preferenceArchetypes.sensitivity_protection;
+      return {
+        ...persona,
+        name: persona.label,
+        preferenceLabel: archetype.label,
+        preferenceNote: archetype.note,
+        weights: normalizeWeights(persona.weights),
+      };
+    }
+
+    function criterionStats(key) {
+      const groups = activeData?.reconciliation?.groups || [];
+      const values = groups.map((group) => Number(group.criteria?.[key]) || 0);
+      if (!values.length) return { min: 0, max: 0, mean: 0, spread: 0, inactive: false };
+      const min = Math.min(...values);
+      const max = Math.max(...values);
+      const mean = values.reduce((total, value) => total + value, 0) / values.length;
+      return { min, max, mean, spread: max - min, inactive: max - min <= SAME_CRITERIA_THRESHOLD };
+    }
+
+    function inactiveCriteria() {
+      return criteriaOrder.filter((key) => criterionStats(key).inactive);
+    }
+
+    function activeCriteria() {
+      const active = criteriaOrder.filter((key) => !criterionStats(key).inactive);
+      return active.length ? active : [...criteriaOrder];
+    }
+
+    function isInactiveCriterion(key) {
+      return criterionStats(key).inactive && activeCriteria().length < criteriaOrder.length;
+    }
+
+    function decisionEffectiveWeights(rowWeights) {
+      const full = normalizeWeights(rowWeights || {});
+      const active = activeCriteria();
+      if (active.length === criteriaOrder.length) return full;
+      const activeMass = active.reduce((total, key) => total + (full[key] || 0), 0);
+      if (activeMass <= 0) return normalizeWeights(Object.fromEntries(active.map((key) => [key, 1])));
+      const effective = {};
+      criteriaOrder.forEach((key) => { effective[key] = active.includes(key) ? (full[key] || 0) / activeMass : 0; });
+      return normalizeWeights(effective);
+    }
+
+    function expandEffectiveWeights(effectiveWeights, baseFullWeights = weights) {
+      const effective = decisionEffectiveWeights(effectiveWeights || {});
+      const base = normalizeWeights(baseFullWeights || {});
+      const inactive = inactiveCriteria();
+      const active = activeCriteria();
+      if (!inactive.length || active.length === criteriaOrder.length) return normalizeWeights(effectiveWeights || base);
+      const inactiveMass = inactive.reduce((total, key) => total + (base[key] || 0), 0);
+      const activeMass = Math.max(0, 1 - inactiveMass);
+      const expanded = {};
+      inactive.forEach((key) => { expanded[key] = base[key] || 0; });
+      active.forEach((key) => { expanded[key] = activeMass * (effective[key] || 0); });
+      return normalizeWeights(expanded);
+    }
+
+    function makeProxyPersonaPreference(excludeKey = currentPersona?.key) {
+      const choices = personaKeys.filter((key) => key !== excludeKey);
+      return personaPreferenceFromKey(randomItem(choices.length ? choices : personaKeys));
+    }
+
+    function weightDistance(aWeights, bWeights) {
+      const a = normalizeWeights(aWeights || {});
+      const b = normalizeWeights(bWeights || {});
+      return criteriaOrder.reduce((total, key) => total + Math.abs((a[key] || 0) - (b[key] || 0)), 0);
+    }
+
+    function chooseConflictingProxyPersona(userBaseline, excludeKey = currentPersona?.key) {
+      const user = normalizeWeights(userBaseline || userWeights || elicitedWeights || weights);
+      const userWinner = winningGroup(user);
+      const candidates = personaKeys
+        .filter((key) => key !== excludeKey)
+        .map((key) => {
+          const persona = personaPreferenceFromKey(key);
+          const winner = winningGroup(persona.weights);
+          return {
+            persona,
+            winner,
+            conflicts: Boolean(userWinner && winner && winner.class_id !== userWinner.class_id),
+            distance: weightDistance(user, persona.weights),
+          };
+        });
+      const conflicting = candidates.filter((item) => item.conflicts);
+      if (conflicting.length) return randomItem(conflicting).persona;
+      const ranked = candidates.sort((a, b) => b.distance - a.distance);
+      return ranked[0]?.persona || makeProxyPersonaPreference(excludeKey);
+    }
+
+    function ensureConflictingProxyPersona(userBaseline) {
+      proxyPersona = chooseConflictingProxyPersona(userBaseline, currentPersona?.key);
+      proxyWeights = proxyIdealWeights();
+      return proxyPersona;
+    }
+
+    function proxyIdealWeights() {
+      if (proxyPersona?.weights) return normalizeWeights(proxyPersona.weights);
+      if (activeData?.reconciliation?.proxy_weights) return normalizeWeights(activeData.reconciliation.proxy_weights);
+      return normalizeWeights(weights);
+    }
+
+    function hasCompleteElicitedPreference() {
+      return Boolean(elicitedWeights) && pairwiseAnswers.length > 0 && answeredPairCount() === pairwiseAnswers.length;
+    }
+
+    function makePersonaPreference() {
+      const personaKey = ensurePersonaKey();
+      const persona = personaTypes[personaKey] || personaTypes.defendants;
+      const archetype = preferenceArchetypes[persona.preferenceKey] || preferenceArchetypes.accuracy_first;
+      return {
+        ...persona,
+        name: persona.label,
+        preferenceLabel: archetype.label,
+        preferenceNote: archetype.note,
+        weights: normalizeWeights(persona.weights),
+      };
+    }
+
+    function personaTitle(persona) {
+      return String(persona?.label || persona?.role || "Stakeholder").trim() || "Stakeholder";
+    }
+
+    function resetPersonaConsent() {
+      if (!personaConsentCheckbox || !personaNextButton) return;
+      personaConsentCheckbox.checked = false;
+      personaNextButton.disabled = true;
+    }
+
+    function renderPersonaCard() {
+      if (!personaCard || !currentPersona) return;
+      personaCard.innerHTML = `
+        <h2 class="persona-reading-title">Persona: ${escapeHtml(personaTitle(currentPersona))}</h2>
+        <div class="persona-reading-copy">
+          <p>${escapeHtml(currentPersona.context)}</p>
+          <p>In this case, your role probably wants the model to prioritize <strong>${escapeHtml(currentPersona.priority)}</strong>.</p>
+          <p>However, your teammates, who play other roles in the system, might prioritize other metrics. Throughout the deliberation, please express your value, respect their concerns, and negotiate with them.</p>
+        </div>
+      `;
+    }
+
+    function resetNegotiationState(note) {
+      negotiationEvents = [];
+      pendingProxyCounter = null;
+      negotiationRound = 0;
+      composerLocked = false;
+      composerNote = note;
+      if (activeData) proxyWeights = proxyIdealWeights();
+      renderHistory();
+    }
+
+    function hasSubmittedUserOffer() {
+      return negotiationEvents.some((event) => event.role === "user" && (event.title === "User initial offer" || event.title === "User counter-offer"));
+    }
+
+    function defaultRankForPersona(persona) {
+      const fallback = [...criteriaOrder];
+      const preferred = personaRankDefaults[persona?.key] || fallback;
+      return [...preferred, ...fallback.filter((key) => !preferred.includes(key))].slice(0, criteriaOrder.length);
+    }
+
+    function resetPairwiseState() {
+      rankedCriteria = defaultRankForPersona(currentPersona);
+      pairwiseAnswers = Array(Math.max(0, rankedCriteria.length - 1)).fill(null);
+      pairwiseIndex = -1;
+      elicitedWeights = inferWeightsFromPairwise();
+    }
+
+    function answeredPairCount() {
+      return pairwiseAnswers.filter((answer) => answer !== null).length;
+    }
+
+    function inferWeightsFromPairwise() {
+      const scores = {};
+      if (!rankedCriteria.length) return normalizeWeights({});
+      scores[rankedCriteria[rankedCriteria.length - 1]] = 1;
+      for (let i = rankedCriteria.length - 2; i >= 0; i -= 1) {
+        const answer = pairwiseAnswers[i];
+        const ratio = intensityOptions.find((option) => option.key === answer)?.ratio || 1;
+        scores[rankedCriteria[i]] = scores[rankedCriteria[i + 1]] * ratio;
+      }
+      criteriaOrder.forEach((key) => {
+        if (scores[key] == null) scores[key] = 1;
+      });
+      return normalizeWeights(scores);
+    }
+
+    function updateElicitedWeights() {
+      elicitedWeights = inferWeightsFromPairwise();
+    }
+
+    function renderWeightPreview(previewWeights) {
+      return criteriaOrder.map((key) => {
+        const pct = Math.round((previewWeights[key] || 0) * 100);
+        return `
+          <div class="weight-preview-row">
+            <span>${criteriaLabels[key]}</span>
+            <div class="preview-track"><div class="preview-fill" style="width:${pct}%"></div></div>
+            <strong>${pct}%</strong>
+          </div>
+        `;
+      }).join("");
+    }
+
+    function moveRankedCriterion(index, direction) {
+      const nextIndex = index + direction;
+      if (nextIndex < 0 || nextIndex >= rankedCriteria.length) return;
+      const next = [...rankedCriteria];
+      [next[index], next[nextIndex]] = [next[nextIndex], next[index]];
+      rankedCriteria = next;
+      pairwiseAnswers = Array(Math.max(0, rankedCriteria.length - 1)).fill(null);
+      updateElicitedWeights();
+      saveElicitationState();
+      renderPreferenceElicitation();
+    }
+
+    function renderPairwiseProgress() {
+      if (!pairwiseProgress) return;
+      const activeCount = pairwiseIndex < 0 ? 0 : pairwiseIndex + 1;
+      pairwiseProgress.innerHTML = pairwiseAnswers.map((answer, index) => `
+        <span class="${answer !== null || index < activeCount ? "active" : ""}"></span>
+      `).join("");
+    }
+
+    function personaRolePhrase(persona) {
+      const key = persona?.key || "stakeholder";
+      return {
+        judges: "judge",
+        defendants: "defendant",
+        community_members: "community member",
+        fairness_advocates: "fairness advocate"
+      }[key] || "stakeholder";
+    }
+
+    function setPairwiseMode(mode) {
+      ["ranking-card", "compare-card", "review-card"].forEach((item) => pairwiseContent?.classList.remove(item));
+      ["ranking-mode", "compare-mode", "review-mode"].forEach((item) => pairwiseContent?.parentElement?.classList.remove(item));
+      pairwiseContent?.classList.add(`${mode}-card`);
+      pairwiseContent?.parentElement?.classList.add(`${mode}-mode`);
+    }
+
+    function bindRankingDrag() {
+      let dragIndex = null;
+      pairwiseContent.querySelectorAll(".ranking-row").forEach((row) => {
+        row.addEventListener("dragstart", () => {
+          dragIndex = Number(row.dataset.rankIndex);
+          row.classList.add("dragging");
+        });
+        row.addEventListener("dragend", () => {
+          row.classList.remove("dragging");
+          dragIndex = null;
+        });
+        row.addEventListener("dragover", (event) => event.preventDefault());
+        row.addEventListener("drop", (event) => {
+          event.preventDefault();
+          const dropIndex = Number(row.dataset.rankIndex);
+          if (dragIndex === null || dragIndex === dropIndex) return;
+          const next = [...rankedCriteria];
+          const [moved] = next.splice(dragIndex, 1);
+          next.splice(dropIndex, 0, moved);
+          rankedCriteria = next;
+          pairwiseAnswers = Array(Math.max(0, rankedCriteria.length - 1)).fill(null);
+          updateElicitedWeights();
+          saveElicitationState();
+          renderPreferenceElicitation();
+        });
+      });
+    }
+
+    function rerankCriteria() {
+      pairwiseIndex = -1;
+      pairwiseAnswers = Array(Math.max(0, rankedCriteria.length - 1)).fill(null);
+      updateElicitedWeights();
+      saveElicitationState();
+      renderPreferenceElicitation();
+    }
+
+    function renderRankingStep() {
+      setPairwiseMode("ranking");
+      pairwiseProgress.style.display = "none";
+      pairwiseNav.style.display = "none";
+      startReconciliationButton.style.display = "inline-flex";
+      pairwiseTitle.innerHTML = "Rank these criteria<em>from most to least important to you.</em>";
+      pairwiseSubtitle.textContent = `Think about your role as a ${personaRolePhrase(currentPersona)}. Drag to reorder - place the criterion that matters most to you at the top.`;
+      pairwiseCounter.textContent = "Ranking";
+      startReconciliationButton.disabled = false;
+      startReconciliationButton.innerHTML = `This order looks right <span class="chevron right" aria-hidden="true"></span>`;
+      pairwiseContent.innerHTML = `
+        <div class="ranking-list">
+          ${rankedCriteria.map((key, index) => `
+            <div class="ranking-row" draggable="true" data-rank-index="${index}">
+              <span class="ranking-grip" aria-hidden="true">&bull;&bull;<br>&bull;&bull;<br>&bull;&bull;</span>
+              <span class="ranking-index">${index + 1}</span>
+              <div>
+                <div class="ranking-name">${escapeHtml(criteriaLabels[key])}</div>
+                <div class="ranking-desc">${escapeHtml(criteriaDescriptions[key])}</div>
+              </div>
+              ${index === 0 ? `<span class="ranking-pill">Most important</span>` : ""}
+              ${index === rankedCriteria.length - 1 ? `<span class="ranking-pill">Least important</span>` : ""}
+            </div>
+          `).join("")}
+        </div>
+      `;
+      bindRankingDrag();
+    }
+
+    function renderPairwiseStep() {
+      setPairwiseMode("compare");
+      pairwiseProgress.style.display = "grid";
+      pairwiseNav.style.display = "grid";
+      startReconciliationButton.style.display = "none";
+      const higherKey = rankedCriteria[pairwiseIndex];
+      const lowerKey = rankedCriteria[pairwiseIndex + 1];
+      const answered = answeredPairCount();
+      const complete = answered === pairwiseAnswers.length;
+      pairwiseTitle.textContent = "How much more important?";
+      pairwiseSubtitle.innerHTML = `You ranked <strong>${escapeHtml(criteriaLabels[higherKey])}</strong> above <strong>${escapeHtml(criteriaLabels[lowerKey])}</strong>. How much more important is it to you?`;
+      pairwiseCounter.textContent = `${pairwiseIndex + 1} / ${pairwiseAnswers.length}`;
+      preferenceBackButton.innerHTML = `<span class="chevron left" aria-hidden="true"></span> Previous pair`;
+      preferenceBackButton.disabled = pairwiseIndex === 0;
+      pairwiseNextButton.innerHTML = `${pairwiseIndex === pairwiseAnswers.length - 1 ? "Review priorities" : "Next pair"} <span class="chevron right" aria-hidden="true"></span>`;
+      pairwiseNextButton.disabled = pairwiseAnswers[pairwiseIndex] === null;
+      pairwiseContent.innerHTML = `
+        <div class="pair-cards">
+          <div class="criterion-card">
+            <div class="criterion-rank">#${pairwiseIndex + 1} (ranked higher)</div>
+            <div class="criterion-name">${escapeHtml(criteriaLabels[higherKey])}</div>
+            <div class="criterion-description">${escapeHtml(criteriaDescriptions[higherKey])}</div>
+          </div>
+          <div class="pair-versus">vs</div>
+          <div class="criterion-card">
+            <div class="criterion-rank">#${pairwiseIndex + 2} (ranked lower)</div>
+            <div class="criterion-name">${escapeHtml(criteriaLabels[lowerKey])}</div>
+            <div class="criterion-description">${escapeHtml(criteriaDescriptions[lowerKey])}</div>
+          </div>
+        </div>
+        <p class="pair-question">Compared to ${escapeHtml(criteriaLabels[lowerKey])}, how important is ${escapeHtml(criteriaLabels[higherKey])} to you?</p>
+        <div class="intensity-options">
+          ${intensityOptions.map((option) => `
+            <label class="intensity-option">
+              <input type="radio" name="pairwiseIntensity" value="${option.key}" ${pairwiseAnswers[pairwiseIndex] === option.key ? "checked" : ""}>
+              <span>${escapeHtml(option.label)}</span>
+            </label>
+          `).join("")}
+        </div>
+        <button id="rerankButton" type="button" class="rerank-button">Re-rank criteria</button>
+      `;
+      document.getElementById("rerankButton")?.addEventListener("click", rerankCriteria);
+      pairwiseContent.querySelectorAll("input[name='pairwiseIntensity']").forEach((input) => {
+        input.addEventListener("change", () => {
+          pairwiseAnswers[pairwiseIndex] = input.value;
+          updateElicitedWeights();
+          saveElicitationState();
+          renderPreferenceElicitation();
+        });
+      });
+    }
+
+    function renderReviewStep() {
+      setPairwiseMode("review");
+      pairwiseProgress.style.display = "none";
+      pairwiseNav.style.display = "none";
+      startReconciliationButton.style.display = "none";
+      const orderedRows = rankedCriteria.map((key, index) => ({ key, index, weight: elicitedWeights[key] || 0 }));
+      pairwiseTitle.textContent = "Your computed priorities";
+      pairwiseSubtitle.textContent = `These weights were automatically derived from your ranking and comparisons. Does this reflect your values as a ${personaRolePhrase(currentPersona)}?`;
+      pairwiseCounter.textContent = "Review";
+      pairwiseContent.innerHTML = `
+        <div class="computed-card">
+          <div class="computed-list">
+            ${orderedRows.map((row) => {
+              const pct = Math.round(row.weight * 100);
+              return `
+                <div class="computed-row">
+                  <div class="computed-rank">${row.index + 1}</div>
+                  <div>
+                    <span class="computed-name">${escapeHtml(criteriaLabels[row.key])}</span>
+                    <span class="computed-desc">${escapeHtml(criteriaDescriptions[row.key])}</span>
+                  </div>
+                  <div class="computed-pct">${pct}%</div>
+                  <div class="computed-track"><div class="computed-fill" style="width:${pct}%"></div></div>
+                </div>
+              `;
+            }).join("")}
+          </div>
+          <p class="computed-note">These weights are read-only - they were calculated from your answers, not entered directly.</p>
+        </div>
+        <div class="review-actions">
+          <button id="reviewBackButton" type="button" class="review-button secondary"><span class="chevron left" aria-hidden="true"></span> Edit comparisons</button>
+          <button id="reviewRerankButton" type="button" class="review-button secondary">Re-rank criteria</button>
+          <button id="reviewConfirmButton" type="button" class="review-button primary">Yes, this is correct <span class="chevron right" aria-hidden="true"></span></button>
+        </div>
+      `;
+      document.getElementById("reviewBackButton")?.addEventListener("click", () => {
+        pairwiseIndex = Math.max(0, pairwiseAnswers.length - 1);
+        saveElicitationState();
+        renderPreferenceElicitation();
+      });
+      document.getElementById("reviewRerankButton")?.addEventListener("click", rerankCriteria);
+      document.getElementById("reviewConfirmButton")?.addEventListener("click", startReconciliationFromElicitation);
+    }
+
+    function renderPreferenceElicitation() {
+      if (!pairwiseContent) return;
+      updateElicitedWeights();
+      renderPairwiseProgress();
+      if (pairwiseIndex < 0) {
+        renderRankingStep();
+      } else if (pairwiseIndex >= pairwiseAnswers.length) {
+        renderReviewStep();
+      } else {
+        renderPairwiseStep();
+      }
+    }
+
+    function showStage(stage, { syncUrl = true } = {}) {
+      activeStage = stage;
+      if (syncUrl) replaceUrlParams({ stage: stageToUrlValue(stage) });
+      saveElicitationState();
+      wizardPanel.classList.toggle("hidden", stage === "reconcile");
+      wizardPanel.classList.toggle("persona-mode", stage === "persona");
+      wizardPanel.classList.toggle("elicitation-mode", stage === "preference");
+      reconciliationGrid.classList.toggle("hidden", stage !== "reconcile");
+      topToolbar.classList.toggle("hidden", stage !== "reconcile");
+      document.body.classList.toggle("reconcile-mode", stage === "reconcile");
+      personaStage.classList.toggle("hidden", stage !== "persona");
+      preferenceStage.classList.toggle("hidden", stage !== "preference");
+      if (stage === "persona") {
+        wizardKicker.textContent = "Stage 1 of 3";
+        wizardTitle.textContent = "Read the stakeholder persona";
+        wizardSubtitle.textContent = "Read the study scenario and step into the stakeholder persona. The next page will ask concrete preference questions before reconciliation begins.";
+        wizardProgress.textContent = "Persona";
+      } else if (stage === "preference") {
+        wizardKicker.textContent = "Stage 2 of 3";
+        wizardTitle.textContent = "Compare criteria importance";
+        wizardSubtitle.textContent = "Rank the criteria, then compare adjacent pairs to derive normalized weights for reconciliation.";
+        wizardProgress.textContent = "Pairwise elicitation";
+        renderPreferenceElicitation();
+      }
+    }
+
+    function startReconciliationFromElicitation() {
+      if (!activeData) return;
+      updateElicitedWeights();
+      if (answeredPairCount() < pairwiseAnswers.length) return;
+      ensureConflictingProxyPersona(elicitedWeights);
+      resetNegotiationState("Start from your elicited preference. Adjust each criterion by degree, then send your opening offer.");
+      showStage("reconcile");
+      beginUserOpeningOffer(elicitedWeights, "Elicited preference baseline");
+      renderPersonaCard();
+      /* addHistory(
+        "system",
+        "Persona read",
+        `${escapeHtml(personaTitle(currentPersona))} frames the user's decision concerns.`,
+        null
+      );
+      
+      addHistory(
+        "system",
+        "Preference elicited",
+        "The answers from Stage 2 are translated into the user's baseline criteria weights for reconciliation.",
+        elicitedWeights
+      );
+      addHistory(
+        "system",
+        "Proxy stakeholder assigned",
+        `The proxy represents ${escapeHtml(personaTitle(proxyPersona))}, a different stakeholder position from the user.`,
+        proxyIdealWeights()
+      );*/
+    }
+
+    function initializePersonaPreference({ newPersona = true, announce = false, preserveElicitation = false } = {}) {
+      if (!activeData) return;
+      const savedPreference = preserveElicitation && elicitedWeights ? {
+        rankedCriteria: [...rankedCriteria],
+        pairwiseAnswers: [...pairwiseAnswers],
+        pairwiseIndex,
+        elicitedWeights: { ...elicitedWeights }
+      } : null;
+      currentPersona = makePersonaPreference();
+      proxyPersona = makeProxyPersonaPreference(currentPersona.key);
+      personaInitialWeights = normalizeWeights(currentPersona.weights);
+      resetPairwiseState();
+      resetNegotiationState("Complete pairwise elicitation to start reconciliation.");
+      resetPersonaConsent();
+      if (savedPreference) {
+        rankedCriteria = savedPreference.rankedCriteria;
+        pairwiseAnswers = savedPreference.pairwiseAnswers;
+        pairwiseIndex = savedPreference.pairwiseIndex;
+        elicitedWeights = savedPreference.elicitedWeights;
+        if (personaConsentCheckbox && personaNextButton) {
+          personaConsentCheckbox.checked = true;
+          personaNextButton.disabled = false;
+        }
+      } else {
+        restoreElicitationState();
+      }
+      setWeights(elicitedWeights, "Elicited initial offer");
+      renderPersonaCard();
+      if (activeStage === "preference") renderPreferenceElicitation();
+      if (announce) showStage("persona");
+    }
+
+    function addHistory(role, title, text, eventWeights = weights, extra = {}) {
+      negotiationEvents.push({ role, title, text, weights: eventWeights ? { ...eventWeights } : null, ...extra });
+      renderHistory();
+    }
+
+    function renderHistory() {
+      if (!negotiationHistory) return;
+      if (!negotiationEvents.length) {
+        negotiationHistory.innerHTML = `<div class="empty-history">No history</div>`;
+        return;
+      }
+      negotiationHistory.innerHTML = negotiationEvents.map((event, index) => `
+        <div class="history-item ${event.role}${event.actionable ? " actionable" : ""}">
+          <div class="history-title">${index + 1}. ${event.title}</div>
+          <div>${event.text}</div>
+          ${event.weights ? `<div class="history-weights">${shortWeights(event.weights)}</div>` : ""}
+        </div>
+      `).join("");
+      requestAnimationFrame(() => {
+        const scrollTarget = chatWindow || negotiationHistory;
+        scrollTarget.scrollTop = scrollTarget.scrollHeight;
+      });
+    }
+
+    function showProxyThinking() {
+      negotiationEvents.push({ role: "thinking", title: "Proxy is thinking", text: `<span class="thinking-dots">Reviewing offer</span>`, weights: null });
+      renderHistory();
+    }
+
+    function removeProxyThinking() {
+      negotiationEvents = negotiationEvents.filter((event) => event.role !== "thinking");
+      renderHistory();
+    }
+
+    function setWeights(nextWeights, source = "User offer") {
+      userWeights = normalizeWeights(nextWeights);
+      weights = { ...userWeights };
+      initializeComposerAdjustments(userWeights);
+      offerSource = source;
+      renderOfferControls();
+      renderSummary();
+      renderReconciliation();
+    }
+
+    function setProxyWeights(nextWeights) {
+      proxyWeights = normalizeWeights(nextWeights);
+      renderSummary();
+      renderReconciliation();
+    }
+
+    function renderSliders() {
+      renderOfferControls();
+      renderSummary();
+    }
+
+    function initializeComposerAdjustments(baseWeights = composerWeights) {
+      composerBaseWeights = normalizeWeights(baseWeights);
+      composerWeights = { ...composerBaseWeights };
+      composerAdjustments = {};
+      criteriaOrder.forEach((key) => { composerAdjustments[key] = "keep"; });
+    }
+
+    function computeWeightsFromAdjustments() {
+      const raw = {};
+      criteriaOrder.forEach((key) => {
+        if (isInactiveCriterion(key)) {
+          raw[key] = composerBaseWeights[key] || 0;
+          return;
+        }
+        const option = degreeAdjustmentOptions.find((item) => item.key === composerAdjustments[key]) || degreeAdjustmentOptions[1];
+        raw[key] = Math.max(0, (composerBaseWeights[key] || 0) + option.delta);
+      });
+      return normalizeWeights(raw);
+    }
+
+    function adjustmentSummary() {
+      const changed = criteriaOrder
+        .filter((key) => !isInactiveCriterion(key))
+        .map((key) => ({ key, option: degreeAdjustmentOptions.find((item) => item.key === composerAdjustments[key]) || degreeAdjustmentOptions[1] }))
+        .filter((item) => item.option.key !== "keep");
+      if (!changed.length) {
+        return hasSubmittedUserOffer() ? "User keeps the proxy offer about the same." : "User keeps the elicited preference about the same.";
+      }
+      return `User ${changed.map((item) => `${item.option.phrase} ${criteriaLabels[item.key]}`).join(", ")}.`;
+    }
+
+    function conflictFocus() {
+      const user = decisionEffectiveWeights(userWeights || composerBaseWeights || weights);
+      const proxy = decisionEffectiveWeights(proxyWeights || proxyIdealWeights());
+      const ranked = activeCriteria()
+        .map((key) => ({
+          key,
+          label: criteriaLabels[key],
+          user: user[key] || 0,
+          proxy: proxy[key] || 0,
+          gap: (proxy[key] || 0) - (user[key] || 0),
+        }))
+        .sort((a, b) => Math.abs(b.gap) - Math.abs(a.gap));
+      const focus = ranked[0];
+      if (!focus || Math.abs(focus.gap) < 0.01) return null;
+      const proxyName = personaTitle(proxyPersona || { label: "the other stakeholder" });
+      const proxyPriority = proxyPersona?.priority || criteriaDescriptions[focus.key] || focus.label;
+      const userPct = Math.round(focus.user * 100);
+      const proxyPct = Math.round(focus.proxy * 100);
+      const directionText = focus.gap >= 0
+        ? `${proxyName} places more weight on ${focus.label}.`
+        : `You place more weight on ${focus.label}.`;
+      return {
+        ...focus,
+        userPct,
+        proxyPct,
+        text: `${directionText} Proxy ${proxyPct}% vs you ${userPct}% after inactive criteria are redistributed. Proxy priority: ${proxyPriority}.`,
+      };
+    }
+    function renderOfferControls() {
+      if (!offerComposer) return;
+      const lockedAttr = composerLocked ? "disabled" : "";
+      composerWeights = composerLocked ? normalizeWeights(composerWeights) : computeWeightsFromAdjustments();
+      offerComposer.classList.toggle("locked", composerLocked);
+      offerComposer.innerHTML = `
+        <div class="composer-bubble">
+          <div class="composer-title">
+          
+            <span class="composer-help" tabindex="0" aria-label="Composer help">?
+              <span class="composer-help-text">${escapeHtml(composerNote)}</span>
+            </span>
+          </div>
+          <div class="foresight-prompt">For each active criterion, should this offer keep it the same or adjust it?</div>
+          <div class="foresight-list">
+            ${activeCriteria().map((key) => {
+              const disabledAttr = lockedAttr;
+              const effectiveBase = decisionEffectiveWeights(composerBaseWeights)[key] || 0;
+              const effectiveOffer = decisionEffectiveWeights(composerWeights)[key] || 0;
+              const criterionTitle = `${criteriaFullLabels[key] || criteriaLabels[key]}: ${criteriaDescriptions[key] || ""}`;
+              const shortName = criteriaShortLabels[key] || criteriaLabels[key];
+              return `
+                <div class="foresight-card" title="${escapeHtml(criterionTitle)}">
+                  <div class="foresight-question">
+                    <span class="foresight-key">${escapeHtml(shortName)}</span>
+                    <span class="foresight-copy">Change?</span>
+                    <span class="foresight-meta">B ${Math.round(effectiveBase * 100)}% · O ${Math.round(effectiveOffer * 100)}%</span>
+                  </div>
+                  <div class="foresight-options">
+                    ${degreeAdjustmentOptions.map((option) => `
+                      <label class="foresight-chip" title="${escapeHtml(criterionTitle)}: ${escapeHtml(option.label)}">
+                        <input type="radio" name="degree-${key}" value="${option.key}" data-criterion="${key}" ${composerAdjustments[key] === option.key ? "checked" : ""} ${disabledAttr}>
+                        ${escapeHtml(option.key === "keep" ? "Keep" : option.key === "decrease" ? "Decrease" : `+${option.shortLabel || option.label}`)}
+                      </label>
+                    `).join("")}
+                  </div>
+                  <span class="foresight-offer">${Math.round(effectiveOffer * 100)}%</span>
+                </div>
+              `;
+            }).join("")}
+          </div>
+          <div class="composer-send-row">
+            <div class="degree-summary">
+              <div>${escapeHtml(adjustmentSummary())}</div>
+            </div>
+            <div class="composer-actions">
+              <button type="button" id="sendOfferButton" class="primary-button" ${lockedAttr}>Send response</button>
+            </div>
+          </div>
+        </div>
+      `;
+      offerComposer.querySelectorAll("input[type='radio'][data-criterion]").forEach((input) => {
+        input.addEventListener("change", (event) => {
+          const key = event.target.dataset.criterion;
+          composerAdjustments[key] = event.target.value;
+          composerWeights = computeWeightsFromAdjustments();
+          composerNote = hasSubmittedUserOffer()
+            ? "Editing a degree-based response. Send it to update the user row and ask for the proxy's reply."
+            : "Editing your opening offer. Send it when these degree changes express your position.";
+          renderOfferControls();
+        });
+      });
+      const sendButton = document.getElementById("sendOfferButton");
+      if (sendButton) {
+        sendButton.addEventListener("click", () => {
+          userWeights = normalizeWeights(composerWeights);
+          weights = { ...userWeights };
+          offerSource = hasSubmittedUserOffer() ? "User counter-offer" : "User initial offer";
+          pendingProxyCounter = null;
+          addHistory("user", offerSource, adjustmentSummary(), userWeights);
+          renderSummary();
+          renderReconciliation();
+          renderProxyBox("ask", { skipUserHistory: true });
+        });
+      }
+    }
+
+    function renderNegotiatedWeights(rowWeights, kind) {
+      return criteriaOrder.map((key) => `
+        <td><span class="weight-display ${kind}">${Math.round((rowWeights[key] || 0) * 100)}%</span></td>
+      `).join("");
+    }
+
+    function computeReliability(group, rowWeights = userWeights) {
+      const effective = decisionEffectiveWeights(rowWeights);
+      return criteriaOrder.reduce((score, key) => score + (effective[key] || 0) * (Number(group.criteria[key]) || 0), 0);
+    }
+
+    function topContributor(group, rowWeights = userWeights) {
+      const effective = decisionEffectiveWeights(rowWeights);
+      return criteriaOrder
+        .map((key) => ({ key, label: criteriaLabels[key], value: (effective[key] || 0) * (Number(group.criteria[key]) || 0) }))
+        .sort((a, b) => b.value - a.value)[0];
+    }
+
+    function winningGroup(rowWeights) {
+      if (!activeData) return null;
+      return activeData.reconciliation.groups
+        .map((group) => ({ ...group, reliability: computeReliability(group, rowWeights) }))
+        .sort((a, b) => b.reliability - a.reliability || b.count - a.count)[0] || null;
+    }
+
+    function resultConsensus(userRowWeights = userWeights, proxyRowWeights = proxyWeights) {
+      const userWinner = winningGroup(userRowWeights);
+      const proxyWinner = winningGroup(proxyRowWeights);
+      if (!userWinner || !proxyWinner || userWinner.class_id !== proxyWinner.class_id) return null;
+      return {
+        label: userWinner.label,
+        userReliability: userWinner.reliability,
+        proxyReliability: proxyWinner.reliability
+      };
+    }
+
+    function resultConsensusText(consensus) {
+      return `Even though our weights are not identical, they already point to the same result: ${escapeHtml(consensus.label)} is the more reliable group for both of us. I get ${fmtPct(consensus.proxyReliability)} with my weights, and you get ${fmtPct(consensus.userReliability)} with yours.<br><br>So I do not need our weights to match perfectly. What matters here is that the final decision agrees. If you are comfortable with that result-level consensus, accept the offer; otherwise you can still modify the weights.`;
+    }
+
+    function lockResultConsensus(consensus, acceptedWeights = userWeights) {
+      composerLocked = true;
+      initializeComposerAdjustments(acceptedWeights);
+      composerNote = "Result-level consensus reached. The composer is locked because both sides select the same prediction group.";
+      pendingProxyCounter = null;
+      renderSummary();
+      renderReconciliation();
+      renderOfferControls();
+      addHistory("proxy", "Result-level consensus", resultConsensusText(consensus), proxyWeights);
+    }
+
+    function renderSummary() {
+      if (!activeData) return;
+      const userWinner = winningGroup(userWeights);
+      const proxyWinner = winningGroup(proxyWeights);
+      const groups = activeData.reconciliation.groups.map((group) => ({
+        ...group,
+        userReliability: computeReliability(group, userWeights),
+        proxyReliability: computeReliability(group, proxyWeights),
+      })).sort((a, b) => a.class_id - b.class_id);
+      const summaryByClass = new Map(activeData.summary.map((item) => [item.class_id, item]));
+      const focusConflict = conflictFocus();
+      const userRoleLabel = personaTitle(currentPersona || { label: "User" });
+      const proxyRoleLabel = personaTitle(proxyPersona || { label: "Proxy" });
+      const userEffective = decisionEffectiveWeights(userWeights);
+      const proxyEffective = decisionEffectiveWeights(proxyWeights);
+
+      const lowGroup = groups[0];
+      const highGroup = groups[1] || groups[0];
+      const visibleGroups = [lowGroup, highGroup].filter(Boolean).slice(0, 2);
+      const shortLabels = {
+        accuracy: "Acc",
+        tpr: "TPR",
+        tnr: "TNR",
+        local_consistency: "Individual fairness",
+        counterfactual_fairness: "CF fairness"
+      };
+      const fullLabels = {
+        accuracy: "Accuracy",
+        tpr: "True Positive Rate / Catch Truly High-Risk Cases",
+        tnr: "True Negative Rate / Avoid False High-Risk Labels",
+        local_consistency: "Individual Fairness",
+        counterfactual_fairness: "CF Fairness"
+      };
+
+      const criterionHeaders = criteriaOrder.map((key) => {
+        const inactive = isInactiveCriterion(key);
+        const stats = criterionStats(key);
+        const title = `${fullLabels[key] || criteriaLabels[key]}: ${criteriaDescriptions[key] || ""}`;
+        const subnote = inactive ? `<span class="matrix-subnote">~${Math.round(stats.mean * 100)}% ±2</span>` : "";
+        return `
+          <th class="matrix-criterion-col ${inactive ? "inactive-row" : ""}" title="${escapeHtml(title)}">
+            <span class="matrix-criterion-label">${escapeHtml(shortLabels[key] || criteriaLabels[key])}</span>${subnote}
+          </th>
+        `;
+      }).join("");
+
+      const predictionRows = visibleGroups.map((group) => {
+        const summary = summaryByClass.get(group.class_id);
+        const percent = summary ? summary.percent : 0;
+        const isUserBest = userWinner && group.class_id === userWinner.class_id;
+        const isProxyBest = proxyWinner && group.class_id === proxyWinner.class_id;
+        return `
+          <tr class="prediction-matrix-row">
+            <th class="row-head matrix-solution-col">
+              <span class="prediction-header-title">${escapeHtml(group.label)}</span>
+              <span class="prediction-header-meta">${group.count} models · ${percent.toFixed(1)}%</span>
+            </th>
+            ${criteriaOrder.map((key) => {
+              const inactive = isInactiveCriterion(key);
+              return `<td class="matrix-cell matrix-criterion-col ${inactive ? "inactive" : ""}">${inactive ? "—" : fmtPct(group.criteria[key])}</td>`;
+            }).join("")}
+            <td class="matrix-benefit-col user-benefit-col benefit-cell user ${isUserBest ? "best" : ""}">${fmtPct(group.userReliability)}</td>
+            <td class="matrix-benefit-col proxy-benefit-col benefit-cell proxy ${isProxyBest ? "best" : ""}">${fmtPct(group.proxyReliability)}</td>
+          </tr>
+        `;
+      }).join("");
+
+      const weightRow = (kind, roleLabel, rowWeights) => `
+        <tr class="matrix-weight-row ${kind}">
+          <th class="row-head matrix-solution-col">
+            <span class="matrix-weight-label">${kind === "user" ? "User weights" : "Proxy weights"}</span>
+            <span class="weight-role">${escapeHtml(roleLabel)}</span>
+          </th>
+          ${criteriaOrder.map((key) => {
+            const inactive = isInactiveCriterion(key);
+            const pct = Math.round((rowWeights[key] || 0) * 100);
+            return `
+              <td class="matrix-criterion-col weight-bar-cell ${inactive ? "inactive-row" : ""}">
+                ${inactive ? `<span class="weight-display ${kind}">—</span>` : `<span class="weight-display ${kind}">${pct}%</span>`}
+              </td>
+            `;
+          }).join("")}
+          <td class="matrix-benefit-col benefit-empty"></td>
+          <td class="matrix-benefit-col benefit-empty"></td>
+        </tr>
+      `;
+
+      summaryTableWrap.innerHTML = `
+        <table class="summary-table comparison-matrix">
+          <thead>
+            <tr>
+              <th class="corner-cell matrix-solution-col"></th>
+              ${criterionHeaders}
+              <th class="matrix-benefit-col user-benefit-col">User<br>benefits<span class="benefit-role">${escapeHtml(userRoleLabel)}</span></th>
+              <th class="matrix-benefit-col proxy-benefit-col">Proxy<br>benefits<span class="benefit-role">${escapeHtml(proxyRoleLabel)}</span></th>
+            </tr>
+          </thead>
+          <tbody>
+            ${predictionRows}
+            ${weightRow("user", userRoleLabel, userEffective)}
+            ${weightRow("proxy", proxyRoleLabel, proxyEffective)}
+          </tbody>
+        </table>
+      `;
+    }
+
+    function staticMoves(fromWeights, toWeights) {
+      const from = normalizeWeights(fromWeights || {});
+      const to = normalizeWeights(toWeights || {});
+      return criteriaOrder
+        .map((key) => ({
+          key,
+          label: criteriaLabels[key],
+          from: from[key] || 0,
+          to: to[key] || 0,
+          delta: (to[key] || 0) - (from[key] || 0),
+        }))
+        .filter((move) => Math.abs(move.delta) >= 0.005)
+        .sort((a, b) => Math.abs(b.delta) - Math.abs(a.delta));
+    }
+
+    async function negotiateWithProxy(offerWeights) {
+      const offer = decisionEffectiveWeights(offerWeights);
+      const ideal = decisionEffectiveWeights(proxyIdealWeights());
+      const distance = weightDistance(offer, ideal);
+      const userWinner = winningGroup(offer);
+      const proxyWinner = winningGroup(ideal);
+      const sameDecision = Boolean(userWinner && proxyWinner && userWinner.class_id === proxyWinner.class_id);
+      const accepted = negotiationRound > 0 && (distance <= 0.16 || sameDecision);
+
+      let target = offer;
+      let explanationText = "I can accept this offer because it is close enough to my role's priorities and supports the same reliability decision.";
+      if (!accepted) {
+        target = negotiationRound === 0
+          ? makeInitialProxyOffer(offer, ideal)
+          : normalizeWeights(Object.fromEntries(criteriaOrder.map((key) => [key, 0.55 * (offer[key] || 0) + 0.45 * (ideal[key] || 0)])));
+        explanationText = describeProxyInitialOffer(target, offer);
+      }
+
+      const expandedTarget = expandEffectiveWeights(target, proxyWeights);
+      const moves = staticMoves(offer, target);
+      negotiationRound += 1;
+      return {
+        accepted,
+        counterWeights: expandedTarget,
+        moves,
+        explanation: { source: "static", text: explanationText },
+        control: { source: "static_export", distance_from_proxy: distance, same_decision: sameDecision },
+      };
+    }
+
+    function deactivateChatActions() {
+      negotiationEvents = negotiationEvents.map((event) => ({
+        ...event,
+        actionable: false,
+        text: typeof event.text === "string" ? event.text.replace(/<div class="history-actions">[\s\S]*?<\/div>/g, "") : event.text,
+      }));
+    }
+
+    function bindCounterOfferActions(actionId, response) {
+      const acceptButton = document.getElementById(`acceptProxyButton-${actionId}`);
+      const modifyButton = document.getElementById(`continueOfferButton-${actionId}`);
+      const proxyOfferName = response.initial ? "proxy initial offer" : "proxy counter-offer";
+      if (acceptButton) {
+        acceptButton.addEventListener("click", () => {
+          deactivateChatActions();
+          if (response.resultConsensus) {
+            const consensus = resultConsensus(userWeights, response.counterWeights);
+            setProxyWeights(response.counterWeights);
+            addHistory("user", "Accepted result-level consensus", "User accepts that both sides already select the same final prediction group, even though their weights are not identical.", userWeights);
+            if (consensus) lockResultConsensus(consensus, userWeights);
+            return;
+          }
+          composerLocked = true;
+          composerNote = "Accepted. The negotiated weights are locked in the composer.";
+          setWeights(response.counterWeights, `Accepted ${proxyOfferName}`);
+          setProxyWeights(response.counterWeights);
+          addHistory("user", `Accepted ${proxyOfferName}`, `User accepts the ${proxyOfferName} as the negotiated preference.`, response.counterWeights);
+          addHistory("proxy", "Consensus confirmed", "Great. The shared preference now uses this accepted offer, so the reliability table can be read as the reconciled decision chain.", response.counterWeights);
+          pendingProxyCounter = null;
+          renderOfferControls();
+        }, { once: true });
+      }
+      if (modifyButton) {
+        modifyButton.addEventListener("click", () => {
+          deactivateChatActions();
+          pendingProxyCounter = response.counterWeights;
+          initializeComposerAdjustments(response.counterWeights);
+          composerLocked = false;
+          composerNote = "Unlocked from the proxy's offer. Choose degree-based adjustments, then send your response.";
+          addHistory("user", `Modify ${proxyOfferName}`, `User chooses to revise the ${proxyOfferName}. The composer is now editable and starts from the proxy's proposed values.`, response.counterWeights);
+          renderOfferControls();
+        }, { once: true });
+      }
+    }
+
+    function moveSentence(move) {
+      const direction = move.delta >= 0 ? "Increase" : "Decrease";
+      return `${direction} ${move.label}: ${fmtPct(move.from)} → ${fmtPct(move.to)}`;
+    }
+
+    function sortedWeightEntries(rowWeights) {
+      return criteriaOrder
+        .map((key) => ({ key, label: criteriaLabels[key], value: rowWeights?.[key] || 0 }))
+        .sort((a, b) => b.value - a.value);
+    }
+
+    function weightPhrase(entry) {
+      return `${entry.label} ${Math.round(entry.value * 100)}%`;
+    }
+
+    function makeInitialProxyOffer(userBaseline, proxyIdeal) {
+      const userShare = 0.35;
+      const proxyShare = 0.65;
+      const user = normalizeWeights(userBaseline || {});
+      const proxy = normalizeWeights(proxyIdeal || {});
+      const blended = {};
+      criteriaOrder.forEach((key) => {
+        blended[key] = userShare * (user[key] || 0) + proxyShare * (proxy[key] || 0);
+      });
+      return normalizeWeights(blended);
+    }
+
+    function proxyFocusedAsk(userBaseline, proxyOffer) {
+      const user = normalizeWeights(userBaseline || {});
+      const proxy = normalizeWeights(proxyOffer || {});
+      const ranked = criteriaOrder
+        .map((key) => ({ key, label: criteriaLabels[key], user: user[key] || 0, proxy: proxy[key] || 0, gap: (proxy[key] || 0) - (user[key] || 0) }))
+        .sort((a, b) => b.gap - a.gap);
+      return ranked.find((item) => item.gap > 0.015) || ranked[0];
+    }
+
+    function describeProxyInitialOffer(proxyOffer, userBaseline) {
+      const userSorted = sortedWeightEntries(userBaseline);
+      const userTop = userSorted[0];
+      const ask = proxyFocusedAsk(userBaseline, proxyOffer);
+      const personaPriority = currentPersona?.priority || userTop.label;
+      const personaRole = personaRolePhrase(currentPersona);
+      const userPct = Math.round((ask.user || 0) * 100);
+      const proxyPct = Math.round((ask.proxy || 0) * 100);
+
+      return `I see that as a ${personaRole}, you care most about ${escapeHtml(personaPriority)}, so I am not asking to erase that priority.<br><br>My main ask is narrower: I want to move ${escapeHtml(ask.label)} from your ${userPct}% toward ${proxyPct}%. This is the part I care about more than you do. Are you willing to give a little room here, or would you rather modify the offer?`;
+    }
+
+    function describeProxyMoves(response) {
+      if (!response.moves.length) return "No large weight changes.";
+      const largest = [...response.moves].sort((a, b) => Math.abs(b.delta) - Math.abs(a.delta))[0];
+      const direction = largest.delta >= 0 ? "raising" : "lowering";
+      return `I am ${direction} ${escapeHtml(largest.label)} from ${fmtPct(largest.from)} to ${fmtPct(largest.to)} to move the proposal toward a shared reliability decision. The full adjustment is:<br>${response.moves.map(moveSentence).join("<br>")}`;
+    }
+
+    function addProxyCounterOffer(response) {
+      const actionId = actionCounter++;
+      const isInitial = Boolean(response.initial);
+      const moveText = isInitial
+        ? "This is an opening offer, not a final demand. Accept it if this focused tradeoff feels reasonable, or modify it to show where you want me to give more room."
+        : describeProxyMoves(response);
+      const title = isInitial ? "Proxy initial offer" : "Proxy counter-offer";
+      const acceptLabel = isInitial ? "Accept offer" : "Accept counter-offer";
+      const modifyLabel = isInitial ? "Modify this offer" : "Modify this counter-offer";
+      addHistory(
+        "proxy",
+        title,
+        `${response.explanation.text}
+          <div class="proxy-moves">${moveText}</div>
+          <div class="history-actions">
+            <button type="button" id="acceptProxyButton-${actionId}" class="primary-button">${acceptLabel}</button>
+            <button type="button" id="continueOfferButton-${actionId}">${modifyLabel}</button>
+          </div>`,
+        response.counterWeights,
+        { actionable: true }
+      );
+      requestAnimationFrame(() => bindCounterOfferActions(actionId, response));
+    }
+
+    function beginUserOpeningOffer(baseWeights, source = "Elicited preference baseline") {
+      const baseline = normalizeWeights(baseWeights || elicitedWeights || personaInitialWeights || activeData?.reconciliation?.default_weights || weights);
+      proxyWeights = proxyIdealWeights();
+      pendingProxyCounter = null;
+      setWeights(baseline, source);
+      initializeComposerAdjustments(baseline);
+      composerLocked = false;
+      composerNote = "Start from your elicited preference. Adjust each criterion by degree, then send your opening offer.";
+      renderSummary();
+      renderReconciliation();
+      renderOfferControls();
+      renderHistory();
+    }
+
+    function openWithProxyOffer() {
+      if (!activeData) return;
+      const userBaseline = normalizeWeights(elicitedWeights || userWeights || activeData.reconciliation.default_weights);
+      const proxyIdeal = normalizeWeights(activeData.reconciliation.proxy_weights || activeData.reconciliation.default_weights);
+      const initialProxyWeights = makeInitialProxyOffer(userBaseline, proxyIdeal);
+      pendingProxyCounter = initialProxyWeights;
+      initializeComposerAdjustments(initialProxyWeights);
+      composerLocked = true;
+      composerNote = "Proxy initial offer loaded as an opening compromise. Choose Accept in the chat, or Modify to unlock and edit it.";
+      setProxyWeights(initialProxyWeights);
+      renderOfferControls();
+      addProxyCounterOffer({
+        initial: true,
+        resultConsensus: false,
+        counterWeights: initialProxyWeights,
+        moves: [],
+        explanation: { text: describeProxyInitialOffer(initialProxyWeights, userBaseline) }
+      });
+    }
+
+    function renderProxyBox(mode = null, options = {}) {
+      if (!activeData) return;
+      if (!mode) {
+        renderHistory();
+        return;
+      }
+
+      if (!options.skipUserHistory) {
+        addHistory("user", hasSubmittedUserOffer() ? "User counter-offer" : "User initial offer", "User proposes criteria weights.", userWeights);
+      }
+      const consensus = resultConsensus(userWeights, proxyWeights);
+      if (consensus && negotiationRound > 0) {
+        lockResultConsensus(consensus, userWeights);
+        return;
+      }
+      showProxyThinking();
+      setTimeout(async () => {
+        try {
+          const response = await negotiateWithProxy(userWeights);
+          removeProxyThinking();
+          if (response.accepted) {
+            addHistory("proxy", "Proxy accepts", response.explanation.text, userWeights);
+            offerSource = "Negotiated user offer";
+            initializeComposerAdjustments(userWeights);
+            composerLocked = true;
+            composerNote = "Consensus reached. The accepted weights are locked in the composer.";
+            setProxyWeights(userWeights);
+            pendingProxyCounter = null;
+            renderSummary();
+            renderReconciliation();
+            renderOfferControls();
+            return;
+          }
+
+          pendingProxyCounter = response.counterWeights;
+          initializeComposerAdjustments(response.counterWeights);
+          composerLocked = true;
+          composerNote = "Proxy counter-offer loaded. Choose Accept in the chat, or Modify to unlock and edit it.";
+          setProxyWeights(response.counterWeights);
+          renderOfferControls();
+          addProxyCounterOffer(response);
+        } catch (error) {
+          removeProxyThinking();
+          addHistory("proxy", "Proxy control error", `Could not generate a counter-offer: ${error.message}`, null);
+        }
+      }, 850);
+    }
+
+    function decisionLabelForClass(classId) {
+      const raw = activeData?.label_names?.[classId] || `Class ${classId}`;
+      const lower = String(raw).toLowerCase();
+      if (lower.includes("high") || lower === "1") return "High risk";
+      if (lower.includes("low") || lower === "0") return "Low risk";
+      return raw;
+    }
+
+    function resetFinalDecision() {
+      finalDecision = null;
+      renderFinalDecisionOptions();
+    }
+
+    function renderFinalDecisionOptions() {
+      if (!finalDecisionOptions || !activeData) return;
+      const classIds = Object.keys(activeData.label_names || {}).map(Number).filter(Number.isFinite);
+      const ids = classIds.length ? classIds : [0, 1];
+      finalDecisionOptions.innerHTML = ids.map((classId) => `
+        <label class="final-decision-option">
+          <input type="radio" name="finalDecision" value="${classId}" ${String(finalDecision) === String(classId) ? "checked" : ""}>
+          <span>${escapeHtml(decisionLabelForClass(classId))}</span>
+        </label>
+      `).join("");
+      if (nextCaseButton) {
+        nextCaseButton.disabled = finalDecision == null;
+      }
+      finalDecisionOptions.querySelectorAll("input[name='finalDecision']").forEach((input) => {
+        input.addEventListener("change", () => {
+          finalDecision = input.value;
+          renderFinalDecisionOptions();
+        });
+      });
+    }
+
+    function renderReconciliation() {
+      if (!activeData) return;
+      const userWinner = winningGroup(userWeights);
+      const proxyWinner = winningGroup(proxyWeights);
+      if (userWinner && proxyWinner && userWinner.class_id === proxyWinner.class_id) {
+        decisionLabel.classList.remove("disagreement");
+        consensusHint.classList.remove("disagreement");
+        decisionLabel.textContent = userWinner.label;
+        decisionReason.textContent = `Consensus reached: both user and proxy identify ${userWinner.label} as the most reliable prediction group under their current weights. The final decision can be shown because the reliability chain agrees.`;
+      } else if (userWinner && proxyWinner) {
+        decisionLabel.classList.add("disagreement");
+        consensusHint.classList.add("disagreement");
+        decisionLabel.textContent = "No consensus yet";
+        decisionReason.textContent = `Proxy thinks ${proxyWinner.label} is more reliable (${fmtPct(proxyWinner.reliability)}), while the user thinks ${userWinner.label} is more reliable (${fmtPct(userWinner.reliability)}). Continue negotiation until both sides select the same prediction group.`;
+      } else {
+        decisionLabel.classList.add("disagreement");
+        consensusHint.classList.add("disagreement");
+        decisionLabel.textContent = "No consensus yet";
+        decisionReason.textContent = "No group is available for this case.";
+      }
+    }
+
+    async function loadDatasets() {
+      datasetMeta = await fetchJson("/api/datasets");
+      datasetSelect.innerHTML = datasetMeta.map((d) => `<option value="${d.key}">${d.label}</option>`).join("");
+      const requestedDataset = getUrlParams().get("dataset");
+      datasetSelect.value = datasetMeta.some((d) => d.key === requestedDataset) ? requestedDataset : "compas";
+      replaceUrlParams({ dataset: datasetSelect.value });
+      await loadCases();
+    }
+
+    async function loadCases() {
+      const dataset = datasetSelect.value;
+      setLoading("Loading cases...");
+      const cases = await fetchJson(`/api/${dataset}/cases`);
+      caseSelect.innerHTML = cases.map((c) => {
+        const flag = c.high_disagreement ? " • disagreement" : "";
+        return `<option value="${c.test_case_index}">Case ${c.test_case_index}${flag}</option>`;
+      }).join("");
+      const requestedCase = getUrlParams().get("case");
+      if (requestedCase && Array.from(caseSelect.options).some((option) => option.value === requestedCase)) {
+        caseSelect.value = requestedCase;
+      }
+      replaceUrlParams({ dataset, case: caseSelect.value });
+      const meta = datasetMeta.find((d) => d.key === dataset);
+      datasetHint.textContent = `${meta.label}: ${meta.case_count} test cases, ${meta.model_count} selected models`;
+      await loadDistribution();
+    }
+
+    async function loadDistribution({ preservePreference = false, forceReconcile = false } = {}) {
+      const dataset = datasetSelect.value;
+      const caseIndex = caseSelect.value;
+      if (caseIndex === "") return;
+      setLoading("Loading model predictions...");
+      activeData = await fetchJson(`/api/${dataset}/cases/${caseIndex}`);
+      resetFinalDecision();
+      currentPersona = null;
+      proxyPersona = null;
+      personaInitialWeights = null;
+      proxyWeights = normalizeWeights(activeData.reconciliation.proxy_weights);
+      initializePersonaPreference({ newPersona: true, announce: false, preserveElicitation: preservePreference });
+      offerSource = "Elicited initial offer";
+      replaceUrlParams({ dataset, case: caseIndex });
+
+      features.innerHTML = renderCaseFeaturePatterns(dataset, activeData.case.features, activeData.shap_patterns, activeData.label_names, activeData.summary);
+
+      modelRows.innerHTML = activeData.models.map((row) => {
+        const label = activeData.label_names[row.pred_class] || `Class ${row.pred_class}`;
+        return `
+          <tr>
+            <td>${row.label}</td>
+            <td><span class="badge class-${row.pred_class}">${label}</span></td>
+            <td>${fmtProb(row.pred_prob)}</td>
+            <td>${fmtPct(row.local_consistency)}</td>
+            <td>${fmtPct(row.counterfactual_fairness)}</td>
+            <td>${fmtPct(row.race_counterfactual_fairness)}</td>
+            <td>${fmtPct(row.gender_counterfactual_fairness)}</td>
+            <td>${fmtPct(row.sensitive_counterfactual_fairness)}</td>
+            <td>${fmtPct(row.test_accuracy)}</td>
+            <td>${fmtPct(row.tpr)}</td>
+            <td>${fmtPct(row.tnr)}</td>
+          </tr>
+        `;
+      }).join("");
+
+      const requestedStage = forceReconcile ? "reconcile" : stageFromUrl();
+      if (requestedStage === "reconcile" && answeredPairCount() === pairwiseAnswers.length) {
+        startReconciliationFromElicitation();
+      } else if (requestedStage === "preference") {
+        showStage("preference");
+      } else {
+        showStage("persona");
+      }
+    }
+
+    personaConsentCheckbox.addEventListener("change", () => {
+      personaNextButton.disabled = !personaConsentCheckbox.checked;
+      saveElicitationState();
+    });
+    personaNextButton.addEventListener("click", () => showStage("preference"));
+    preferenceBackButton.addEventListener("click", () => {
+      if (pairwiseIndex < 0) {
+        showStage("persona");
+      } else {
+        pairwiseIndex -= 1;
+        saveElicitationState();
+        renderPreferenceElicitation();
+      }
+    });
+    pairwiseNextButton.addEventListener("click", () => {
+      if (pairwiseIndex < 0) {
+        pairwiseIndex = 0;
+      } else if (pairwiseIndex >= pairwiseAnswers.length) {
+        pairwiseIndex = 0;
+      } else if (pairwiseAnswers[pairwiseIndex] !== null) {
+        pairwiseIndex += 1;
+      }
+      saveElicitationState();
+      renderPreferenceElicitation();
+    });
+    startReconciliationButton.addEventListener("click", () => {
+      if (pairwiseIndex < 0) {
+        pairwiseIndex = 0;
+        renderPreferenceElicitation();
+      } else if (pairwiseIndex >= pairwiseAnswers.length) {
+        startReconciliationFromElicitation();
+      }
+    });
+    datasetSelect.addEventListener("change", () => {
+      replaceUrlParams({ dataset: datasetSelect.value, case: null, stage: "1" });
+      loadCases();
+    });
+    caseSelect.addEventListener("change", () => {
+      const preservePreference = hasCompleteElicitedPreference();
+      replaceUrlParams({ dataset: datasetSelect.value, case: caseSelect.value, stage: preservePreference ? "3" : "1" });
+      loadDistribution({ preservePreference, forceReconcile: preservePreference });
+    });
+    nextCaseButton.addEventListener("click", () => {
+      if (finalDecision == null || !caseSelect || !caseSelect.options.length) return;
+      const nextIndex = (caseSelect.selectedIndex + 1) % caseSelect.options.length;
+      caseSelect.selectedIndex = nextIndex;
+      caseSelect.dispatchEvent(new Event("change"));
+    });
+
+    toggleDetailsButton.addEventListener("click", (event) => {
+      event.preventDefault();
+    });
+
+    loadDatasets().catch((error) => {
+      datasetHint.textContent = `Error: ${error.message}`;
+      setLoading("Failed to load data.");
+      console.error(error);
+    });
+  </script>
+</body>
+</html>

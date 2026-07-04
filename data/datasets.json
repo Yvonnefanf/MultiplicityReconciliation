@@ -1,0 +1,1 @@
+[{"case_count":854,"key":"loan","label":"Loan Approval","label_names":["Rejected","Approved"],"model_count":100},{"case_count":1235,"key":"compas","label":"COMPAS","label_names":["Low Risk","High Risk"],"model_count":100}]
