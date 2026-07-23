@@ -1,0 +1,212 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1800" height="940" viewBox="0 0 1800 940" role="img" aria-labelledby="title desc">
+  <title id="title">Theory-Grounded Negotiation Architecture</title>
+  <desc id="desc">Two-panel architecture diagram contrasting unstructured preference reconciliation with a theory-grounded structured negotiation pipeline.</desc>
+  <defs>
+    <style>
+      .bg { fill: #ffffff; }
+      .panel-title { font: 700 34px Georgia, 'Times New Roman', serif; fill: #111111; }
+      .label { font: 700 25px Georgia, 'Times New Roman', serif; fill: #111111; }
+      .small-label { font: 700 20px Georgia, 'Times New Roman', serif; fill: #111111; }
+      .box-text { font: 700 27px Georgia, 'Times New Roman', serif; fill: #ffffff; text-anchor: middle; dominant-baseline: middle; }
+      .box-text-dark { font: 700 25px Georgia, 'Times New Roman', serif; fill: #222222; text-anchor: middle; dominant-baseline: middle; }
+      .box-text-small { font: 700 22px Georgia, 'Times New Roman', serif; fill: #ffffff; text-anchor: middle; dominant-baseline: middle; }
+      .caption { font: 700 25px Georgia, 'Times New Roman', serif; fill: #222222; text-anchor: middle; }
+      .caption-blue { fill: #0d8fe8; }
+      .caption-orange { fill: #ff9a25; }
+      .blue { fill: #0d8fe8; stroke: #0d8fe8; }
+      .blue-light { fill: #eaf5ff; stroke: #0d8fe8; }
+      .orange { fill: #ff9a25; stroke: #ff9a25; }
+      .orange-deep { fill: #ff6500; stroke: #ff6500; }
+      .orange-light { fill: #fff1df; stroke: #ff9a25; }
+      .gray { fill: #a9a9a9; stroke: #a9a9a9; }
+      .red { fill: #ff5e70; stroke: #ff5e70; }
+      .line-blue { stroke: #0d8fe8; stroke-width: 5; fill: none; }
+      .line-orange { stroke: #ff9a25; stroke-width: 5; fill: none; }
+      .line-gray { stroke: #b8b8b8; stroke-width: 5; fill: none; }
+      .line-red { stroke: #ff5e70; stroke-width: 5; fill: none; stroke-dasharray: 12 10; }
+      .line-thin { stroke-width: 3.5; }
+      .panel-border { fill: none; stroke: #eeeeee; stroke-width: 2; }
+      .gap-text { font: 700 31px Georgia, 'Times New Roman', serif; fill: #ff5e70; text-anchor: middle; }
+      .gap-sub { font: 700 20px Georgia, 'Times New Roman', serif; fill: #ff5e70; text-anchor: middle; }
+    </style>
+    <marker id="arrow-blue" markerWidth="16" markerHeight="16" refX="13" refY="8" orient="auto" markerUnits="strokeWidth">
+      <path d="M 0 0 L 16 8 L 0 16 z" fill="#0d8fe8"/>
+    </marker>
+    <marker id="arrow-orange" markerWidth="16" markerHeight="16" refX="13" refY="8" orient="auto" markerUnits="strokeWidth">
+      <path d="M 0 0 L 16 8 L 0 16 z" fill="#ff9a25"/>
+    </marker>
+    <marker id="arrow-gray" markerWidth="16" markerHeight="16" refX="13" refY="8" orient="auto" markerUnits="strokeWidth">
+      <path d="M 0 0 L 16 8 L 0 16 z" fill="#b8b8b8"/>
+    </marker>
+    <marker id="arrow-red" markerWidth="16" markerHeight="16" refX="13" refY="8" orient="auto" markerUnits="strokeWidth">
+      <path d="M 0 0 L 16 8 L 0 16 z" fill="#ff5e70"/>
+    </marker>
+  </defs>
+
+  <rect class="bg" width="1800" height="940"/>
+
+  <!-- Panel labels -->
+  <text class="panel-title" x="46" y="72">a)</text>
+  <text class="panel-title" x="936" y="72">b)</text>
+
+  <!-- LEFT PANEL: unstructured reconciliation -->
+  <rect class="gray" x="292" y="704" width="250" height="72" rx="10"/>
+  <text class="box-text" x="417" y="730">Model</text>
+  <text class="box-text" x="417" y="762">Candidates</text>
+
+  <circle cx="165" cy="510" r="42" fill="#ffffff" stroke="#111111" stroke-width="4"/>
+  <path d="M142 505 q22 -20 46 0" fill="none" stroke="#111111" stroke-width="4"/>
+  <circle cx="151" cy="516" r="4" fill="#111111"/>
+  <circle cx="181" cy="516" r="4" fill="#111111"/>
+  <path d="M154 535 q13 10 27 0" fill="none" stroke="#111111" stroke-width="4"/>
+  <text class="label" x="96" y="590">User</text>
+
+  <circle cx="730" cy="510" r="42" fill="#ffffff" stroke="#111111" stroke-width="4"/>
+  <path d="M710 492 q25 -18 45 4" fill="none" stroke="#111111" stroke-width="4"/>
+  <circle cx="716" cy="516" r="4" fill="#111111"/>
+  <circle cx="746" cy="516" r="4" fill="#111111"/>
+  <path d="M715 535 q15 -8 30 5" fill="none" stroke="#111111" stroke-width="4"/>
+  <text class="label" x="780" y="528">Proxy</text>
+
+  <rect class="blue" x="255" y="462" width="330" height="72" rx="10"/>
+  <text class="box-text" x="420" y="498">Criteria Weights</text>
+
+  <rect class="orange" x="124" y="154" width="285" height="68" rx="10"/>
+  <text class="box-text" x="266" y="188">User Weights</text>
+  <rect class="blue" x="525" y="154" width="285" height="68" rx="10"/>
+  <text class="box-text" x="667" y="188">Proxy Weights</text>
+
+  <rect class="orange-deep" x="310" y="272" width="265" height="86" rx="12"/>
+  <text class="box-text-small" x="442" y="301">Ad-hoc</text>
+  <text class="box-text-small" x="442" y="330">Exchange</text>
+
+  <rect class="orange" x="218" y="52" width="295" height="68" rx="10"/>
+  <text class="box-text" x="365" y="86">Decision</text>
+  <rect class="blue" x="610" y="52" width="260" height="68" rx="10"/>
+  <text class="box-text" x="740" y="86">Decision</text>
+
+  <path class="line-gray" marker-end="url(#arrow-gray)" d="M417 704 L417 560"/>
+  <text class="small-label" x="445" y="645">observe</text>
+  <path class="line-blue" marker-end="url(#arrow-blue)" d="M292 498 L215 498"/>
+  <path class="line-blue" marker-end="url(#arrow-blue)" d="M585 498 L688 498"/>
+  <path class="line-orange" marker-end="url(#arrow-orange)" d="M265 222 L265 272"/>
+  <path class="line-blue" marker-end="url(#arrow-blue)" d="M667 222 L667 272"/>
+  <path class="line-orange" marker-end="url(#arrow-orange)" d="M442 272 L410 220"/>
+  <path class="line-blue" marker-end="url(#arrow-blue)" d="M575 315 L645 220"/>
+  <path class="line-orange" marker-end="url(#arrow-orange)" d="M365 154 L365 122"/>
+  <path class="line-blue" marker-end="url(#arrow-blue)" d="M740 154 L740 122"/>
+  <text class="small-label" x="146" y="448">set</text>
+  <text class="small-label" x="664" y="448">infer</text>
+  <text class="small-label" x="286" y="137">evaluate</text>
+  <text class="small-label" x="754" y="137">evaluate</text>
+
+  <text class="caption" x="430" y="835">
+    <tspan class="caption-blue">AI</tspan><tspan> exchanges weights.</tspan>
+  </text>
+  <text class="caption" x="430" y="872">
+    <tspan class="caption-orange">User</tspan><tspan> must infer what is negotiable.</tspan>
+  </text>
+
+  <!-- Middle gap -->
+  <path class="line-red" marker-end="url(#arrow-red)" d="M848 475 L925 475"/>
+  <path class="line-red" marker-end="url(#arrow-red)" d="M925 548 L848 548"/>
+  <text class="gap-text" x="887" y="430">Negotiation</text>
+  <text class="gap-text" x="887" y="465">Gap</text>
+  <text class="gap-sub" x="887" y="594">No explicit interests, priorities,</text>
+  <text class="gap-sub" x="887" y="620">reservation bounds, or floors</text>
+
+  <!-- RIGHT PANEL: structured negotiation -->
+  <rect class="gray" x="1422" y="704" width="275" height="72" rx="10"/>
+  <text class="box-text" x="1560" y="730">Model Candidates</text>
+  <text class="box-text" x="1560" y="762">+ Criteria Performance</text>
+
+  <circle cx="1015" cy="478" r="42" fill="#ffffff" stroke="#111111" stroke-width="4"/>
+  <path d="M991 471 q24 -20 48 0" fill="none" stroke="#111111" stroke-width="4"/>
+  <circle cx="1001" cy="486" r="4" fill="#111111"/>
+  <circle cx="1030" cy="486" r="4" fill="#111111"/>
+  <path d="M1004 506 q12 11 25 0" fill="none" stroke="#111111" stroke-width="4"/>
+  <text class="label" x="948" y="558">User</text>
+
+  <circle cx="1650" cy="478" r="42" fill="#ffffff" stroke="#111111" stroke-width="4"/>
+  <path d="M1629 460 q25 -18 46 4" fill="none" stroke="#111111" stroke-width="4"/>
+  <circle cx="1636" cy="486" r="4" fill="#111111"/>
+  <circle cx="1666" cy="486" r="4" fill="#111111"/>
+  <path d="M1636 507 q15 -8 29 5" fill="none" stroke="#111111" stroke-width="4"/>
+  <text class="label" x="1695" y="496">AI</text>
+
+  <rect class="orange-light" x="1015" y="152" width="285" height="196" rx="12"/>
+  <rect class="orange" x="1015" y="152" width="285" height="54" rx="12"/>
+  <text class="box-text-small" x="1158" y="181">User Profile</text>
+  <text class="box-text-dark" x="1158" y="235">Interests</text>
+  <text class="box-text-dark" x="1158" y="273">Issue Priorities</text>
+  <text class="box-text-dark" x="1158" y="311">Reservation Bounds</text>
+  <text class="box-text-dark" x="1158" y="342">Performance Guards</text>
+
+  <rect class="orange-light" x="1395" y="152" width="285" height="196" rx="12"/>
+  <rect class="orange" x="1395" y="152" width="285" height="54" rx="12"/>
+  <text class="box-text-small" x="1538" y="181">Proxy Profile</text>
+  <text class="box-text-dark" x="1538" y="235">Role Context</text>
+  <text class="box-text-dark" x="1538" y="273">Interests</text>
+  <text class="box-text-dark" x="1538" y="311">Rigidity</text>
+  <text class="box-text-dark" x="1538" y="342">Performance Guards</text>
+
+  <rect class="blue" x="1125" y="406" width="430" height="78" rx="10"/>
+  <text class="box-text" x="1340" y="445">Stakeholder Profile Layer</text>
+
+  <rect class="blue" x="1125" y="538" width="430" height="78" rx="10"/>
+  <text class="box-text" x="1340" y="577">Offer Generation Layer</text>
+
+  <rect class="blue-light" x="1035" y="650" width="255" height="128" rx="12"/>
+  <text class="box-text-dark" x="1162" y="680">Package Offer</text>
+  <text class="box-text-dark" x="1162" y="715">Detect priorities</text>
+  <text class="box-text-dark" x="1162" y="750">Pareto frontier</text>
+
+  <rect class="blue-light" x="1398" y="650" width="255" height="128" rx="12"/>
+  <text class="box-text-dark" x="1526" y="680">Counter-offer</text>
+  <text class="box-text-dark" x="1526" y="715">Filter bounds</text>
+  <text class="box-text-dark" x="1526" y="750">Check guards</text>
+
+  <rect class="blue" x="1125" y="812" width="430" height="78" rx="10"/>
+  <text class="box-text" x="1340" y="851">Communication Layer</text>
+
+  <rect class="orange" x="965" y="812" width="130" height="78" rx="10"/>
+  <text class="box-text-small" x="1030" y="840">State</text>
+  <text class="box-text-small" x="1030" y="867">Core</text>
+
+  <rect class="orange" x="1585" y="812" width="150" height="78" rx="10"/>
+  <text class="box-text-small" x="1660" y="839">Small</text>
+  <text class="box-text-small" x="1660" y="866">Concession</text>
+
+  <rect class="orange-deep" x="1140" y="42" width="320" height="70" rx="10"/>
+  <text class="box-text" x="1300" y="77">Negotiated Contract</text>
+
+  <rect class="orange" x="1505" y="42" width="260" height="70" rx="10"/>
+  <text class="box-text" x="1635" y="77">User Final</text>
+  <text class="box-text" x="1635" y="104">Decision</text>
+
+  <path class="line-gray" marker-end="url(#arrow-gray)" d="M1560 704 L1560 620"/>
+  <text class="small-label" x="1588" y="663">observe</text>
+  <path class="line-orange" marker-end="url(#arrow-orange)" d="M1158 348 L1260 406"/>
+  <path class="line-orange" marker-end="url(#arrow-orange)" d="M1538 348 L1435 406"/>
+  <path class="line-blue" marker-end="url(#arrow-blue)" d="M1340 484 L1340 538"/>
+  <path class="line-blue" marker-end="url(#arrow-blue)" d="M1340 616 L1250 650"/>
+  <path class="line-blue" marker-end="url(#arrow-blue)" d="M1340 616 L1455 650"/>
+  <path class="line-blue" marker-end="url(#arrow-blue)" d="M1162 778 L1235 812"/>
+  <path class="line-blue" marker-end="url(#arrow-blue)" d="M1526 778 L1440 812"/>
+  <path class="line-orange" marker-end="url(#arrow-orange)" d="M1095 851 L1125 851"/>
+  <path class="line-orange" marker-end="url(#arrow-orange)" d="M1555 851 L1585 851"/>
+  <path class="line-blue" marker-end="url(#arrow-blue)" d="M1340 812 L1340 616"/>
+  <path class="line-blue" marker-end="url(#arrow-blue)" d="M1340 406 L1340 112"/>
+  <path class="line-orange" marker-end="url(#arrow-orange)" d="M1460 77 L1505 77"/>
+  <path class="line-orange" marker-end="url(#arrow-orange)" d="M1635 112 L1635 435"/>
+  <text class="small-label" x="1495" y="132">user authority</text>
+  <text class="small-label" x="1365" y="139">formalize</text>
+  <text class="small-label" x="1585" y="442">verbalize</text>
+
+  <path class="line-red" marker-end="url(#arrow-red)" d="M1015 520 C1090 600 1108 646 1140 650"/>
+  <text class="gap-sub" x="1068" y="618">objection / ask why</text>
+
+  <text class="caption" x="1355" y="914">
+    <tspan class="caption-blue">AI</tspan><tspan> scaffolds theory-grounded negotiation; </tspan><tspan class="caption-orange">User</tspan><tspan> keeps final decision authority.</tspan>
+  </text>
+</svg>

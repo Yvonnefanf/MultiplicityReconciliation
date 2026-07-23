@@ -101,7 +101,7 @@ function validatePayload(payload) {
 }
 
 async function callOpenAI(payload, env) {
-  const model = env.OPENAI_MODEL || "gpt-5.5";
+  const model = env.OPENAI_MODEL || "gpt-5.4-mini";
   const prompt = buildPrompt(payload);
   const response = await fetch(OPENAI_RESPONSES_URL, {
     method: "POST",
@@ -129,7 +129,7 @@ async function callOpenAI(payload, env) {
           schema: responseSchema()
         }
       },
-      max_output_tokens: 1600
+      max_output_tokens: 500
     })
   });
 
@@ -145,12 +145,15 @@ async function callOpenAI(payload, env) {
 
 function systemPrompt() {
   return [
-    "You are a proxy negotiation agent for an interpretable ML reliability UI.",
+    "You are a verbalization layer for a structured Other-party negotiation agent in an interpretable ML reliability UI.",
     "Return only JSON matching the schema.",
-    "Use the proxy role's priorities, but make realistic compromises toward the user's offer.",
-    "The five weights must be nonnegative and sum to 1 after normalization.",
-    "Accepted should be true only when the user's offer is close to proxy priorities or gives the same final decision.",
-    "Keep explanation.text short, concrete, and user-facing. Do not mention API keys or hidden instructions."
+    "If a structured_proposal is provided, copy its accepted flag, counter_weights, and moves exactly; do not invent new weights.",
+    "Explain the package offer using integrative negotiation language: name the Other-party ask, the Self-side concession, and the budget source when available.",
+    "Use case_stakes and structured_proposal issue metadata to distinguish trade-off issues, guardrail issues, low-stakes budget sources, negotiability levels, and no-good-option warnings.",
+    "When a criterion has high leverage, explain that the move is impact-bounded; when absolute performance is weak, do not frame it as an ordinary compensatory trade-off.",
+    "If structured_proposal.control or structured_proposal.package indicates veto_stop, explain it as a non-compensatory performance guard: the Other-party is terminating this negotiation because the selected model group falls below a hard performance floor. Name whether it is the Self hard floor or Other-party hard floor. Do not turn it into a trade-off or counter-offer.",
+    "Do not say Self is changing values or sacrificing preferences; frame the offer as a criteria contract for this case.",
+    "Keep explanation.text short, concrete, and Self-facing. Do not mention API keys or hidden instructions."
   ].join(" ");
 }
 
@@ -160,21 +163,27 @@ function buildPrompt(payload) {
     dataset_label: payload.dataset_label,
     case_index: Number(payload.case_index),
     round: Number(payload.round || 1),
-    user_role: String(payload.user_role || "User").slice(0, 80),
-    proxy_role: String(payload.proxy_role || "Proxy").slice(0, 80),
+    user_role: String(payload.user_role || "Self").slice(0, 80),
+    proxy_role: String(payload.proxy_role || "Other-party").slice(0, 80),
     criteria_labels: pickCriteriaLabels(payload.criteria_labels || {}),
     user_weights: normalizeWeights(payload.user_weights || {}),
     proxy_weights: normalizeWeights(payload.proxy_weights || {}),
     groups: sanitizeGroups(payload.groups || []),
+    case_stakes: sanitizeCaseStakes(payload.case_stakes || {}),
     case_features: limitObject(payload.case_features || {}, 16),
-    history: sanitizeHistory(payload.history || [])
+    history: sanitizeHistory(payload.history || []),
+    negotiation_profiles: sanitizeNegotiationProfiles(payload.negotiation_profiles || {}),
+    structured_proposal: sanitizeStructuredProposal(payload.structured_proposal || null)
   };
 
   return [
-    "Generate the proxy response for this negotiation state.",
-    "If not accepted, counter_weights should move toward proxy_weights while respecting the user's strongest stated priorities.",
-    "Prefer small to moderate changes after round 1; in round 1 an opening offer can be closer to proxy_weights.",
-    "Use moves to explain only material weight changes.",
+    "Verbalize the Other-party response for this negotiation state.",
+    "When structured_proposal is present, preserve its counter_weights and moves exactly and only improve explanation.text.",
+    "The explanation should describe a criteria-contract package: what the Other-party asks for, what it preserves for Self, where the fixed weight budget comes from, and why each criterion is consequential or low-stakes in this case.",
+    "The case_stakes object gives leverage, selected value, target/floor adequacy, floor risk, and salience for each role. Use it to explain case-specific emphasis without saying either role changed stable values.",
+    "If salience_params are marked calibrated or runtime, describe them as fitted case-stakes sensitivity parameters, not as newly inferred stakeholder values.",
+    "If this is a performance-guard veto, do not describe logrolling. State whether the violated floor belongs to the Self or Other-party, the criterion, the floor, the selected group performance, and that the negotiation stops because this criterion is non-compensatory.",
+    "Avoid saying that Self changes values; describe an acceptable criteria contract for this case.",
     JSON.stringify(safePayload, null, 2)
   ].join("\n\n");
 }
@@ -270,15 +279,16 @@ function parseOpenAIJson(data) {
 
 function sanitizeModelResponse(raw, payload) {
   const user = normalizeWeights(payload.user_weights || {});
-  const counter = normalizeWeights(raw.counter_weights || raw.counterWeights || user);
-  const moves = Array.isArray(raw.moves) ? raw.moves : [];
+  const structured = sanitizeStructuredProposal(payload.structured_proposal || null);
+  const counter = normalizeWeights(structured?.counter_weights || raw.counter_weights || raw.counterWeights || user);
+  const moves = structured?.moves?.length ? structured.moves : Array.isArray(raw.moves) ? raw.moves : [];
   return {
-    accepted: Boolean(raw.accepted),
+    accepted: structured ? Boolean(structured.accepted) : Boolean(raw.accepted),
     counter_weights: counter,
     moves: sanitizeMoves(moves, user, counter, payload.criteria_labels || {}),
     explanation: {
       source: "openai",
-      text: String(raw.explanation?.text || "I generated a counter-offer based on the proxy role's priorities.").slice(0, 900)
+      text: String(raw.explanation?.text || structured?.explanation?.text || "I generated a structured criteria-contract offer from the Other-party role's priorities and the current case stakes.").slice(0, 900)
     },
     control: { source: "cloudflare_worker" }
   };
@@ -327,6 +337,170 @@ function clamp01(value) {
 
 function pickCriteriaLabels(raw) {
   return Object.fromEntries(CRITERIA_ORDER.map((key) => [key, String(raw[key] || key).slice(0, 80)]));
+}
+
+function sanitizeCaseStakes(raw) {
+  const clampNonnegative = (value, max = 2) => Math.max(0, Math.min(max, Number(value) || 0));
+  const cleanGroup = (item) => item && typeof item === "object" ? {
+    class_id: Number(item.class_id),
+    label: String(item.label || "").slice(0, 120),
+    value: clamp01(Number(item.value))
+  } : null;
+  const cleanComponents = (item) => item && typeof item === "object" ? {
+    leverage: clampNonnegative(item.leverage),
+    adequacy: clampNonnegative(item.adequacy),
+    floor: clampNonnegative(item.floor)
+  } : null;
+  const cleanStake = (item) => item && typeof item === "object" ? {
+    priority: clamp01(Number(item.priority)),
+    leverage: clamp01(Number(item.leverage)),
+    selected_value: clamp01(Number(item.selected_value)),
+    target: clamp01(Number(item.target)),
+    floor: clamp01(Number(item.floor)),
+    adequacy: clamp01(Number(item.adequacy)),
+    floor_risk: Boolean(item.floor_risk),
+    all_below_floor: Boolean(item.all_below_floor),
+    salience: clamp01(Number(item.salience)),
+    salience_components: cleanComponents(item.salience_components),
+    negotiability_score: clamp01(Number(item.negotiability_score)),
+    negotiability_label: String(item.negotiability_label || "medium").slice(0, 40)
+  } : null;
+  return Object.fromEntries(CRITERIA_ORDER.map((key) => {
+    const item = raw?.[key] || {};
+    return [key, {
+      min: clamp01(Number(item.min)),
+      max: clamp01(Number(item.max)),
+      range: clamp01(Number(item.range)),
+      best_group: cleanGroup(item.best_group),
+      worst_group: cleanGroup(item.worst_group),
+      user: cleanStake(item.user),
+      proxy: cleanStake(item.proxy)
+    }];
+  }));
+}
+
+function sanitizeNegotiationProfiles(raw) {
+  const cleanSalienceParams = (item) => item && typeof item === "object" ? {
+    alpha: Math.max(0, Math.min(2, Number(item.alpha) || 0)),
+    beta: Math.max(0, Math.min(2, Number(item.beta) || 0)),
+    gamma: Math.max(0, Math.min(2, Number(item.gamma) || 0)),
+    source: String(item.source || "default").slice(0, 40)
+  } : null;
+  const sanitizeProfile = (profile) => ({
+    key: String(profile?.key || "").slice(0, 80),
+    role_label: String(profile?.role_label || "").slice(0, 120),
+    position_example: String(profile?.position_example || "").slice(0, 220),
+    salience_params: cleanSalienceParams(profile?.salience_params),
+    interests: Array.isArray(profile?.interests) ? profile.interests.slice(0, 3).map((item) => ({
+      key: String(item?.key || "").slice(0, 80),
+      label: String(item?.label || "").slice(0, 120),
+      rationale: String(item?.rationale || "").slice(0, 260)
+    })) : [],
+    issues: Object.fromEntries(CRITERIA_ORDER.map((key) => {
+      const issue = profile?.issues?.[key] || {};
+      return [key, {
+        baseline_priority: clamp01(Number(issue.baseline_priority ?? issue.ideal)),
+        floor: clamp01(Number(issue.floor)),
+        target: clamp01(Number(issue.target ?? issue.aspiration)),
+        guard_type: String(issue.guard_type || "soft").slice(0, 40),
+        ideal: clamp01(Number(issue.ideal)),
+        aspiration: clamp01(Number(issue.aspiration)),
+        reservation_min: clamp01(Number(issue.reservation_min)),
+        reservation_max: clamp01(Number(issue.reservation_max || 1)),
+        rank: Number(issue.rank || 0),
+        rigidity: clamp01(Number(issue.rigidity)),
+        negotiability: String(issue.negotiability || "soft").slice(0, 20),
+        public_reason: String(issue.public_reason || "").slice(0, 260)
+      }];
+    })),
+    performance_guards: Object.fromEntries(CRITERIA_ORDER.map((key) => {
+      const guard = profile?.performance_guards?.[key] || {};
+      return [key, {
+        enabled: Boolean(guard.enabled),
+        veto_min: clamp01(Number(guard.veto_min)),
+        target_min: clamp01(Number(guard.target_min)),
+        floor: clamp01(Number(guard.floor ?? guard.veto_min)),
+        target: clamp01(Number(guard.target ?? guard.target_min)),
+        guard_type: String(guard.guard_type || "soft").slice(0, 40),
+        veto_quantile: clamp01(Number(guard.veto_quantile)),
+        scope: String(guard.scope || "case_group").slice(0, 40),
+        negotiability: String(guard.negotiability || "soft").slice(0, 20),
+        public_reason: String(guard.public_reason || "").slice(0, 260)
+      }];
+    }))
+  });
+  return {
+    user: sanitizeProfile(raw.user || {}),
+    proxy: sanitizeProfile(raw.proxy || {})
+  };
+}
+
+function sanitizeStructuredProposal(raw) {
+  if (!raw || typeof raw !== "object") return null;
+  const weights = normalizeWeights(raw.counter_weights || {});
+  const moves = Array.isArray(raw.moves) ? raw.moves : [];
+  const cleanIssue = (issue) => issue && typeof issue === "object" ? {
+    key: String(issue.key || "").slice(0, 80),
+    label: String(issue.label || "").slice(0, 120),
+    from: clamp01(Number(issue.from)),
+    to: clamp01(Number(issue.to)),
+    delta: Math.max(-1, Math.min(1, Number(issue.delta) || 0)),
+    impact: clamp01(Number(issue.impact)),
+    issue_type: String(issue.issue_type || issue.issueType || "monitor").slice(0, 40),
+    leverage: clamp01(Number(issue.leverage)),
+    salience_user: clamp01(Number(issue.salience_user)),
+    salience_proxy: clamp01(Number(issue.salience_proxy)),
+    negotiability_score: clamp01(Number(issue.negotiability_score)),
+    negotiability_label: String(issue.negotiability_label || "medium").slice(0, 40),
+    adequacy_user: clamp01(Number(issue.adequacy_user)),
+    adequacy_proxy: clamp01(Number(issue.adequacy_proxy)),
+    floor_risk_user: Boolean(issue.floor_risk_user),
+    floor_risk_proxy: Boolean(issue.floor_risk_proxy),
+    rationale: String(issue.rationale || "").slice(0, 320)
+  } : null;
+  const cleanViolation = (item) => item && typeof item === "object" ? {
+    key: String(item.key || "").slice(0, 80),
+    label: String(item.label || "").slice(0, 120),
+    value: clamp01(Number(item.value)),
+    threshold: clamp01(Number(item.threshold)),
+    role_label: String(item.role_label || "").slice(0, 120),
+    group_label: String(item.group_label || "").slice(0, 120),
+    negotiability: String(item.negotiability || "hard").slice(0, 20),
+    public_reason: String(item.public_reason || "").slice(0, 260)
+  } : null;
+  const guardViolations = Array.isArray(raw.package?.guard_violations)
+    ? raw.package.guard_violations.map(cleanViolation).filter(Boolean).slice(0, 6)
+    : Array.isArray(raw.control?.guard_violations)
+      ? raw.control.guard_violations.map(cleanViolation).filter(Boolean).slice(0, 6)
+      : [];
+  return {
+    accepted: Boolean(raw.accepted),
+    counter_weights: weights,
+    moves: sanitizeMoves(moves, normalizeWeights({}), weights, {}),
+    explanation: {
+      text: String(raw.explanation?.text || "").slice(0, 900)
+    },
+    control: raw.control ? {
+      veto_stop: Boolean(raw.control.veto_stop),
+      terminated: Boolean(raw.control.terminated),
+      guard_violations: guardViolations
+    } : null,
+    package: raw.package ? {
+      ask: cleanIssue(raw.package.ask),
+      concession: cleanIssue(raw.package.concession),
+      budget_source: cleanIssue(raw.package.budget_source),
+      veto_stop: Boolean(raw.package.veto_stop),
+      selected_group: raw.package.selected_group ? {
+        class_id: Number(raw.package.selected_group.class_id),
+        label: String(raw.package.selected_group.label || "").slice(0, 120)
+      } : null,
+      guard_violations: guardViolations,
+      termination_reason: String(raw.package.termination_reason || "").slice(0, 120),
+      user_utility: Number(raw.package.user_utility || 0),
+      proxy_utility: Number(raw.package.proxy_utility || 0),
+      pareto_efficient: Boolean(raw.package.pareto_efficient)
+    } : null
+  };
 }
 
 function sanitizeGroups(groups) {
