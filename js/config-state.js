@@ -158,7 +158,9 @@
     let aggregateSelfShare = 0.5;
     let negotiateV2Versions = [];
     let negotiateV2VersionIndex = 0;
-    let negotiateV2Draft = { selfSacrifice: null, otherSacrifice: null, step: 0.1 };
+    let negotiateV2Draft = { selfSacrifice: null, otherSacrifice: null, step: 0.1, topGive: "none" };
+    let negotiateV2Phase = "settled"; // "self" while only Self has moved this turn; "settled" once Other-party has responded
+    let negotiateV2Busy = false;      // true while a turn is mid-flight (Self stated, awaiting Other-party LLM)
 
     const SAME_CRITERIA_THRESHOLD = 0.02;
     const NEGOTIATION_STEP = 0.025;

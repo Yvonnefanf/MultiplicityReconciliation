@@ -98,7 +98,10 @@
                 { role: "other", roleLabel: "Other-party optimal", model: selectedSingleOptimalModel(otherWeights) },
               ];
             })();
-        return renderMultiOptimalCaseFeaturePattern(dataset, activeData.case.features, activeData.shap_patterns, activeData.label_names, activeData.models, selectedItems);
+        const multiOptions = isNegotiateV2Condition()
+          ? { versionTag: true, versions: negotiateV2Versions, currentVersionIndex: negotiateV2VersionIndex }
+          : {};
+        return renderMultiOptimalCaseFeaturePattern(dataset, activeData.case.features, activeData.shap_patterns, activeData.label_names, activeData.models, selectedItems, multiOptions);
       }
       if (studyCondition() === "exposure") {
         return renderExposureCaseFeaturePattern(dataset, activeData.case.features, activeData.shap_patterns, activeData.label_names, activeData.summary, activeData.models, activeData.reconciliation.groups, exposureHighlightOptions());
@@ -227,6 +230,15 @@
     if (toggleDetailsButton) {
       toggleDetailsButton.addEventListener("click", (event) => {
         event.preventDefault();
+      });
+    }
+
+    if (features) {
+      features.addEventListener("change", (event) => {
+        const versionSelect = event.target.closest && event.target.closest(".negotiate-v2-model-version-select");
+        if (versionSelect && isNegotiateV2Condition()) {
+          applyNegotiateV2Version(versionSelect.value);
+        }
       });
     }
 

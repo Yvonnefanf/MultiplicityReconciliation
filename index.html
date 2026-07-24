@@ -773,10 +773,17 @@
     body.condition-multioptimal .grid { grid-template-columns: minmax(0, 1fr); }
     body.condition-multioptimal .negotiation-panel { display: none; }
     .multi-optimal-group { align-items: center; display: grid; gap: 2px; justify-items: center; min-height: 58px; position: relative; }
-    .multi-optimal-role { color: #111; font-size: 14px; font-weight: 900; }
-    .multi-optimal-model-line { align-items: center; display: grid; font-size: 15px; font-weight: 900; grid-template-columns: max-content 24px; justify-content: center; column-gap: 6px; justify-self: center; line-height: 1.15; position: relative; width: max-content; }
+    .multi-optimal-role { align-items: center; color: #111; column-gap: 6px; display: flex; font-size: 14px; font-weight: 900; justify-content: center; row-gap: 3px; }
+    .multi-optimal-model-line { align-items: center; display: flex; flex-wrap: wrap; font-size: 15px; font-weight: 900; justify-content: center; column-gap: 6px; row-gap: 4px; justify-self: center; line-height: 1.15; position: relative; width: max-content; }
     .multi-optimal-model-line > span:first-child { display: block; white-space: nowrap; }
+    .negotiate-v2-model-version-select { appearance: auto; background: #eef3f8; border: 1px solid #c7d7e4; border-radius: 999px; color: #2d4356; cursor: pointer; font-size: 12px; font-weight: 800; max-width: 88px; padding: 0 2px; }
+    .negotiate-v2-model-version-select:hover { border-color: #8fb0c7; }
     .multi-optimal-detail-wrap { margin-left: 0; position: relative; }
+    /* Model #id is itself the hover trigger for the SHAP popover, styled as a link */
+    .exposure-performance-group.multi-optimal-group .multi-optimal-model-line .exposure-detail-wrap { position: relative; left: auto; top: auto; margin: 0; transform: none; }
+    .multi-optimal-model-line .model-detail-link { color: var(--blue); cursor: pointer; text-decoration: underline; text-underline-offset: 2px; }
+    .multi-optimal-model-line .exposure-detail-wrap:hover .model-detail-link,
+    .multi-optimal-model-line .exposure-detail-wrap:focus-within .model-detail-link { color: #3d5573; }
     .multi-optimal-table .exposure-shap-popover { grid-template-columns: 320px 170px 180px; top: 50%; }
     .multi-optimal-popover-ai { align-content: start; align-self: start; gap: 0; margin-top: 0; width: 180px; }
     .multi-optimal-popover-ai .single-ai-title { align-items: center; display: flex; height: var(--popover-heading-height); justify-content: center; margin: 0; }
@@ -822,8 +829,9 @@
     .chat-window { align-items: stretch; background: rgba(255, 253, 249, .58); border: 1.5px solid var(--line); border-radius: 16px; display: flex; flex-direction: column; gap: 10px; height: 100%; max-height: calc(100vh - 260px); min-height: 620px; overflow: hidden; padding: 12px; }
     body.condition-negotiation .chat-window,
     body.condition-negotiatev2 .chat-window { background: #fff; border: 2px solid #000; border-radius: 0; max-height: calc(100vh - 170px); min-height: 620px; }
-    .negotiate-v2-composer .response-config { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .negotiate-v2-composer .response-config { grid-template-columns: repeat(3, minmax(0, 1fr)); }
     .negotiate-v2-composer .response-preview { background: #fff; border: 1.5px solid #d4e0ea; border-radius: 10px; color: #222; font-size: 12px; font-weight: 750; line-height: 1.35; margin-top: 7px; padding: 7px 9px; }
+    .negotiate-v2-warning { background: #fff5e6; border: 1.5px solid #e6b35c; border-radius: 8px; color: #7a4a00; font-size: 12px; font-weight: 750; line-height: 1.35; margin-top: 7px; padding: 6px 9px; }
     .multi-optimal-version-note { color: #555; font-size: 12px; font-weight: 850; margin: 0 0 8px; text-align: center; }
     .composer { background: transparent; border: 0; display: grid; flex: 0 0 auto; justify-items: end; margin-top: auto; padding: 0; }
     .composer.locked { background: transparent; }
@@ -888,7 +896,7 @@
     .response-act-chip:has(input:disabled) { cursor: not-allowed; opacity: .58; }
     .response-config { align-items: end; display: grid; gap: 5px; grid-template-columns: repeat(3, minmax(0, 1fr)); }
     .response-field { display: grid; gap: 2px; min-width: 0; }
-    .response-field label { color: var(--muted); font-size: 8px; font-weight: 900; }
+    .response-field label { color: var(--muted); font-size: 12px; font-weight: 900; }
     .response-field select { background: rgba(255, 253, 249, .92); border: 1.5px solid #c7d7e4; border-radius: 7px; color: var(--ink); font-size: 10px; font-weight: 800; min-height: 24px; padding: 2px 6px; width: 100%; }
     .response-preview { display: none; }
     .response-preview strong { color: var(--ink); font-size: 10px; }
@@ -951,12 +959,18 @@
     .history-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
     .history-item.user { justify-self: end; background: #eaf1f6; border: 1px solid #c7d7e4; }
     .history-item.proxy { justify-self: start; background: var(--proxy-bg); border: 1px solid var(--proxy-border); }
+    /* negotiatev2 reads as a dialog: Self (my side) on the left, Other-party on the right */
+    body.condition-negotiatev2 .history-item.user { justify-self: start; }
+    body.condition-negotiatev2 .history-item.proxy { justify-self: end; }
     .history-item.system { justify-self: center; background: #eee7dc; border: 1px solid var(--line); color: var(--muted); }
     .history-item.thinking { justify-self: start; background: var(--proxy-bg); border: 1px dashed var(--proxy-border); color: var(--muted); }
     .thinking-dots::after { content: ""; animation: dots 1.2s steps(4, end) infinite; }
     @keyframes dots { 0% { content: ""; } 25% { content: "."; } 50% { content: ".."; } 75%, 100% { content: "..."; } }
     .history-title { font-weight: 850; margin-bottom: 3px; }
     .history-weights { color: var(--muted); font-variant-numeric: tabular-nums; }
+    .history-offer { border-radius: 8px; margin: 4px 0; padding: 4px 8px; font-weight: 600; }
+    .history-offer-self { background: #eaf1f6; border: 1px solid #c7d7e4; color: #223; }
+    .history-offer-other { background: var(--proxy-bg); border: 1px solid var(--proxy-border); color: #2d271f; }
     .group-card { background: rgba(255, 253, 249, .74); }
     .group-card.winner { border-color: var(--brown); box-shadow: 0 0 0 2px rgba(73, 53, 29, .12); }
     .reliability { display: flex; align-items: baseline; gap: 8px; margin: 8px 0 10px; }

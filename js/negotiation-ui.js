@@ -776,17 +776,16 @@
     }
 
     function negotiateV2SelectedItems() {
-      const current = negotiateV2CurrentVersion();
-      if (current) {
-        return [
-          { role: "self", roleLabel: "Self optimal", model: negotiateV2ModelBySeed(current.selfModelSeed) },
-          { role: "other", roleLabel: "Other-party optimal", model: negotiateV2ModelBySeed(current.otherModelSeed) },
-        ];
-      }
       ensureDifferentProxyPersona();
+      const selfWeights = normalizeWeights(userWeights || elicitedWeights || weights);
+      const otherWeights = normalizeWeights(proxyWeights || proxyIdealWeights());
+      // Mid-turn (only Self has moved) we keep the two models distinct; once the
+      // Other-party has responded we allow them to collapse onto one shared model.
+      const allowShared = negotiateV2Phase !== "self";
+      const choice = negotiateV2ChooseModels(selfWeights, otherWeights, { allowShared });
       return [
-        { role: "self", roleLabel: "Self optimal", model: selectedSingleOptimalModel(userWeights) },
-        { role: "other", roleLabel: "Other-party optimal", model: selectedSingleOptimalModel(proxyWeights || proxyIdealWeights()) },
+        { role: "self", roleLabel: "Self optimal", model: choice.selfModel },
+        { role: "other", roleLabel: "Other-party optimal", model: choice.otherModel },
       ];
     }
 
@@ -846,6 +845,11 @@
       };
     }
 
+    function ordinalRank(rank) {
+      const n = Math.max(1, Math.min(criteriaOrder.length, Math.round(Number(rank) || criteriaOrder.length)));
+      return ["top", "2nd", "3rd", "4th", "5th"][n - 1] || `#${n}`;
+    }
+
     function negotiateV2AutomaticCounterMove(base, selfSacrifice, step = 0.1) {
       const baseSelfWeights = normalizeWeights(base?.selfWeights || userWeights || weights);
       const baseOtherWeights = normalizeWeights(base?.otherWeights || proxyWeights || proxyIdealWeights());
@@ -855,6 +859,7 @@
       const nextSelfWeights = negotiateV2RedistributeWeights(baseSelfWeights, selfSacrifice, selfReceive, step);
       const baseChoice = negotiateV2ChooseModels(baseSelfWeights, baseOtherWeights, { allowShared: false });
       const baseDistance = negotiateV2ModelDistance(baseChoice.selfModel, baseChoice.otherModel);
+      const selfGiveRank = selfSacrifice ? issueRank(userProfile, selfSacrifice) : criteriaOrder.length;
       const activeKeys = activeCriteria().length ? activeCriteria() : criteriaOrder;
       const candidates = activeKeys
         .filter((key) => key !== otherReceive)
@@ -869,8 +874,12 @@
           const consensusBonus = choice.shared ? 2.8 : choice.consensusClass ? 1.7 : 0;
           const distanceGain = Math.max(0, baseDistance - nextDistance);
           const profileCost = (issue.isCore ? 1.4 : 0) + (issue.floorRisk ? 2.5 : 0) + issue.rigidity * 0.45 + (issue.stake?.salience || 0) * 3.2;
+          // Logrolling: Other-party should give on an issue it ranks LOW (cheap to concede)
+          // while receiving on Self's TOP issue — a mutually efficient cross-issue trade.
+          const giveEase = Math.max(0, issue.rank - 1);           // lower priority => easier to give
+          const logrollGain = giveEase * 0.5;
           const modelSpaceGain = consensusBonus + distanceGain * 3.5 + selfGain * 0.4;
-          const score = modelSpaceGain + issue.negotiability * 0.8 + (userIssue.stake?.salience || 0) * 0.6 - profileCost - otherLoss * 0.3;
+          const score = modelSpaceGain + logrollGain + issue.negotiability * 0.8 + (userIssue.stake?.salience || 0) * 0.6 - profileCost - otherLoss * 0.3;
           return {
             key,
             receiveKey: otherReceive,
@@ -882,6 +891,7 @@
             userIssue,
             distanceGain,
             consensusBonus,
+            logrollGain,
           };
         })
         .sort((a, b) => b.score - a.score || b.consensusBonus - a.consensusBonus || b.issue.negotiability - a.issue.negotiability);
@@ -896,15 +906,56 @@
         userIssue: null,
         distanceGain: 0,
         consensusBonus: 0,
+        logrollGain: 0,
       };
+      // Describe the move in terms of how the resulting model performs on the
+      // criteria each side cares about — never in terms of raw weights.
+      const selfTopKey = otherReceive; // the criterion Self cares most about
+      const oldOtherModel = baseChoice.otherModel;
+      const newOtherModel = (selected.choice && selected.choice.otherModel) || oldOtherModel;
+      const topOld = modelCriterionValue(oldOtherModel, selfTopKey);
+      const topNew = modelCriterionValue(newOtherModel, selfTopKey);
+      const topImproved = (Number.isFinite(topNew) && Number.isFinite(topOld)) ? topNew - topOld : 0;
+      let sacrificedKey = null;
+      let worstDrop = 0.004;
+      for (const key of criteriaOrder) {
+        if (key === selfTopKey) continue;
+        const ov = modelCriterionValue(oldOtherModel, key);
+        const nv = modelCriterionValue(newOtherModel, key);
+        if (!Number.isFinite(ov) || !Number.isFinite(nv)) continue;
+        const drop = ov - nv;
+        if (drop > worstDrop) { worstDrop = drop; sacrificedKey = key; }
+      }
+      const selfOffer = selfSacrifice
+        ? `I can ease up on ${criteriaLabels[selfSacrifice]} so we can move toward a model that also does well on ${criteriaLabels[selfReceive]}, which the Other-party cares about most.`
+        : `I'll keep my current preferences this round.`;
+      const otherOffer = selected.issue
+        ? `I understand you care most about ${criteriaLabels[selfTopKey]}. My updated model ${topImproved > 0.001 ? `does better on ${criteriaLabels[selfTopKey]}` : `holds ${criteriaLabels[selfTopKey]} steady`}, so it fits your priority more closely${sacrificedKey ? `, giving up only a little ${criteriaLabels[sacrificedKey]}` : ""}.`
+        : `I can't do better on ${criteriaLabels[selfTopKey]} without dropping below my own limits, so I'll stay with my current model.`;
+      const reciprocity = selected.choice?.shared
+        ? "Both sides now land on the same acceptable model — consensus reached."
+        : selected.choice?.consensusClass
+          ? "Both models now recommend the same decision, though they remain distinct."
+          : "The two models moved closer, but there is no shared model yet.";
       return {
         ...selected,
         selfReceive,
+        selfGiveRank,
         nextSelfWeights,
+        selfOffer,
+        otherOffer,
+        reciprocity,
         rationale: selected.issue
-          ? `Other-party proposes giving room on ${criteriaLabels[selected.key]} because it is relatively negotiable for its profile and moves the available model options closer to both sides.`
-          : "Other-party keeps its profile weights because no useful concession direction was available in the current model set.",
+          ? `Logrolling trade: Self concedes ${criteriaLabels[selfSacrifice]} → ${criteriaLabels[selfReceive]}; Other-party concedes ${criteriaLabels[selected.key]} → ${criteriaLabels[selected.receiveKey]}. Each gives on a lower-priority issue to advance the other's top concern, which pulls the available model options together. ${reciprocity}`
+          : `Other-party keeps its profile weights because no concession direction was cheap enough without crossing its core priorities. ${reciprocity}`,
       };
+    }
+
+    // How much Self is willing to let its MOST-important criterion slip, in metric
+    // units. Default "none" fully protects the top criterion; the user can open it up.
+    function negotiateV2TopFlexValue() {
+      const map = { none: 0, little: 0.03, moderate: 0.08 };
+      return map[negotiateV2Draft?.topGive] ?? 0;
     }
 
     function negotiateV2ChooseModels(selfWeights, otherWeights, options = {}) {
@@ -916,13 +967,21 @@
       if (options.allowShared !== false) {
         const minSelf = selfBestScore * 0.94;
         const minOther = otherBestScore * 0.94;
+        // Guard Self's top criterion: a shared model may only drop below the best
+        // achievable value on that criterion by the user's chosen flexibility budget.
+        const selfTopKey = options.selfTopKey || topMetricKeyForWeights(selfWeights);
+        const topFlex = Number.isFinite(options.topFlex) ? options.topFlex : negotiateV2TopFlexValue();
+        const topValues = candidates.map((model) => modelCriterionValue(model, selfTopKey)).filter(Number.isFinite);
+        const topFloor = topValues.length ? Math.max(...topValues) - topFlex : null;
         const shared = candidates
           .map((model) => ({
             model,
             selfScore: negotiateV2Reliability(model, selfWeights),
             otherScore: negotiateV2Reliability(model, otherWeights),
+            topValue: modelCriterionValue(model, selfTopKey),
           }))
-          .filter((row) => row.selfScore >= minSelf && row.otherScore >= minOther)
+          .filter((row) => row.selfScore >= minSelf && row.otherScore >= minOther
+            && (topFloor == null || !Number.isFinite(row.topValue) || row.topValue >= topFloor - 1e-9))
           .sort((a, b) => (b.selfScore + b.otherScore) - (a.selfScore + a.otherScore) || Math.abs(0.5 - Number(a.model.pred_prob || 0)) - Math.abs(0.5 - Number(b.model.pred_prob || 0)))[0];
         if (shared) return { selfModel: shared.model, otherModel: shared.model, shared: true };
       }
@@ -930,7 +989,7 @@
       return { selfModel: selfBest, otherModel: otherBest, shared: false, consensusClass };
     }
 
-    function negotiateV2CreateVersion({ selfWeights, otherWeights, selfSacrifice = null, otherSacrifice = null, selfReceive = null, otherReceive = null, note = "Initial multi-optimal state", rationale = "", allowShared = true }) {
+    function negotiateV2CreateVersion({ selfWeights, otherWeights, selfSacrifice = null, otherSacrifice = null, selfReceive = null, otherReceive = null, note = "Initial multi-optimal state", rationale = "", allowShared = true, selfOffer = "", otherOffer = "", reciprocity = "" }) {
       const choice = negotiateV2ChooseModels(selfWeights, otherWeights, { allowShared });
       const id = negotiateV2Versions.length;
       const selfLabel = activeData?.label_names?.[choice.selfModel?.pred_class] || `Class ${choice.selfModel?.pred_class}`;
@@ -945,6 +1004,9 @@
         selfReceive,
         otherReceive,
         rationale,
+        selfOffer,
+        otherOffer,
+        reciprocity,
         selfModelSeed: choice.selfModel?.seed,
         otherModelSeed: choice.otherModel?.seed,
         consensus: Boolean(choice.selfModel && choice.otherModel && Number(choice.selfModel.pred_class) === Number(choice.otherModel.pred_class)),
@@ -962,39 +1024,114 @@
       const initialOther = normalizeWeights(proxyWeights || proxyIdealWeights());
       negotiateV2Versions = [negotiateV2CreateVersion({ selfWeights: initialSelf, otherWeights: initialOther, allowShared: false })];
       negotiateV2VersionIndex = 0;
+      negotiateV2Phase = "settled";
+      negotiateV2Busy = false;
+      userWeights = normalizeWeights(initialSelf);
+      weights = { ...userWeights };
+      proxyWeights = normalizeWeights(initialOther);
+      // Default sacrifice = Self's least-important criterion, but skipping Self's
+      // most-important one and the Other-party's least-important one (conceding
+      // either of those is not a useful logrolling move).
+      const selfTopKey = topMetricKeyForWeights(initialSelf);
+      const otherBottomKey = criteriaOrder.slice().sort((a, b) => (initialOther[a] || 0) - (initialOther[b] || 0))[0];
+      const selfLowFirst = criteriaOrder.slice().sort((a, b) => (initialSelf[a] || 0) - (initialSelf[b] || 0));
+      const defaultSacrifice = selfLowFirst.find((key) => key !== selfTopKey && key !== otherBottomKey)
+        || selfLowFirst.find((key) => key !== selfTopKey)
+        || selfLowFirst[0]
+        || criteriaOrder[0];
       negotiateV2Draft = {
-        selfSacrifice: criteriaOrder.find((key) => key !== rankedCriteria?.[0]) || criteriaOrder[0],
+        selfSacrifice: defaultSacrifice,
         otherSacrifice: null,
         step: 0.1,
+        topGive: "none",
       };
-      renderNegotiateV2History();
+      // The turn-by-turn dialogue now lives in the shared chat history; version
+      // review is handled by the model-header dropdowns on the left.
+      negotiationEvents = [];
+      const v0 = negotiateV2CurrentVersion();
+      addHistory("system", "Starting point (v0)", `${v0?.summary || "Two acceptable models are on the table."} Pick a criterion Self can give ground on and send it — the Other-party will respond and both models will move toward each other until they agree.`, null);
     }
 
-    function negotiateV2AdvanceVersion() {
-      const current = negotiateV2CurrentVersion();
-      if (!current) resetNegotiateV2State();
+    // Ask the worker/LLM to verbalize the Other-party's already-computed move (like
+    // the negotiation condition: the move is structural, the LLM only phrases it).
+    async function negotiateV2VerbalizeOtherMove(move, selfWeights, baseOtherWeights) {
+      const fallback = move.otherOffer || move.rationale || "Other-party responded to Self's concession.";
+      if (!OPENAI_PROXY_URL) return fallback;
+      const nextOther = normalizeWeights(move.nextOtherWeights);
+      const structuredResponse = {
+        accepted: Boolean(move.choice?.shared),
+        counterWeights: nextOther,
+        moves: staticMoves(decisionEffectiveWeights(baseOtherWeights), decisionEffectiveWeights(nextOther)),
+        explanation: { source: "structured_negotiatev2", text: fallback },
+        control: { source: "negotiatev2" },
+        structuredProposal: null,
+      };
+      try {
+        const response = await fetch(OPENAI_PROXY_URL, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(buildProxyPayload(selfWeights, structuredResponse)),
+        });
+        if (!response.ok) throw new Error(`${response.status} ${response.statusText}`);
+        const raw = await response.json();
+        negotiationRound += 1;
+        return raw?.explanation?.text || fallback;
+      } catch (error) {
+        negotiationRound += 1;
+        return `${fallback}<br><span class="muted">OpenAI verbalization fallback: ${escapeHtml(error.message)}</span>`;
+      }
+    }
+
+    async function negotiateV2AdvanceVersion() {
+      if (negotiateV2Busy) return;
+      if (!negotiateV2Versions.length) resetNegotiateV2State();
       const base = negotiateV2CurrentVersion();
-      const move = negotiateV2AutomaticCounterMove(base, negotiateV2Draft.selfSacrifice, negotiateV2Draft.step);
-      const nextSelfWeights = move.nextSelfWeights;
-      const nextOtherWeights = move.nextOtherWeights;
+      const selfSacrifice = negotiateV2Draft.selfSacrifice;
+      const step = negotiateV2Draft.step;
+      const move = negotiateV2AutomaticCounterMove(base, selfSacrifice, step);
       negotiateV2Draft.otherSacrifice = move.key;
-      const note = `Self gives room on ${criteriaLabels[negotiateV2Draft.selfSacrifice]} toward ${criteriaLabels[move.selfReceive]}; Other-party proposes giving room on ${criteriaLabels[move.key]} toward ${criteriaLabels[move.receiveKey]}.`;
+
+      // ---- Phase A: Self states its concession; Self's model updates immediately ----
+      negotiateV2Busy = true;
+      negotiateV2Phase = "self";
+      userWeights = normalizeWeights(move.nextSelfWeights);
+      weights = { ...userWeights };
+      addHistory("user", "Self concedes", move.selfOffer, userWeights);
+      renderOfferControls();
+      renderSummary();
+      renderReconciliation();
+      rerenderFeatureExplanationForCurrentWeights();
+      renderFinalDecisionOptions();
+
+      // ---- Phase B: Other-party thinks, replies with an LLM explanation, its model updates ----
+      showProxyThinking();
+      const explanationText = await negotiateV2VerbalizeOtherMove(move, move.nextSelfWeights, normalizeWeights(base?.otherWeights || proxyWeights));
+      removeProxyThinking();
+      proxyWeights = normalizeWeights(move.nextOtherWeights);
+      negotiateV2Phase = "settled";
+
+      const note = `Self gives room on ${criteriaLabels[selfSacrifice]} toward ${criteriaLabels[move.selfReceive]}; Other-party gives room on ${criteriaLabels[move.key]} toward ${criteriaLabels[move.receiveKey]}.`;
       const version = negotiateV2CreateVersion({
-        selfWeights: nextSelfWeights,
-        otherWeights: nextOtherWeights,
-        selfSacrifice: negotiateV2Draft.selfSacrifice,
+        selfWeights: move.nextSelfWeights,
+        otherWeights: move.nextOtherWeights,
+        selfSacrifice,
         otherSacrifice: move.key,
         selfReceive: move.selfReceive,
         otherReceive: move.receiveKey,
         rationale: move.rationale,
+        selfOffer: move.selfOffer,
+        otherOffer: move.otherOffer,
+        reciprocity: move.reciprocity,
         note,
       });
       negotiateV2Versions.push(version);
       negotiateV2VersionIndex = negotiateV2Versions.length - 1;
-      userWeights = normalizeWeights(nextSelfWeights);
-      weights = { ...userWeights };
-      proxyWeights = normalizeWeights(nextOtherWeights);
-      renderNegotiateV2History();
+
+      const otherTitle = version.shared ? "Other-party · consensus reached" : version.consensus ? "Other-party · agrees on decision" : "Other-party responds";
+      addHistory("proxy", otherTitle, explanationText, proxyWeights);
+      if (version.reciprocity) addHistory("system", version.label, version.reciprocity, null);
+
+      negotiateV2Busy = false;
       renderOfferControls();
       renderSummary();
       renderReconciliation();
@@ -1002,88 +1139,92 @@
       renderFinalDecisionOptions();
     }
 
-    function renderNegotiateV2History() {
-      if (!negotiationHistory || !isNegotiateV2Condition()) return;
-      if (!negotiateV2Versions.length) {
-        negotiationHistory.innerHTML = `<div class="empty-history">No versions yet</div>`;
-        return;
+    function applyNegotiateV2Version(index) {
+      if (!negotiateV2Versions.length || negotiateV2Busy) return;
+      negotiateV2VersionIndex = Math.max(0, Math.min(negotiateV2Versions.length - 1, Number(index) || 0));
+      const version = negotiateV2CurrentVersion();
+      if (version) {
+        userWeights = normalizeWeights(version.selfWeights);
+        weights = { ...userWeights };
+        proxyWeights = normalizeWeights(version.otherWeights);
       }
-      negotiationHistory.innerHTML = negotiateV2Versions.map((version) => `
-        <div class="history-item ${version.id === negotiateV2VersionIndex ? "proxy" : "system"}">
-          <div class="history-title">${escapeHtml(version.label)} ${version.id === negotiateV2VersionIndex ? "(current)" : ""}</div>
-          <div>${escapeHtml(version.summary)}</div>
-          <div class="history-weights">${escapeHtml(version.note)}</div>
-          ${version.rationale ? `<div class="history-weights">${escapeHtml(version.rationale)}</div>` : ""}
-        </div>
-      `).join("");
-      scrollHistoryToBottom();
+      negotiateV2Phase = "settled";
+      renderOfferControls();
+      renderSummary();
+      renderReconciliation();
+      rerenderFeatureExplanationForCurrentWeights();
+      renderFinalDecisionOptions();
     }
 
     function renderNegotiateV2Controls() {
       if (!offerComposer) return;
       if (!negotiateV2Versions.length) resetNegotiateV2State();
       const current = negotiateV2CurrentVersion();
-      const optionHtml = criteriaOrder.map((key) => `<option value="${key}">${escapeHtml(criteriaLabels[key])}</option>`).join("");
-      const previewMove = current ? negotiateV2AutomaticCounterMove(current, negotiateV2Draft.selfSacrifice || criteriaOrder[0], negotiateV2Draft.step || 0.1) : null;
-      const proposedOther = previewMove?.key ? `${criteriaLabels[previewMove.key]} -> ${criteriaLabels[previewMove.receiveKey]}` : "No useful counter-move available";
+      const selfTopKey = topMetricKeyForWeights(userWeights);
+      const otherTopKey = topMetricKeyForWeights(proxyWeights || proxyIdealWeights());
+      const sacrificeTag = (key) => {
+        const tags = [];
+        if (key === selfTopKey) tags.push("★ your top priority");
+        if (key === otherTopKey) tags.push("◆ Other-party's top");
+        return tags.length ? ` — ${tags.join(", ")}` : "";
+      };
+      const optionHtml = criteriaOrder.map((key) => `<option value="${key}">${escapeHtml(criteriaLabels[key] + sacrificeTag(key))}</option>`).join("");
+      const chosenSacrifice = negotiateV2Draft.selfSacrifice || criteriaOrder[0];
+      const warning = chosenSacrifice === selfTopKey
+        ? `⚠ ${criteriaLabels[chosenSacrifice]} is what <strong>you</strong> care about most — giving ground here works against your own priority.`
+        : chosenSacrifice === otherTopKey
+          ? `⚠ ${criteriaLabels[chosenSacrifice]} is the <strong>Other-party's</strong> top concern — conceding it is unlikely to move you toward agreement.`
+          : "";
       offerComposer.classList.remove("locked");
+      const busy = negotiateV2Busy;
       offerComposer.innerHTML = `
         <div class="composer-bubble negotiate-v2-composer">
           <div class="composer-title">Negotiate acceptable models</div>
-          <div class="foresight-prompt">Current version: <strong>${escapeHtml(current?.label || "v0")}</strong></div>
+          <div class="foresight-prompt">Current version: <strong>${escapeHtml(current?.label || "v0")}</strong>${current?.shared ? " · consensus reached" : ""}</div>
           <div class="response-config">
             <div class="response-field">
-              <label for="negotiateV2VersionSelect">Version history</label>
-              <select id="negotiateV2VersionSelect">
-                ${negotiateV2Versions.map((version, index) => `<option value="${index}" ${index === negotiateV2VersionIndex ? "selected" : ""}>${escapeHtml(version.label)}${version.consensus ? " - consensus" : ""}</option>`).join("")}
+              <label for="negotiateV2TopGive">Give on your top priority (${escapeHtml(criteriaLabels[selfTopKey] || "")})</label>
+              <select id="negotiateV2TopGive" ${busy ? "disabled" : ""}>
+                <option value="none">No — protect it</option>
+                <option value="little">A little</option>
+                <option value="moderate">Moderate</option>
               </select>
             </div>
             <div class="response-field">
               <label for="negotiateV2SelfSacrifice">Self can sacrifice</label>
-              <select id="negotiateV2SelfSacrifice">${optionHtml}</select>
-            </div>
-            <div class="response-field negotiate-v2-proposal-field">
-              <label>System-proposed Other-party move</label>
-              <div class="negotiate-v2-proposal" title="${escapeHtml(previewMove?.rationale || "Other-party move is computed from its profile and the available Rashomon model options.")}">${escapeHtml(proposedOther)}</div>
+              <select id="negotiateV2SelfSacrifice" ${busy ? "disabled" : ""}>${optionHtml}</select>
             </div>
             <div class="response-field">
               <label for="negotiateV2Step">Concession size</label>
-              <select id="negotiateV2Step">
+              <select id="negotiateV2Step" ${busy ? "disabled" : ""}>
                 <option value="0.05">Small</option>
                 <option value="0.1">Medium</option>
                 <option value="0.16">Large</option>
               </select>
             </div>
           </div>
-          <div class="response-preview">${escapeHtml(current?.summary || "Initial multi-optimal state")}<br>${escapeHtml(previewMove?.rationale || "")}</div>
+          ${warning ? `<div class="negotiate-v2-warning">${warning}</div>` : ""}
+          <div class="response-preview">${escapeHtml(current?.summary || "Initial multi-optimal state")}</div>
           <div class="composer-send-row">
-            <div class="degree-summary"><div>Pick Self's concession; the system proposes the Other-party counter-move from its profile and model-space directions.</div></div>
-            <div class="composer-actions"><button type="button" id="negotiateV2AdvanceButton" class="primary-button">Generate next version</button></div>
+            <div class="degree-summary"><div>Pick what Self gives ground on and send it. Self's model updates first, then the Other-party replies and its model moves too — repeat until both recommend the same model.</div></div>
+            <div class="composer-actions"><button type="button" id="negotiateV2AdvanceButton" class="primary-button" ${busy ? "disabled" : ""}>${busy ? "Other-party is responding…" : "Send Self's concession"}</button></div>
           </div>
         </div>
       `;
       const selfSelect = document.getElementById("negotiateV2SelfSacrifice");
       const stepSelect = document.getElementById("negotiateV2Step");
-      const versionSelect = document.getElementById("negotiateV2VersionSelect");
+      const topGiveSelect = document.getElementById("negotiateV2TopGive");
       if (selfSelect) selfSelect.value = negotiateV2Draft.selfSacrifice || criteriaOrder[0];
       if (stepSelect) stepSelect.value = String(negotiateV2Draft.step || 0.1);
-      if (versionSelect) {
-        versionSelect.addEventListener("change", (event) => {
-          negotiateV2VersionIndex = Math.max(0, Math.min(negotiateV2Versions.length - 1, Number(event.target.value) || 0));
-          const version = negotiateV2CurrentVersion();
-          if (version) {
-            userWeights = normalizeWeights(version.selfWeights);
-            weights = { ...userWeights };
-            proxyWeights = normalizeWeights(version.otherWeights);
-          }
-          renderNegotiateV2History();
-          renderOfferControls();
-          renderSummary();
-          renderReconciliation();
-          rerenderFeatureExplanationForCurrentWeights();
-          renderFinalDecisionOptions();
-        });
-      }
+      if (topGiveSelect) topGiveSelect.value = negotiateV2Draft.topGive || "none";
+      if (topGiveSelect) topGiveSelect.addEventListener("change", (event) => {
+        negotiateV2Draft.topGive = event.target.value || "none";
+        renderOfferControls();
+        renderSummary();
+        renderReconciliation();
+        rerenderFeatureExplanationForCurrentWeights();
+        renderFinalDecisionOptions();
+      });
       if (selfSelect) selfSelect.addEventListener("change", (event) => {
         negotiateV2Draft.selfSacrifice = event.target.value;
         renderOfferControls();

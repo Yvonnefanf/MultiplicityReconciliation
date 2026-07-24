@@ -745,6 +745,16 @@
         `;
       }).join("");
       const performanceGridColumns = `180px repeat(${activeItems.length}, 180px)`;
+      const roleTagLabel = { self: "self", other: "other" };
+      const versionTagHtml = (item) => {
+        if (!options.versionTag || !Array.isArray(options.versions) || !options.versions.length) return "";
+        const role = roleTagLabel[item.role] || item.role || "";
+        const current = Number(options.currentVersionIndex) || 0;
+        const optionsHtml = options.versions.map((version, index) =>
+          `<option value="${index}" ${index === current ? "selected" : ""}>${escapeHtml(role)} · ${escapeHtml(version.label)}${version.shared ? " ✓" : ""}</option>`
+        ).join("");
+        return `<select class="negotiate-v2-model-version-select" data-role="${escapeHtml(item.role || "")}" title="This is ${escapeHtml(role)}'s optimal model at the selected version. Switch to review the optimal model from an earlier round.">${optionsHtml}</select>`;
+      };
       const modelHeader = (item, index) => {
         const model = item.model;
         const classId = Number(model.pred_class);
@@ -752,11 +762,10 @@
         const pattern = patterns[index] || { features: {} };
         return `
           <div class="exposure-performance-group multi-optimal-group class-${classId}">
-            <div class="multi-optimal-role">${escapeHtml(item.roleLabel)}</div>
+            <div class="multi-optimal-role"><span>${escapeHtml(item.roleLabel)}</span>${versionTagHtml(item)}</div>
             <div class="multi-optimal-model-line">
-              <span>Model #${escapeHtml(model.seed ?? model.id ?? "-")}: ${escapeHtml(predictionLabel)}</span>
-              <span class="exposure-detail-wrap multi-optimal-detail-wrap">
-                <button type="button" class="exposure-detail-button" aria-label="Show SHAP explanation detail">?</button>
+              <span class="exposure-detail-wrap multi-optimal-detail-wrap" tabindex="0" role="button" aria-label="Show SHAP explanation detail">
+                <span class="model-detail-link">Model #${escapeHtml(model.seed ?? model.id ?? "-")}: ${escapeHtml(predictionLabel)}</span>
                 <div class="exposure-shap-popover" role="tooltip" aria-label="SHAP explanation detail">
                 <div class="single-feature-list exposure-shap-feature-list">
                   <div class="single-diagram-heading single-attr-heading">Attribute</div>
