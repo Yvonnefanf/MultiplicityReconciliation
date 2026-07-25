@@ -169,6 +169,8 @@
       const negotiateItems = isNegotiateV2Condition() ? negotiateV2SelectedItems() : null;
       const selfModel = negotiateItems?.[0]?.model || selectedSingleOptimalModel(userWeights);
       const otherModel = negotiateItems?.[1]?.model || selectedSingleOptimalModel(proxyWeights || proxyIdealWeights());
+      const selfCardTitle = negotiateItems?.[0]?.roleLabel || "Self optimal";
+      const otherCardTitle = negotiateItems?.[1]?.roleLabel || "Other-party optimal";
       const versionLabel = isNegotiateV2Condition() ? negotiateV2CurrentVersion()?.label : null;
       const card = (title, model) => {
         if (!model) return `<div class="single-model-card"><div class="single-model-kicker">${escapeHtml(title)}</div><div class="status">No optimal model available.</div></div>`;
@@ -187,8 +189,8 @@
           </div>
         `;
       };
-      const versionNote = versionLabel ? `<div class="multi-optimal-version-note">Negotiation version: ${escapeHtml(versionLabel)}</div>` : "";
-      summaryTableWrap.innerHTML = `${versionNote}<div class="multi-optimal-summary">${card("Self optimal", selfModel)}${card("Other-party optimal", otherModel)}</div>`;
+      const versionNote = versionLabel ? `<div class="multi-optimal-version-note">Negotiation round: ${escapeHtml(versionLabel)}</div>` : "";
+      summaryTableWrap.innerHTML = `${versionNote}<div class="multi-optimal-summary">${card(selfCardTitle, selfModel)}${card(otherCardTitle, otherModel)}</div>`;
     }
 
     function renderSummary() {

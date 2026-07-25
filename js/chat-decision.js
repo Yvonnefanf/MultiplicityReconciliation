@@ -362,6 +362,35 @@
       }
     }
 
+    // negotiatev2 has three terminal states rather than a simple agree/conflict
+    // split: still bargaining, agreed on one model, or a genuine impasse.
+    function renderNegotiateV2StatusBanner() {
+      const state = negotiateV2CurrentVersion();
+      const selected = negotiateV2SelectedItems();
+      const selfModel = selected?.[0]?.model;
+      const otherModel = selected?.[1]?.model;
+      finalDecisionStatusBanner.classList.remove("hidden", "conflict");
+      if (!selfModel || !otherModel) {
+        finalDecisionStatusBanner.classList.add("conflict");
+        finalDecisionStatusBanner.innerHTML = "No model positions are available for this case.";
+        return;
+      }
+      const selfLabel = activeData?.label_names?.[selfModel.pred_class] || `Class ${selfModel.pred_class}`;
+      const otherLabel = activeData?.label_names?.[otherModel.pred_class] || `Class ${otherModel.pred_class}`;
+      if (state?.status === "agreed") {
+        finalDecisionStatusBanner.innerHTML = `Agreement reached: both sides stand behind model #${escapeHtml(String(selfModel.seed ?? "-"))}, which predicts <strong>${escapeHtml(selfLabel)}</strong>.`;
+        return;
+      }
+      finalDecisionStatusBanner.classList.add("conflict");
+      if (state?.status === "impasse") {
+        finalDecisionStatusBanner.innerHTML = `No agreement: your final model predicts <strong>${escapeHtml(selfLabel)}</strong>, the Other-party's predicts <strong>${escapeHtml(otherLabel)}</strong>. The final decision is yours.`;
+        return;
+      }
+      finalDecisionStatusBanner.innerHTML = Number(selfModel.pred_class) === Number(otherModel.pred_class)
+        ? `Still negotiating (${escapeHtml(state?.label || "")}): the two standing models already agree on <strong>${escapeHtml(selfLabel)}</strong>, but you have not settled on one model.`
+        : `Still negotiating (${escapeHtml(state?.label || "")}): your model predicts <strong>${escapeHtml(selfLabel)}</strong>, the Other-party's predicts <strong>${escapeHtml(otherLabel)}</strong>.`;
+    }
+
     function renderFinalDecisionStatusBanner() {
       if (!finalDecisionStatusBanner) return;
       const showBanner = activeData && (studyCondition() === "negotiation" || isMultiOptimalCondition()) && showsProxyWeights();
@@ -374,19 +403,14 @@
         renderAggregateRecommendationBanner();
         return;
       }
-      let selfWinner;
-      let otherWinner;
-      let versionLabel = "";
       if (isNegotiateV2Condition()) {
-        const selected = negotiateV2SelectedItems();
-        selfWinner = selected?.[0]?.model;
-        otherWinner = selected?.[1]?.model;
-        versionLabel = negotiateV2CurrentVersion()?.label || "v0";
-      } else {
-        selfWinner = isMultiOptimalCondition() ? selectedSingleOptimalModel(userWeights) : winningGroup(userWeights);
-        const otherWeights = proxyWeights || proxyIdealWeights();
-        otherWinner = isMultiOptimalCondition() ? selectedSingleOptimalModel(otherWeights) : winningGroup(proxyWeights);
+        renderNegotiateV2StatusBanner();
+        return;
       }
+      const selfWinner = isMultiOptimalCondition() ? selectedSingleOptimalModel(userWeights) : winningGroup(userWeights);
+      const otherWeights = proxyWeights || proxyIdealWeights();
+      const otherWinner = isMultiOptimalCondition() ? selectedSingleOptimalModel(otherWeights) : winningGroup(proxyWeights);
+      const versionLabel = "";
       const selfClassId = Number(selfWinner?.class_id ?? selfWinner?.pred_class);
       const otherClassId = Number(otherWinner?.class_id ?? otherWinner?.pred_class);
       const selfLabel = activeData?.label_names?.[selfClassId] || selfWinner?.label || `Class ${selfClassId}`;
@@ -478,11 +502,43 @@
         return;
       }
 
+      if (isNegotiateV2Condition()) {
+        const state = negotiateV2CurrentVersion();
+        const selected = negotiateV2SelectedItems();
+        const selfModel = selected?.[0]?.model;
+        const otherModel = selected?.[1]?.model;
+        if (!selfModel || !otherModel) {
+          decisionLabel.classList.add("disagreement");
+          decisionLabel.textContent = "No result available";
+          decisionReason.textContent = "No model positions could be computed for this case.";
+          return;
+        }
+        const selfLabel = activeData?.label_names?.[selfModel.pred_class] || `Class ${selfModel.pred_class}`;
+        const otherLabel = activeData?.label_names?.[otherModel.pred_class] || `Class ${otherModel.pred_class}`;
+        if (state?.status === "agreed") {
+          decisionLabel.textContent = selfLabel;
+          decisionReason.textContent = `Both sides settled on model #${selfModel.seed}, which predicts ${selfLabel}. Make the final decision after reviewing its explanation.`;
+          return;
+        }
+        decisionLabel.classList.add("disagreement");
+        consensusHint.classList.add("disagreement");
+        if (Number(selfModel.pred_class) === Number(otherModel.pred_class)) {
+          decisionLabel.textContent = selfLabel;
+          decisionReason.textContent = state?.status === "impasse"
+            ? `No agreement was reached, but both final models happen to predict ${selfLabel}. Make the final decision after reviewing both explanations.`
+            : `Model #${selfModel.seed} and model #${otherModel.seed} both predict ${selfLabel}, but you have not agreed on a single model yet.`;
+          return;
+        }
+        decisionLabel.textContent = `${selfLabel} / ${otherLabel}`;
+        decisionReason.textContent = state?.status === "impasse"
+          ? `No agreement: your model #${selfModel.seed} predicts ${selfLabel}, theirs #${otherModel.seed} predicts ${otherLabel}. Review both explanations before deciding.`
+          : `Your model #${selfModel.seed} predicts ${selfLabel}, while model #${otherModel.seed} predicts ${otherLabel}. Say what their model costs you and what you can give up, then send an offer.`;
+        return;
+      }
+
       if (isMultiOptimalCondition()) {
-        const selected = isNegotiateV2Condition() ? negotiateV2SelectedItems() : null;
-        const selfModel = selected?.[0]?.model || selectedSingleOptimalModel(userWeights);
-        const otherModel = selected?.[1]?.model || selectedSingleOptimalModel(proxyWeights || proxyIdealWeights());
-        const versionLabel = isNegotiateV2Condition() ? negotiateV2CurrentVersion()?.label || "v0" : "";
+        const selfModel = selectedSingleOptimalModel(userWeights);
+        const otherModel = selectedSingleOptimalModel(proxyWeights || proxyIdealWeights());
         const selfLabel = activeData?.label_names?.[selfModel?.pred_class] || `Class ${selfModel?.pred_class}`;
         const otherLabel = activeData?.label_names?.[otherModel?.pred_class] || `Class ${otherModel?.pred_class}`;
         if (isAggregateCondition()) {
@@ -491,16 +547,12 @@
           decisionReason.textContent = `The aggregate recommendation combines Self optimal model #${selfModel?.seed ?? "-"} and Other-party optimal model #${otherModel?.seed ?? "-"} using stakeholder importance and model reliability as aggregation weights.`;
         } else if (selfModel && otherModel && Number(selfModel.pred_class) === Number(otherModel.pred_class)) {
           decisionLabel.textContent = selfLabel;
-          decisionReason.textContent = isNegotiateV2Condition()
-            ? `${versionLabel}: Self model #${selfModel.seed} and Other-party model #${otherModel.seed} now both predict ${selfLabel}. The current negotiated model version has reached prediction consensus.`
-            : `Self optimal model #${selfModel.seed} and Other-party optimal model #${otherModel.seed} both predict ${selfLabel}. Make the final decision after reviewing both model explanations.`;
+          decisionReason.textContent = `Self optimal model #${selfModel.seed} and Other-party optimal model #${otherModel.seed} both predict ${selfLabel}. Make the final decision after reviewing both model explanations.`;
         } else if (selfModel && otherModel) {
           decisionLabel.classList.add("disagreement");
           consensusHint.classList.add("disagreement");
           decisionLabel.textContent = `${selfLabel} / ${otherLabel}`;
-          decisionReason.textContent = isNegotiateV2Condition()
-            ? `${versionLabel}: Self model #${selfModel.seed} predicts ${selfLabel}, while Other-party model #${otherModel.seed} predicts ${otherLabel}. Choose criteria each side can sacrifice and generate another Rashomon model version.`
-            : `Self optimal model #${selfModel.seed} predicts ${selfLabel}, while Other-party optimal model #${otherModel.seed} predicts ${otherLabel}. Review both model explanations before making the final decision.`;
+          decisionReason.textContent = `Self optimal model #${selfModel.seed} predicts ${selfLabel}, while Other-party optimal model #${otherModel.seed} predicts ${otherLabel}. Review both model explanations before making the final decision.`;
         } else {
           decisionLabel.classList.add("disagreement");
           decisionLabel.textContent = "No result available";

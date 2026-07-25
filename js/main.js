@@ -99,7 +99,7 @@
               ];
             })();
         const multiOptions = isNegotiateV2Condition()
-          ? { versionTag: true, versions: negotiateV2Versions, currentVersionIndex: negotiateV2VersionIndex }
+          ? { versionTag: true, versionsByRole: negotiateV2VersionsByRole(), versionIndexByRole: negotiateV2VersionIndexByRole() }
           : {};
         return renderMultiOptimalCaseFeaturePattern(dataset, activeData.case.features, activeData.shap_patterns, activeData.label_names, activeData.models, selectedItems, multiOptions);
       }
@@ -237,7 +237,7 @@
       features.addEventListener("change", (event) => {
         const versionSelect = event.target.closest && event.target.closest(".negotiate-v2-model-version-select");
         if (versionSelect && isNegotiateV2Condition()) {
-          applyNegotiateV2Version(versionSelect.value);
+          applyNegotiateV2Version(versionSelect.dataset.role, versionSelect.value);
         }
       });
     }

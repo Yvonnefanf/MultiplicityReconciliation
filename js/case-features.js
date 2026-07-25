@@ -747,13 +747,16 @@
       const performanceGridColumns = `180px repeat(${activeItems.length}, 180px)`;
       const roleTagLabel = { self: "self", other: "other" };
       const versionTagHtml = (item) => {
-        if (!options.versionTag || !Array.isArray(options.versions) || !options.versions.length) return "";
+        if (!options.versionTag) return "";
+        // Each side keeps its own offer track, so the dropdown is per role.
+        const versions = options.versionsByRole?.[item.role] || [];
+        if (!versions.length) return "";
         const role = roleTagLabel[item.role] || item.role || "";
-        const current = Number(options.currentVersionIndex) || 0;
-        const optionsHtml = options.versions.map((version, index) =>
+        const current = Number(options.versionIndexByRole?.[item.role]) || 0;
+        const optionsHtml = versions.map((version, index) =>
           `<option value="${index}" ${index === current ? "selected" : ""}>${escapeHtml(role)} · ${escapeHtml(version.label)}${version.shared ? " ✓" : ""}</option>`
         ).join("");
-        return `<select class="negotiate-v2-model-version-select" data-role="${escapeHtml(item.role || "")}" title="This is ${escapeHtml(role)}'s optimal model at the selected version. Switch to review the optimal model from an earlier round.">${optionsHtml}</select>`;
+        return `<select class="negotiate-v2-model-version-select" data-role="${escapeHtml(item.role || "")}" title="This is the model ${escapeHtml(role)} stood behind at the selected round. Switch to review an earlier offer.">${optionsHtml}</select>`;
       };
       const modelHeader = (item, index) => {
         const model = item.model;

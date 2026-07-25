@@ -60,7 +60,7 @@
       return SINGLE_MODEL_SEED_BY_DATASET[dataset] ?? null;
     }
     const STUDY_CONDITIONS = ["single", "singleoptimal", "multioptimal", "aggregate", "negotiatev2", "exposure", "informed", "negotiation"];
-    const DEFAULT_STUDY_CONDITION = "negotiation";
+    const DEFAULT_STUDY_CONDITION = "negotiatev2";
     const configuredStudyCondition = String(new URLSearchParams(window.location.search).get("condition") || "").toLowerCase().replace(/[-_\s]/g, "");
     const activeStudyCondition = STUDY_CONDITIONS.includes(configuredStudyCondition) ? configuredStudyCondition : DEFAULT_STUDY_CONDITION;
     document.body.classList.add(`condition-${activeStudyCondition}`);
@@ -156,11 +156,11 @@
     let activeStage = "persona";
     let finalDecision = null;
     let aggregateSelfShare = 0.5;
-    let negotiateV2Versions = [];
-    let negotiateV2VersionIndex = 0;
-    let negotiateV2Draft = { selfSacrifice: null, otherSacrifice: null, step: 0.1, topGive: "none" };
-    let negotiateV2Phase = "settled"; // "self" while only Self has moved this turn; "settled" once Other-party has responded
-    let negotiateV2Busy = false;      // true while a turn is mid-flight (Self stated, awaiting Other-party LLM)
+    // negotiatev2 model-space negotiation state; see negotiation-ui.js.
+    // Both sides' weights live inside nv2.weights and stay fixed for the whole
+    // negotiation — only the model each side stands behind moves.
+    let nv2 = null;
+    let negotiateV2Busy = false;      // true while a turn is mid-flight (Self offered, awaiting Other-party LLM)
 
     const SAME_CRITERIA_THRESHOLD = 0.02;
     const NEGOTIATION_STEP = 0.025;

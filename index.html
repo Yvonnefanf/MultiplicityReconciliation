@@ -292,7 +292,7 @@
     .reconcile-subtitle { color: #796b58; font-size: clamp(15px, 1.5vw, 18px); font-weight: 650; line-height: 1.45; margin: 0; max-width: 860px; }
     .grid { align-items: stretch; display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 18px; margin-top: 4px; }
     body.condition-negotiation .grid { align-items: start; grid-template-columns: 780px minmax(360px, 640px); }
-    body.condition-negotiatev2 .grid { align-items: start; grid-template-columns: minmax(780px, 1fr) minmax(360px, 520px); }
+    body.condition-negotiatev2 .grid { align-items: start; grid-template-columns: 820px minmax(360px, 820px); }
     body.condition-single .grid,
     body.condition-singleoptimal .grid,
     body.condition-multioptimal .grid,
@@ -832,6 +832,12 @@
     .negotiate-v2-composer .response-config { grid-template-columns: repeat(3, minmax(0, 1fr)); }
     .negotiate-v2-composer .response-preview { background: #fff; border: 1.5px solid #d4e0ea; border-radius: 10px; color: #222; font-size: 12px; font-weight: 750; line-height: 1.35; margin-top: 7px; padding: 7px 9px; }
     .negotiate-v2-warning { background: #fff5e6; border: 1.5px solid #e6b35c; border-radius: 8px; color: #7a4a00; font-size: 12px; font-weight: 750; line-height: 1.35; margin-top: 7px; padding: 6px 9px; }
+    .negotiate-v2-pending { background: #eef6ff; border: 1.5px solid #7fa8d0; border-radius: 8px; color: #1d3f63; font-size: 12px; font-weight: 750; line-height: 1.35; margin: 7px 0; padding: 6px 9px; }
+    /* Provenance of the Other-party wording: language model vs scripted fallback. */
+    .nv2-voice { border-radius: 999px; display: inline-block; font-size: 9.5px; font-weight: 800; letter-spacing: 0.04em; margin-left: 6px; padding: 1px 6px; text-transform: uppercase; vertical-align: 1px; cursor: help; }
+    .nv2-voice.llm { background: #eaf3ea; border: 1px solid #b6d3b6; color: #3d6b42; }
+    .nv2-voice.fallback { background: #f3f0e8; border: 1px solid #d6c9a8; color: #7a6224; }
+    .negotiate-v2-composer .response-package { margin-top: 7px; }
     .multi-optimal-version-note { color: #555; font-size: 12px; font-weight: 850; margin: 0 0 8px; text-align: center; }
     .composer { background: transparent; border: 0; display: grid; flex: 0 0 auto; justify-items: end; margin-top: auto; padding: 0; }
     .composer.locked { background: transparent; }
@@ -1195,16 +1201,16 @@
     </section>
   </main>
 
-  <script src="js/config-state.js?v=20260723-negotiatev2-v1"></script>
-  <script src="js/utils-salience.js?v=20260723-negotiatev2-v1"></script>
-  <script src="js/case-features.js?v=20260723-negotiatev2-v1"></script>
-  <script src="js/persona-persistence.js?v=20260723-negotiatev2-v1"></script>
-  <script src="js/profiles-stakes.js?v=20260723-negotiatev2-v1"></script>
-  <script src="js/elicitation.js?v=20260723-negotiatev2-v1"></script>
-  <script src="js/negotiation-ui.js?v=20260723-negotiatev2-v1"></script>
-  <script src="js/summary-guards.js?v=20260723-negotiatev2-v1"></script>
-  <script src="js/negotiation-engine.js?v=20260723-negotiatev2-v1"></script>
-  <script src="js/chat-decision.js?v=20260723-negotiatev2-v1"></script>
-  <script src="js/main.js?v=20260723-negotiatev2-v1"></script>
+  <script src="js/config-state.js?v=20260725-nv2-model-negotiation"></script>
+  <script src="js/utils-salience.js?v=20260725-nv2-model-negotiation"></script>
+  <script src="js/case-features.js?v=20260725-nv2-model-negotiation"></script>
+  <script src="js/persona-persistence.js?v=20260725-nv2-model-negotiation"></script>
+  <script src="js/profiles-stakes.js?v=20260725-nv2-model-negotiation"></script>
+  <script src="js/elicitation.js?v=20260725-nv2-model-negotiation"></script>
+  <script src="js/negotiation-ui.js?v=20260725-nv2-model-negotiation"></script>
+  <script src="js/summary-guards.js?v=20260725-nv2-model-negotiation"></script>
+  <script src="js/negotiation-engine.js?v=20260725-nv2-model-negotiation"></script>
+  <script src="js/chat-decision.js?v=20260725-nv2-model-negotiation"></script>
+  <script src="js/main.js?v=20260725-nv2-model-negotiation"></script>
 </body>
 </html>

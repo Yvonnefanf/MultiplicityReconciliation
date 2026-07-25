@@ -2,7 +2,7 @@
    Part of the Negotiated Rashomon Reconciliation app. Loaded as an ordered
    classic script; all top-level declarations share one global scope. */
 
-    const STATIC_DATA_VERSION = "20260723-negotiatev2-v1";
+    const STATIC_DATA_VERSION = "20260725-nv2-model-negotiation";
 
     function staticApiUrl(url) {
       if (url === "/api/datasets") return "data/datasets.json";

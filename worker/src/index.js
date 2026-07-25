@@ -91,10 +91,20 @@ async function readJsonBody(request) {
   }
 }
 
+function isModelNegotiation(payload) {
+  return payload?.protocol === "model_negotiation";
+}
+
 function validatePayload(payload) {
   if (!payload || typeof payload !== "object") throw new Error("Payload must be an object");
   if (!payload.dataset || typeof payload.dataset !== "string") throw new Error("Missing dataset");
   if (!Number.isFinite(Number(payload.case_index))) throw new Error("Missing case_index");
+  if (isModelNegotiation(payload)) {
+    if (!payload.incoming_offer || typeof payload.incoming_offer !== "object") throw new Error("Missing incoming_offer");
+    if (payload.my_response !== "accept" && payload.my_response !== "counter") throw new Error("my_response must be accept or counter");
+    if (payload.my_response === "counter" && !payload.counter_offer) throw new Error("Missing counter_offer");
+    return;
+  }
   normalizeWeights(payload.user_weights || {});
   normalizeWeights(payload.proxy_weights || {});
   if (!Array.isArray(payload.groups)) throw new Error("Missing groups array");
@@ -102,7 +112,8 @@ function validatePayload(payload) {
 
 async function callOpenAI(payload, env) {
   const model = env.OPENAI_MODEL || "gpt-5.4-mini";
-  const prompt = buildPrompt(payload);
+  const modelProtocol = isModelNegotiation(payload);
+  const prompt = modelProtocol ? buildModelNegotiationPrompt(payload) : buildPrompt(payload);
   const response = await fetch(OPENAI_RESPONSES_URL, {
     method: "POST",
     headers: {
@@ -114,7 +125,7 @@ async function callOpenAI(payload, env) {
       input: [
         {
           role: "system",
-          content: [{ type: "input_text", text: systemPrompt() }]
+          content: [{ type: "input_text", text: modelProtocol ? modelNegotiationSystemPrompt() : systemPrompt() }]
         },
         {
           role: "user",
@@ -124,9 +135,9 @@ async function callOpenAI(payload, env) {
       text: {
         format: {
           type: "json_schema",
-          name: "proxy_negotiation_response",
+          name: modelProtocol ? "model_negotiation_response" : "proxy_negotiation_response",
           strict: true,
-          schema: responseSchema()
+          schema: modelProtocol ? modelNegotiationResponseSchema() : responseSchema()
         }
       },
       max_output_tokens: 500
@@ -140,7 +151,147 @@ async function callOpenAI(payload, env) {
 
   const data = await response.json();
   const parsed = parseOpenAIJson(data);
-  return sanitizeModelResponse(parsed, payload);
+  return modelProtocol ? sanitizeModelNegotiationResponse(parsed) : sanitizeModelResponse(parsed, payload);
+}
+
+/* ------------------------------------------------------------------------
+   negotiatev2 — model-space negotiation.
+
+   The client has already decided everything structural: which model is being
+   offered, whether this side accepts or counters, what it concedes and what
+   the other side gains. The LLM only voices it, in the stakeholder's register.
+   Nothing here mentions criteria weights, because in this protocol the sides
+   never trade weights — they trade models.
+   ------------------------------------------------------------------------ */
+
+function modelNegotiationSystemPrompt() {
+  return [
+    "You speak as one stakeholder in a two-party negotiation over which of several equally-accurate ML models to stand behind for one case.",
+    "Return only JSON matching the schema. You write explanation.text and nothing else; every decision in the payload is already final.",
+    "Never invent, change, or second-guess the model being offered, the accept/counter decision, or any number. Restate only what the payload contains, and omit any move whose field is null rather than inventing a substitute.",
+    "Never mention criteria weights, weight percentages, utilities, scores, or any internal parameter. Speak about criteria as named performance numbers (percentages) and about models by their id.",
+    "Never say that either side changed its values or priorities. Priorities are fixed; what moves is which model each side is willing to live with.",
+    "",
+    "You are an integrative (interest-based) negotiator, not a haggler. A counter-offer must run these speech acts in this order, one clause or sentence each, skipping any whose payload field is null:",
+    "(1) ACKNOWLEDGE — from they_just_conceded, name what the other side gave up and show you registered the cost to them. Perspective-taking first; never open with your own complaint.",
+    "(2) LOCATE THE GAP — from complaint, name the one criterion where their offer still fails you, with its number. State it as an obligation of your role, not as a preference or a demand.",
+    "(3) RECIPROCATE — from concession, name what you are giving up in return, with both numbers, and mark that it is a genuine cost to you. An unlabelled concession is not read as one.",
+    "(4) PRESERVE — from what_i_must_keep, name the one thing you will not trade and give the reason you cannot defend going below it. Never phrase this as a threat or an ultimatum.",
+    "(5) JUSTIFY THE TRADE — from why_trading_works, explain that you two rank these criteria differently, so swapping makes both sides better off than meeting in the middle. This is the heart of the message: the deal is good because your priorities differ, not because someone caved.",
+    "(6) GAIN-FRAME — from payback, state what your counter-offer does for THEM as an improvement, in their terms. End on their gain, never on your own.",
+    "",
+    "If how_far_i_have_moved shows you have already conceded across rounds, you may invoke it once to ask for reciprocity — state it as a fact, not a grievance.",
+    "When accepting: acknowledge their movement, say which criterion it finally brought far enough and to what number, then give the honest reason you are accepting (no counter of yours would do better, or the deadline makes settling better than walking away).",
+    "When holding firm because they did not move: say so plainly, restate the limit and the reason for it, and leave the door open unless deadline_reached is true.",
+    "If deadline_reached is true, say this is the last round.",
+    "",
+    "Stay in role, first person, plain language a non-technical stakeholder would use. Warm but not soft; you are trying to reach a deal, not to win. 3 to 5 sentences, at most 110 words. No lists, no headings, no markdown, no restating the payload as data."
+  ].join(" ");
+}
+
+function sanitizeModelSnapshot(raw) {
+  if (!raw || typeof raw !== "object") return null;
+  return {
+    id: String(raw.id || "").slice(0, 20),
+    prediction: String(raw.prediction || "").slice(0, 80),
+    criteria: Object.fromEntries(CRITERIA_ORDER.map((key) => [key, raw.criteria?.[key] == null ? null : clamp01(Number(raw.criteria[key]))]))
+  };
+}
+
+function sanitizeCriterionMove(raw) {
+  if (!raw || typeof raw !== "object") return null;
+  const value = (item) => item == null ? null : clamp01(Number(item));
+  return {
+    criterion: String(raw.criterion || "").slice(0, 120),
+    from: value(raw.from),
+    to: value(raw.to),
+    their_value: value(raw.their_value),
+    my_value: value(raw.my_value)
+  };
+}
+
+function buildModelNegotiationPrompt(payload) {
+  const priorityList = (raw) => (Array.isArray(raw) ? raw : []).slice(0, CRITERIA_ORDER.length).map((item) => String(item).slice(0, 80));
+  const safePayload = {
+    dataset_label: String(payload.dataset_label || payload.dataset || "").slice(0, 80),
+    case_index: Number(payload.case_index),
+    round: Number(payload.round || 1),
+    max_round: Number(payload.max_round || 3),
+    deadline_reached: Boolean(payload.deadline_reached),
+    i_am: String(payload.proxy_role || "Other-party").slice(0, 80),
+    they_are: String(payload.user_role || "Self").slice(0, 80),
+    criteria_labels: pickCriteriaLabels(payload.criteria_labels || {}),
+    my_priority_order: priorityList(payload.my_priority_order),
+    their_priority_order: priorityList(payload.their_priority_order),
+    case_features: limitObject(payload.case_features || {}, 16),
+    models_on_the_table: Number(payload.option_count || 0),
+    their_offer: sanitizeModelSnapshot(payload.incoming_offer),
+    my_previous_position: sanitizeModelSnapshot(payload.my_previous_position),
+    my_response: payload.my_response === "accept" ? "accept" : "counter",
+    my_counter_offer: sanitizeModelSnapshot(payload.counter_offer),
+    why: String(payload.decision_reason || "").slice(0, 60),
+    // one field per speech act, so a null field simply drops that act
+    they_just_conceded: sanitizeCriterionMove(payload.they_just_conceded),
+    it_gained_me: sanitizeCriterionMove(payload.it_gained_me),
+    complaint: sanitizeCriterionMove(payload.complaint),
+    concession: sanitizeCriterionMove(payload.concession),
+    what_i_must_keep: payload.what_i_must_keep ? {
+      criterion: String(payload.what_i_must_keep.label || "").slice(0, 120),
+      hold_at: payload.what_i_must_keep.keep == null ? null : clamp01(Number(payload.what_i_must_keep.keep)),
+      their_offer_would_put_it_at: payload.what_i_must_keep.under_their_offer == null ? null : clamp01(Number(payload.what_i_must_keep.under_their_offer)),
+      actually_at_risk: Boolean(payload.what_i_must_keep.at_risk)
+    } : null,
+    why_trading_works: payload.why_trading_works ? {
+      i_value_more: String(payload.why_trading_works.i_value_more || "").slice(0, 120),
+      they_value_more: String(payload.why_trading_works.they_value_more || "").slice(0, 120)
+    } : null,
+    how_far_i_have_moved: payload.how_far_i_have_moved ? {
+      rounds_moved: Number(payload.how_far_i_have_moved.rounds_moved || 0),
+      criterion: String(payload.how_far_i_have_moved.criterion || "").slice(0, 120),
+      given_up: clamp01(Number(payload.how_far_i_have_moved.given_up))
+    } : null,
+    payback: sanitizeCriterionMove(payload.payback),
+    history: sanitizeHistory(payload.history || [])
+  };
+
+  return [
+    "Voice this stakeholder's reply in the model negotiation below.",
+    "All criteria values are shares between 0 and 1; render them as percentages.",
+    "Each speech act in your instructions maps to one field: (1) ACKNOWLEDGE -> they_just_conceded, (2) LOCATE THE GAP -> complaint, (3) RECIPROCATE -> concession, (4) PRESERVE -> what_i_must_keep, (5) JUSTIFY THE TRADE -> why_trading_works, (6) GAIN-FRAME -> payback. A null field means skip that act entirely.",
+    "Skip act (4) unless what_i_must_keep.actually_at_risk is true — defending a limit nobody attacked sounds evasive.",
+    "my_priority_order and their_priority_order are ordinal only — use them to decide what to emphasise, never quote them as numbers or weights.",
+    "why explains the accept/counter decision: no_better_counter means countering would not improve your position; deadline means rounds ran out; can_improve and below_reservation mean you are countering.",
+    JSON.stringify(safePayload, null, 2)
+  ].join("\n\n");
+}
+
+function modelNegotiationResponseSchema() {
+  return {
+    type: "object",
+    additionalProperties: false,
+    required: ["explanation"],
+    properties: {
+      explanation: {
+        type: "object",
+        additionalProperties: false,
+        required: ["source", "text"],
+        properties: {
+          source: { type: "string", enum: ["openai"] },
+          text: { type: "string", maxLength: 700 }
+        }
+      }
+    }
+  };
+}
+
+function sanitizeModelNegotiationResponse(raw) {
+  return {
+    explanation: {
+      source: "openai",
+      text: String(raw?.explanation?.text || "").slice(0, 700)
+    },
+    control: { source: "cloudflare_worker", protocol: "model_negotiation" }
+  };
 }
 
 function systemPrompt() {

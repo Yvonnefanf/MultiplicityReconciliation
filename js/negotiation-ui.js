@@ -69,11 +69,8 @@
       showStage("reconcile");
       if (isNegotiateV2Condition()) {
         composerLocked = false;
-        composerNote = "Select criteria each side can sacrifice, then generate the next acceptable model version.";
-        renderOfferControls();
-        renderSummary();
-        renderReconciliation();
-        renderFinalDecisionOptions();
+        composerNote = "Say what the Other-party's model costs you and what you can give up; the system finds the model that repays them most for it.";
+        nv2Rerender();
       } else {
         beginUserOpeningOffer(elicitedWeights, "Elicited preference baseline");
       }
@@ -767,474 +764,1008 @@
     }
 
 
-    function negotiateV2ModelBySeed(seed) {
+    /* ==================================================================
+       negotiatev2 — model-space negotiation (core condition)
+
+       The negotiated object is a MODEL drawn from the Pareto-optimal option
+       set, never a weight vector. Each side's elicited weights stay FIXED as
+       a private utility function, so "giving ground" happens in outcome
+       space and never implies that a stakeholder's values changed.
+
+       Protocol: alternating offers. Both sides open at v0 (each side's own
+       utility-maximising model, normally in conflict). A move is an
+       integrative package —
+         complaint  : your model fails me on criterion D
+         concession : I can absorb up to N points less on criterion G
+         payback    : so take this model, it is better for you on criterion P
+       — and the system searches the option set for the model that maximises
+       the RECEIVER's utility subject to the mover's concession budget and a
+       time-dependent reservation level (Faratin-style concession tactics).
+       The receiver accepts (AOP rule: the offer is at least as good as its
+       own best planned counter) or counters. Capped at v3 per side; no
+       agreement by then is a genuine impasse, not a forced merge.
+       ================================================================== */
+
+    const NV2_MAX_VERSION = 3;
+    const NV2_GIVE_STEPS = [
+      { key: "small", label: "A little", value: 0.02 },
+      { key: "medium", label: "Some", value: 0.05 },
+      { key: "large", label: "A lot", value: 0.09 },
+    ];
+    // Share of the distance from "my own best model" to "their opening model"
+    // that I am willing to give up by version t. Boulware-ish: hold early,
+    // concede near the deadline, never concede the whole distance.
+    const NV2_CONCESSION_SCHEDULE = [0, 0.34, 0.62, 0.84];
+    const NV2_DEMAND_EPSILON = 0.005;
+    const NV2_ACCEPT_TOLERANCE = 0.004;
+
+    function nv2OtherSide(side) {
+      return side === "self" ? "other" : "self";
+    }
+
+    function nv2CaseKey() {
+      return `${activeData?.dataset ?? datasetSelect?.value ?? ""}:${activeData?.case?.test_case_index ?? caseSelect?.value ?? ""}`;
+    }
+
+    // A negotiation belongs to one case: its option set, anchors and offer
+    // tracks are all built from that case's models. Carrying it into the next
+    // case would silently negotiate over models that are no longer on screen.
+    function nv2EnsureForCurrentCase() {
+      if (!activeData) return null;
+      if (!nv2 || nv2.caseKey !== nv2CaseKey()) resetNegotiateV2State();
+      return nv2;
+    }
+
+    function nv2SideLabel(side) {
+      return side === "self" ? "Self" : "Other-party";
+    }
+
+    function nv2MetricValue(model, key) {
+      const value = modelCriterionValue(model, key);
+      return Number.isFinite(value) ? value : null;
+    }
+
+    function nv2Utility(model, side) {
+      if (!model || !nv2) return 0;
+      return modelWeightedUtility(model, nv2.weights[side]);
+    }
+
+    function nv2ModelBySeed(seed) {
       return (activeData?.models || []).find((model) => String(model.seed) === String(seed)) || null;
     }
 
-    function negotiateV2CurrentVersion() {
-      return negotiateV2Versions[negotiateV2VersionIndex] || null;
-    }
-
-    function negotiateV2SelectedItems() {
-      ensureDifferentProxyPersona();
-      const selfWeights = normalizeWeights(userWeights || elicitedWeights || weights);
-      const otherWeights = normalizeWeights(proxyWeights || proxyIdealWeights());
-      // Mid-turn (only Self has moved) we keep the two models distinct; once the
-      // Other-party has responded we allow them to collapse onto one shared model.
-      const allowShared = negotiateV2Phase !== "self";
-      const choice = negotiateV2ChooseModels(selfWeights, otherWeights, { allowShared });
-      return [
-        { role: "self", roleLabel: "Self optimal", model: choice.selfModel },
-        { role: "other", roleLabel: "Other-party optimal", model: choice.otherModel },
-      ];
-    }
-
-    function negotiateV2RedistributeWeights(baseWeights, sacrificeKey, receiveKey, step = 0.1) {
-      const base = normalizeWeights(baseWeights || weights);
-      if (!sacrificeKey || !criteriaOrder.includes(sacrificeKey)) return base;
-      const next = { ...base };
-      const available = Math.max(0, (next[sacrificeKey] || 0) - 0.01);
-      const give = Math.min(Math.max(0, Number(step) || 0), available);
-      next[sacrificeKey] = Math.max(0.01, (next[sacrificeKey] || 0) - give);
-      const receiver = receiveKey && receiveKey !== sacrificeKey ? receiveKey : criteriaOrder.find((key) => key !== sacrificeKey) || criteriaOrder[0];
-      next[receiver] = (next[receiver] || 0) + give;
-      return normalizeWeights(next);
-    }
-
-    function negotiateV2Reliability(model, rowWeights) {
-      return model ? modelWeightedUtility(model, rowWeights) : 0;
-    }
-
-    function negotiateV2ParetoCandidates() {
-      const frontier = paretoOptimalModels(activeData?.models || []);
-      return frontier.length ? frontier : (activeData?.models || []);
-    }
-
-    function negotiateV2BestModel(rowWeights, candidates = negotiateV2ParetoCandidates()) {
-      return candidates.slice().sort((a, b) => {
-        const utilityDelta = negotiateV2Reliability(b, rowWeights) - negotiateV2Reliability(a, rowWeights);
-        if (Math.abs(utilityDelta) > 0.000001) return utilityDelta;
+    function nv2BestModelFor(side, pool = nv2?.options || []) {
+      return pool.slice().sort((a, b) => {
+        const delta = nv2Utility(b, side) - nv2Utility(a, side);
+        if (Math.abs(delta) > 0.000001) return delta;
         return Number(b.pred_prob || 0) - Number(a.pred_prob || 0);
       })[0] || null;
     }
 
-    function negotiateV2ModelDistance(a, b) {
-      if (!a || !b) return 1;
-      const metricDistance = criteriaOrder.reduce((total, key) => {
-        const av = modelCriterionValue(a, key);
-        const bv = modelCriterionValue(b, key);
-        if (!Number.isFinite(av) || !Number.isFinite(bv)) return total;
-        return total + Math.abs(av - bv);
-      }, 0) / Math.max(1, criteriaOrder.length);
-      const probDistance = Math.abs(Number(a.pred_prob || 0) - Number(b.pred_prob || 0));
-      const classPenalty = Number(a.pred_class) === Number(b.pred_class) ? 0 : 0.18;
-      return metricDistance + 0.35 * probDistance + classPenalty;
+    function nv2Track(side) {
+      return nv2?.[side]?.track || [];
     }
 
-    function negotiateV2IssueRow(profile, key, rowWeights) {
-      const stake = caseCriterionStake(profile, key, rowWeights);
-      return {
-        key,
-        label: criteriaLabels[key] || key,
-        stake,
-        rank: issueRank(profile, key),
-        rigidity: issueRigidity(profile, key),
-        negotiability: stakeNegotiabilityScore(stake),
-        floorRisk: Boolean(stake.floor_risk || stake.all_below_floor),
-        isCore: key === primaryCriterionKeyForProfile(profile),
-      };
+    // The side's live bargaining position (its most recent stated model).
+    function nv2Position(side) {
+      const track = nv2Track(side);
+      return track[track.length - 1] || null;
     }
 
-    function ordinalRank(rank) {
-      const n = Math.max(1, Math.min(criteriaOrder.length, Math.round(Number(rank) || criteriaOrder.length)));
-      return ["top", "2nd", "3rd", "4th", "5th"][n - 1] || `#${n}`;
+    // The position the participant is currently *looking at* (version dropdown).
+    function nv2ViewedPosition(side) {
+      const track = nv2Track(side);
+      if (!track.length) return null;
+      const index = Math.max(0, Math.min(track.length - 1, Number(nv2[side].viewIndex) || 0));
+      return track[index];
     }
 
-    function negotiateV2AutomaticCounterMove(base, selfSacrifice, step = 0.1) {
-      const baseSelfWeights = normalizeWeights(base?.selfWeights || userWeights || weights);
-      const baseOtherWeights = normalizeWeights(base?.otherWeights || proxyWeights || proxyIdealWeights());
-      const { userProfile, proxyProfile } = buildNegotiationContext(baseSelfWeights);
-      const selfReceive = topMetricKeyForWeights(baseOtherWeights);
-      const otherReceive = topMetricKeyForWeights(baseSelfWeights);
-      const nextSelfWeights = negotiateV2RedistributeWeights(baseSelfWeights, selfSacrifice, selfReceive, step);
-      const baseChoice = negotiateV2ChooseModels(baseSelfWeights, baseOtherWeights, { allowShared: false });
-      const baseDistance = negotiateV2ModelDistance(baseChoice.selfModel, baseChoice.otherModel);
-      const selfGiveRank = selfSacrifice ? issueRank(userProfile, selfSacrifice) : criteriaOrder.length;
-      const activeKeys = activeCriteria().length ? activeCriteria() : criteriaOrder;
-      const candidates = activeKeys
-        .filter((key) => key !== otherReceive)
+    function nv2NextVersion() {
+      return nv2Track("self").length;
+    }
+
+    function nv2PredictionLabel(model) {
+      if (!model) return "-";
+      return activeData?.label_names?.[model.pred_class] || `Class ${model.pred_class}`;
+    }
+
+    function nv2ModelTag(model) {
+      return model ? `#${model.seed ?? model.id ?? "?"}` : "-";
+    }
+
+    // How much criterion `key` costs `side` when it looks at `targetModel`
+    // instead of its own current position: the complaint ranking.
+    function nv2Complaints(side, targetModel) {
+      const own = nv2Position(side)?.model;
+      const rowWeights = nv2.weights[side];
+      return criteriaOrder
         .map((key) => {
-          const issue = negotiateV2IssueRow(proxyProfile, key, baseOtherWeights);
-          const userIssue = negotiateV2IssueRow(userProfile, key, baseSelfWeights);
-          const nextOtherWeights = negotiateV2RedistributeWeights(baseOtherWeights, key, otherReceive, step);
-          const choice = negotiateV2ChooseModels(nextSelfWeights, nextOtherWeights, { allowShared: true });
-          const nextDistance = negotiateV2ModelDistance(choice.selfModel, choice.otherModel);
-          const otherLoss = Math.max(0, (baseOtherWeights[key] || 0) - (nextOtherWeights[key] || 0));
-          const selfGain = Math.max(0, (nextOtherWeights[otherReceive] || 0) - (baseOtherWeights[otherReceive] || 0));
-          const consensusBonus = choice.shared ? 2.8 : choice.consensusClass ? 1.7 : 0;
-          const distanceGain = Math.max(0, baseDistance - nextDistance);
-          const profileCost = (issue.isCore ? 1.4 : 0) + (issue.floorRisk ? 2.5 : 0) + issue.rigidity * 0.45 + (issue.stake?.salience || 0) * 3.2;
-          // Logrolling: Other-party should give on an issue it ranks LOW (cheap to concede)
-          // while receiving on Self's TOP issue — a mutually efficient cross-issue trade.
-          const giveEase = Math.max(0, issue.rank - 1);           // lower priority => easier to give
-          const logrollGain = giveEase * 0.5;
-          const modelSpaceGain = consensusBonus + distanceGain * 3.5 + selfGain * 0.4;
-          const score = modelSpaceGain + logrollGain + issue.negotiability * 0.8 + (userIssue.stake?.salience || 0) * 0.6 - profileCost - otherLoss * 0.3;
-          return {
-            key,
-            receiveKey: otherReceive,
-            nextOtherWeights,
-            nextSelfWeights,
-            choice,
-            score,
-            issue,
-            userIssue,
-            distanceGain,
-            consensusBonus,
-            logrollGain,
-          };
+          const mine = nv2MetricValue(own, key);
+          const theirs = nv2MetricValue(targetModel, key);
+          const gap = mine != null && theirs != null ? mine - theirs : 0;
+          const weight = rowWeights[key] || 0;
+          return { key, label: criteriaLabels[key] || key, mine, theirs, gap, weight, cost: weight * Math.max(0, gap) };
         })
-        .sort((a, b) => b.score - a.score || b.consensusBonus - a.consensusBonus || b.issue.negotiability - a.issue.negotiability);
-      const selected = candidates[0] || {
-        key: activeKeys.find((key) => key !== otherReceive) || activeKeys[0] || criteriaOrder[0],
-        receiveKey: otherReceive,
-        nextOtherWeights: baseOtherWeights,
-        nextSelfWeights,
-        choice: negotiateV2ChooseModels(nextSelfWeights, baseOtherWeights, { allowShared: true }),
-        score: 0,
-        issue: null,
-        userIssue: null,
-        distanceGain: 0,
-        consensusBonus: 0,
-        logrollGain: 0,
+        .sort((a, b) => b.cost - a.cost || b.weight - a.weight);
+    }
+
+    // Logrolling heuristic: concede the criterion that is cheapest for me and
+    // dearest to them, i.e. the largest positive (their weight - my weight).
+    function nv2LogrollGiveKey(side, demandKey) {
+      const other = nv2OtherSide(side);
+      const mine = nv2.weights[side];
+      const theirs = nv2.weights[other];
+      return criteriaOrder
+        .filter((key) => key !== demandKey)
+        .map((key) => ({ key, edge: (theirs[key] || 0) - (mine[key] || 0), mineWeight: mine[key] || 0 }))
+        .sort((a, b) => b.edge - a.edge || a.mineWeight - b.mineWeight)[0]?.key || null;
+    }
+
+    function nv2GiveOptions(side, demandKey) {
+      const other = nv2OtherSide(side);
+      const mine = nv2.weights[side];
+      const theirs = nv2.weights[other];
+      const own = nv2Position(side)?.model;
+      return criteriaOrder
+        .filter((key) => key !== demandKey)
+        .map((key) => ({
+          key,
+          label: criteriaLabels[key] || key,
+          mineWeight: mine[key] || 0,
+          theirWeight: theirs[key] || 0,
+          edge: (theirs[key] || 0) - (mine[key] || 0),
+          current: nv2MetricValue(own, key),
+        }))
+        .sort((a, b) => b.edge - a.edge || a.mineWeight - b.mineWeight);
+    }
+
+    function nv2GiveStep(stepKey) {
+      return NV2_GIVE_STEPS.find((item) => item.key === stepKey) || NV2_GIVE_STEPS[1];
+    }
+
+    // Reservation utility at version t: how far down my own utility scale I am
+    // prepared to travel, measured from my opening model toward theirs.
+    function nv2Reservation(side, versionIndex) {
+      const anchors = nv2?.anchors?.[side];
+      if (!anchors) return 0;
+      const t = Math.max(0, Math.min(NV2_MAX_VERSION, Number(versionIndex) || 0));
+      const share = NV2_CONCESSION_SCHEDULE[t] ?? NV2_CONCESSION_SCHEDULE[NV2_CONCESSION_SCHEDULE.length - 1];
+      return anchors.best - (anchors.best - anchors.atTheirBest) * share;
+    }
+
+    // Search the option set for the package this side should put on the table.
+    // Constraints relax in tiers so the composer always previews something.
+    function nv2SearchOffer(side, { demandKey, giveKey, giveAmount, versionIndex, targetModel = null, improvementTarget = null }) {
+      const other = nv2OtherSide(side);
+      const own = nv2Position(side)?.model;
+      const target = targetModel || nv2Position(other)?.model;
+      const pool = nv2.options || [];
+      const giveBase = nv2MetricValue(own, giveKey);
+      const giveFloor = giveBase == null ? -Infinity : giveBase - giveAmount;
+      const demandBase = nv2MetricValue(target, demandKey);
+      const demandFloor = demandBase == null ? -Infinity : demandBase + NV2_DEMAND_EPSILON;
+      const reservation = nv2Reservation(side, versionIndex);
+      // The declared criterion carries the full concession budget; everything
+      // else may only slip half as far. Without this the search would quietly
+      // take the loss somewhere the participant never agreed to, and the
+      // "where can you give ground" control would be decorative.
+      const collateralBudget = giveAmount * 0.5;
+      const withinGive = (model) => {
+        const declared = nv2MetricValue(model, giveKey);
+        if (declared != null && declared < giveFloor - 1e-9) return false;
+        return criteriaOrder.every((key) => {
+          // The demanded criterion is exempt from the cap on purpose. When both
+          // sides sit at opposite ends of the same axis, that axis is the only
+          // currency either has: the mover converges down from its own maximum
+          // while still demanding far more than the other side currently gives.
+          // Capping it here starved the search and drove 19 of 20 cases to
+          // impasse. The narrative stays honest because both numbers are shown.
+          if (key === giveKey || key === demandKey) return true;
+          const before = nv2MetricValue(own, key);
+          const after = nv2MetricValue(model, key);
+          if (before == null || after == null) return true;
+          return before - after <= collateralBudget + 1e-9;
+        });
       };
-      // Describe the move in terms of how the resulting model performs on the
-      // criteria each side cares about — never in terms of raw weights.
-      const selfTopKey = otherReceive; // the criterion Self cares most about
-      const oldOtherModel = baseChoice.otherModel;
-      const newOtherModel = (selected.choice && selected.choice.otherModel) || oldOtherModel;
-      const topOld = modelCriterionValue(oldOtherModel, selfTopKey);
-      const topNew = modelCriterionValue(newOtherModel, selfTopKey);
-      const topImproved = (Number.isFinite(topNew) && Number.isFinite(topOld)) ? topNew - topOld : 0;
-      let sacrificedKey = null;
-      let worstDrop = 0.004;
-      for (const key of criteriaOrder) {
-        if (key === selfTopKey) continue;
-        const ov = modelCriterionValue(oldOtherModel, key);
-        const nv = modelCriterionValue(newOtherModel, key);
-        if (!Number.isFinite(ov) || !Number.isFinite(nv)) continue;
-        const drop = ov - nv;
-        if (drop > worstDrop) { worstDrop = drop; sacrificedKey = key; }
+      const meetsDemand = (model) => {
+        const value = nv2MetricValue(model, demandKey);
+        return value == null || value >= demandFloor;
+      };
+      const aboveReservation = (model) => nv2Utility(model, side) >= reservation - 1e-9;
+      const tiers = [
+        { name: "full", test: (model) => withinGive(model) && meetsDemand(model) && aboveReservation(model) },
+        { name: "drop_demand", test: (model) => withinGive(model) && aboveReservation(model) },
+        { name: "drop_reservation", test: (model) => withinGive(model) && meetsDemand(model) },
+        { name: "budget_only", test: withinGive },
+      ];
+      // How much better the offer has to be for the receiver before it counts as
+      // a real move. The declared concession size sets the bar: a bigger
+      // concession promises them a bigger gain.
+      const ownForThem = nv2Utility(own, other);
+      const moveBar = Number.isFinite(improvementTarget) ? improvementTarget : giveAmount;
+      for (const tier of tiers) {
+        const feasible = pool.filter(tier.test);
+        if (!feasible.length) continue;
+        const moving = feasible.filter((model) => nv2Utility(model, other) - ownForThem >= moveBar - 1e-9);
+        // Concede the least that still moves them. Maximising *their* utility
+        // instead would spend the whole reservation budget in one round, which
+        // is not how a negotiator behaves — it is capitulation.
+        const pick = moving.length
+          ? moving.slice().sort((a, b) => {
+              const delta = nv2Utility(b, side) - nv2Utility(a, side);
+              if (Math.abs(delta) > 0.000001) return delta;
+              return nv2Utility(b, other) - nv2Utility(a, other);
+            })[0]
+          : feasible.slice().sort((a, b) => {
+              const delta = nv2Utility(b, other) - nv2Utility(a, other);
+              if (Math.abs(delta) > 0.000001) return delta;
+              return nv2Utility(b, side) - nv2Utility(a, side);
+            })[0];
+        if (pick && pick !== own && nv2Utility(pick, other) > ownForThem + 1e-6) {
+          return { model: pick, tier: tier.name, reservation, giveFloor, demandFloor, reachedTarget: moving.length > 0, held: false };
+        }
       }
-      const selfOffer = selfSacrifice
-        ? `I can ease up on ${criteriaLabels[selfSacrifice]} so we can move toward a model that also does well on ${criteriaLabels[selfReceive]}, which the Other-party cares about most.`
-        : `I'll keep my current preferences this round.`;
-      const otherOffer = selected.issue
-        ? `I understand you care most about ${criteriaLabels[selfTopKey]}. My updated model ${topImproved > 0.001 ? `does better on ${criteriaLabels[selfTopKey]}` : `holds ${criteriaLabels[selfTopKey]} steady`}, so it fits your priority more closely${sacrificedKey ? `, giving up only a little ${criteriaLabels[sacrificedKey]}` : ""}.`
-        : `I can't do better on ${criteriaLabels[selfTopKey]} without dropping below my own limits, so I'll stay with my current model.`;
-      const reciprocity = selected.choice?.shared
-        ? "Both sides now land on the same acceptable model — consensus reached."
-        : selected.choice?.consensusClass
-          ? "Both models now recommend the same decision, though they remain distinct."
-          : "The two models moved closer, but there is no shared model yet.";
-      return {
-        ...selected,
-        selfReceive,
-        selfGiveRank,
-        nextSelfWeights,
-        selfOffer,
-        otherOffer,
-        reciprocity,
-        rationale: selected.issue
-          ? `Logrolling trade: Self concedes ${criteriaLabels[selfSacrifice]} → ${criteriaLabels[selfReceive]}; Other-party concedes ${criteriaLabels[selected.key]} → ${criteriaLabels[selected.receiveKey]}. Each gives on a lower-priority issue to advance the other's top concern, which pulls the available model options together. ${reciprocity}`
-          : `Other-party keeps its profile weights because no concession direction was cheap enough without crossing its core priorities. ${reciprocity}`,
-      };
+      return { model: own, tier: "held", reservation, giveFloor, demandFloor, reachedTarget: false, held: true };
     }
 
-    // How much Self is willing to let its MOST-important criterion slip, in metric
-    // units. Default "none" fully protects the top criterion; the user can open it up.
-    function negotiateV2TopFlexValue() {
-      const map = { none: 0, little: 0.03, moderate: 0.08 };
-      return map[negotiateV2Draft?.topGive] ?? 0;
+    // What the offered model buys the receiving side, relative to the mover's
+    // previous position — the "what's in it for you" line of the package.
+    function nv2PaybackFor(side, offerModel, previousModel) {
+      const other = nv2OtherSide(side);
+      const theirs = nv2.weights[other];
+      return criteriaOrder
+        .map((key) => {
+          const before = nv2MetricValue(previousModel, key);
+          const after = nv2MetricValue(offerModel, key);
+          const gain = before != null && after != null ? after - before : 0;
+          return { key, label: criteriaLabels[key] || key, before, after, gain, value: (theirs[key] || 0) * gain };
+        })
+        .sort((a, b) => b.value - a.value)[0] || null;
     }
 
-    function negotiateV2ChooseModels(selfWeights, otherWeights, options = {}) {
-      const candidates = negotiateV2ParetoCandidates();
-      const selfBest = negotiateV2BestModel(selfWeights, candidates);
-      const otherBest = negotiateV2BestModel(otherWeights, candidates);
-      const selfBestScore = negotiateV2Reliability(selfBest, selfWeights);
-      const otherBestScore = negotiateV2Reliability(otherBest, otherWeights);
-      if (options.allowShared !== false) {
-        const minSelf = selfBestScore * 0.94;
-        const minOther = otherBestScore * 0.94;
-        // Guard Self's top criterion: a shared model may only drop below the best
-        // achievable value on that criterion by the user's chosen flexibility budget.
-        const selfTopKey = options.selfTopKey || topMetricKeyForWeights(selfWeights);
-        const topFlex = Number.isFinite(options.topFlex) ? options.topFlex : negotiateV2TopFlexValue();
-        const topValues = candidates.map((model) => modelCriterionValue(model, selfTopKey)).filter(Number.isFinite);
-        const topFloor = topValues.length ? Math.max(...topValues) - topFlex : null;
-        const shared = candidates
-          .map((model) => ({
-            model,
-            selfScore: negotiateV2Reliability(model, selfWeights),
-            otherScore: negotiateV2Reliability(model, otherWeights),
-            topValue: modelCriterionValue(model, selfTopKey),
-          }))
-          .filter((row) => row.selfScore >= minSelf && row.otherScore >= minOther
-            && (topFloor == null || !Number.isFinite(row.topValue) || row.topValue >= topFloor - 1e-9))
-          .sort((a, b) => (b.selfScore + b.otherScore) - (a.selfScore + a.otherScore) || Math.abs(0.5 - Number(a.model.pred_prob || 0)) - Math.abs(0.5 - Number(b.model.pred_prob || 0)))[0];
-        if (shared) return { selfModel: shared.model, otherModel: shared.model, shared: true };
+    // What the move actually cost the mover. The declared criterion is only a
+    // permission — report where the loss really landed, otherwise the message
+    // can claim a concession that the offered model never made.
+    function nv2ConcessionDetail(side, offerModel, previousModel, giveKey) {
+      const drops = criteriaOrder
+        .map((key) => {
+          const before = nv2MetricValue(previousModel, key);
+          const after = nv2MetricValue(offerModel, key);
+          return { key, label: criteriaLabels[key] || key, before, after, drop: before != null && after != null ? before - after : 0 };
+        })
+        .filter((item) => item.drop > 0.001)
+        .sort((a, b) => b.drop - a.drop);
+      const declared = drops.find((item) => item.key === giveKey);
+      if (declared) return { ...declared, asDeclared: true };
+      if (drops.length) return { ...drops[0], asDeclared: false };
+      const before = nv2MetricValue(previousModel, giveKey);
+      return { key: giveKey, label: criteriaLabels[giveKey] || giveKey, before, after: nv2MetricValue(offerModel, giveKey), drop: 0, asDeclared: true };
+    }
+
+    // The automated Other-party's own move: same package structure, chosen for
+    // it rather than by it, so the LLM never invents a bargaining position.
+    function nv2AutoMove(side, incomingModel, versionIndex, receivedGain = null) {
+      const complaints = nv2Complaints(side, incomingModel);
+      const demandKey = complaints[0]?.key || criteriaOrder[0];
+      const giveKey = nv2LogrollGiveKey(side, demandKey) || criteriaOrder.find((key) => key !== demandKey) || criteriaOrder[0];
+      // Tit-for-tat: answer a concession with a concession, and a stonewall
+      // with a stonewall. Without this the other side keeps sweetening against
+      // a party that never moves, and impasse becomes unreachable.
+      if (Number.isFinite(receivedGain) && receivedGain <= 0.001) {
+        return {
+          model: nv2Position(side)?.model,
+          tier: "hold",
+          held: true,
+          stonewalled: true,
+          reachedTarget: false,
+          demandKey,
+          giveKey,
+          giveAmount: 0,
+          reciprocal: 0,
+          complaint: complaints[0] || null,
+        };
       }
-      const consensusClass = selfBest && otherBest && Number(selfBest.pred_class) === Number(otherBest.pred_class);
-      return { selfModel: selfBest, otherModel: otherBest, shared: false, consensusClass };
+      // Norm of reciprocity: answer the concession you were just handed rather
+      // than running a fixed schedule. A fixed schedule lets whichever side
+      // moves first be walked down alone, which reads as bad faith.
+      const reciprocal = Number.isFinite(receivedGain)
+        ? Math.max(0.015, Math.min(0.12, receivedGain))
+        : 0.02 + 0.03 * Math.max(0, Math.min(NV2_MAX_VERSION - 1, versionIndex - 1));
+      const giveAmount = Math.max(0.02, Math.min(0.12, reciprocal * 1.5));
+      const search = nv2SearchOffer(side, { demandKey, giveKey, giveAmount, versionIndex, targetModel: incomingModel, improvementTarget: reciprocal });
+      return { ...search, demandKey, giveKey, giveAmount, reciprocal, complaint: complaints[0] || null };
     }
 
-    function negotiateV2CreateVersion({ selfWeights, otherWeights, selfSacrifice = null, otherSacrifice = null, selfReceive = null, otherReceive = null, note = "Initial multi-optimal state", rationale = "", allowShared = true, selfOffer = "", otherOffer = "", reciprocity = "" }) {
-      const choice = negotiateV2ChooseModels(selfWeights, otherWeights, { allowShared });
-      const id = negotiateV2Versions.length;
-      const selfLabel = activeData?.label_names?.[choice.selfModel?.pred_class] || `Class ${choice.selfModel?.pred_class}`;
-      const otherLabel = activeData?.label_names?.[choice.otherModel?.pred_class] || `Class ${choice.otherModel?.pred_class}`;
-      return {
-        id,
-        label: `v${id}`,
-        selfWeights: normalizeWeights(selfWeights),
-        otherWeights: normalizeWeights(otherWeights),
-        selfSacrifice,
-        otherSacrifice,
-        selfReceive,
-        otherReceive,
-        rationale,
-        selfOffer,
-        otherOffer,
-        reciprocity,
-        selfModelSeed: choice.selfModel?.seed,
-        otherModelSeed: choice.otherModel?.seed,
-        consensus: Boolean(choice.selfModel && choice.otherModel && Number(choice.selfModel.pred_class) === Number(choice.otherModel.pred_class)),
-        shared: Boolean(choice.shared),
-        note,
-        summary: choice.shared
-          ? `v${id}: shared model #${choice.selfModel?.seed} predicts ${selfLabel}.`
-          : `v${id}: Self model #${choice.selfModel?.seed} predicts ${selfLabel}; Other-party model #${choice.otherModel?.seed} predicts ${otherLabel}.`,
-      };
+    // Alternating-offers acceptance: take the offer when countering cannot
+    // realistically do better, or when the deadline makes holding out worse.
+    function nv2AcceptanceDecision(side, offerModel, versionIndex, receivedGain = null) {
+      const utility = nv2Utility(offerModel, side);
+      const plan = nv2AutoMove(side, offerModel, versionIndex, receivedGain);
+      const counterUtility = plan.model ? nv2Utility(plan.model, side) : utility;
+      const reservation = nv2Reservation(side, versionIndex);
+      if (utility >= counterUtility - NV2_ACCEPT_TOLERANCE) {
+        return { accept: true, reason: "no_better_counter", utility, counterUtility, reservation, plan };
+      }
+      if (utility >= reservation) {
+        if (versionIndex >= NV2_MAX_VERSION) return { accept: true, reason: "deadline", utility, counterUtility, reservation, plan };
+        return { accept: false, reason: "can_improve", utility, counterUtility, reservation, plan };
+      }
+      return { accept: false, reason: "below_reservation", utility, counterUtility, reservation, plan };
+    }
+
+    function nv2PushPosition(side, entry) {
+      nv2[side].track.push(entry);
+      nv2[side].viewIndex = nv2[side].track.length - 1;
+    }
+
+    function nv2EnsureDraft() {
+      if (!nv2) return null;
+      const target = nv2Position("other")?.model;
+      if (!criteriaOrder.includes(nv2.draft.demandKey)) {
+        nv2.draft.demandKey = nv2Complaints("self", target)[0]?.key || rankedCriteria?.[0] || criteriaOrder[0];
+      }
+      if (!criteriaOrder.includes(nv2.draft.giveKey) || nv2.draft.giveKey === nv2.draft.demandKey) {
+        nv2.draft.giveKey = nv2LogrollGiveKey("self", nv2.draft.demandKey) || criteriaOrder.find((key) => key !== nv2.draft.demandKey) || criteriaOrder[0];
+      }
+      if (!NV2_GIVE_STEPS.some((item) => item.key === nv2.draft.giveStep)) nv2.draft.giveStep = "medium";
+      return nv2.draft;
+    }
+
+    function nv2PreviewOffer() {
+      const draft = nv2EnsureDraft();
+      if (!draft) return null;
+      const versionIndex = Math.min(NV2_MAX_VERSION, nv2NextVersion());
+      const search = nv2SearchOffer("self", {
+        demandKey: draft.demandKey,
+        giveKey: draft.giveKey,
+        giveAmount: nv2GiveStep(draft.giveStep).value,
+        versionIndex,
+      });
+      return { ...search, versionIndex, demandKey: draft.demandKey, giveKey: draft.giveKey };
     }
 
     function resetNegotiateV2State() {
       if (!activeData) return;
-      const initialSelf = normalizeWeights(userWeights || elicitedWeights || weights);
-      const initialOther = normalizeWeights(proxyWeights || proxyIdealWeights());
-      negotiateV2Versions = [negotiateV2CreateVersion({ selfWeights: initialSelf, otherWeights: initialOther, allowShared: false })];
-      negotiateV2VersionIndex = 0;
-      negotiateV2Phase = "settled";
-      negotiateV2Busy = false;
-      userWeights = normalizeWeights(initialSelf);
-      weights = { ...userWeights };
-      proxyWeights = normalizeWeights(initialOther);
-      // Default sacrifice = Self's least-important criterion, but skipping Self's
-      // most-important one and the Other-party's least-important one (conceding
-      // either of those is not a useful logrolling move).
-      const selfTopKey = topMetricKeyForWeights(initialSelf);
-      const otherBottomKey = criteriaOrder.slice().sort((a, b) => (initialOther[a] || 0) - (initialOther[b] || 0))[0];
-      const selfLowFirst = criteriaOrder.slice().sort((a, b) => (initialSelf[a] || 0) - (initialSelf[b] || 0));
-      const defaultSacrifice = selfLowFirst.find((key) => key !== selfTopKey && key !== otherBottomKey)
-        || selfLowFirst.find((key) => key !== selfTopKey)
-        || selfLowFirst[0]
-        || criteriaOrder[0];
-      negotiateV2Draft = {
-        selfSacrifice: defaultSacrifice,
-        otherSacrifice: null,
-        step: 0.1,
-        topGive: "none",
+      ensureDifferentProxyPersona();
+      const frontier = paretoOptimalModels(activeData.models || []);
+      const options = frontier.length ? frontier : (activeData.models || []);
+      const selfWeights = normalizeWeights(elicitedWeights || userWeights || weights);
+      const otherWeights = normalizeWeights(proxyWeights || proxyIdealWeights());
+      // Weights are captured once and never mutated again: they are each
+      // side's private, stable utility function for the whole negotiation.
+      nv2 = {
+        caseKey: nv2CaseKey(),
+        options,
+        weights: { self: selfWeights, other: otherWeights },
+        anchors: {},
+        self: { track: [], viewIndex: 0 },
+        other: { track: [], viewIndex: 0 },
+        status: "open",
+        agreed: null,
+        pending: null,
+        draft: { demandKey: null, giveKey: null, giveStep: "medium" },
+        mutualHolds: 0,
+        log: [],
       };
-      // The turn-by-turn dialogue now lives in the shared chat history; version
-      // review is handled by the model-header dropdowns on the left.
+      const selfBest = nv2BestModelFor("self", options);
+      const otherBest = nv2BestModelFor("other", options);
+      nv2.anchors = {
+        self: { best: nv2Utility(selfBest, "self"), atTheirBest: nv2Utility(otherBest, "self") },
+        other: { best: nv2Utility(otherBest, "other"), atTheirBest: nv2Utility(selfBest, "other") },
+      };
+      nv2PushPosition("self", { version: 0, model: selfBest, act: "open" });
+      nv2PushPosition("other", { version: 0, model: otherBest, act: "open" });
+      negotiateV2Busy = false;
+      userWeights = { ...selfWeights };
+      weights = { ...userWeights };
+      proxyWeights = { ...otherWeights };
       negotiationEvents = [];
-      const v0 = negotiateV2CurrentVersion();
-      addHistory("system", "Starting point (v0)", `${v0?.summary || "Two acceptable models are on the table."} Pick a criterion Self can give ground on and send it — the Other-party will respond and both models will move toward each other until they agree.`, null);
+      nv2EnsureDraft();
+
+      const sameClass = selfBest && otherBest && Number(selfBest.pred_class) === Number(otherBest.pred_class);
+      const otherRole = personaTitle(proxyPersona || { label: "Other-party" });
+      const otherTop = criteriaLabels[topMetricKeyForWeights(otherWeights)] || "their key criterion";
+      const selfTop = criteriaLabels[topMetricKeyForWeights(selfWeights)] || "your key criterion";
+      addHistory(
+        "system",
+        "Opening positions (v0)",
+        `${options.length} models are on the table and none of them beats another on every criterion — so which one is "right" is a matter of priorities, not accuracy.<br><br>`
+          + `Your best model is ${nv2ModelTag(selfBest)} (${escapeHtml(nv2PredictionLabel(selfBest))}), strongest on <strong>${escapeHtml(selfTop)}</strong>. `
+          + `The ${escapeHtml(otherRole)}'s best model is ${nv2ModelTag(otherBest)} (${escapeHtml(nv2PredictionLabel(otherBest))}), strongest on <strong>${escapeHtml(otherTop)}</strong>. `
+          + (sameClass
+            ? "They already point to the same decision, so you only need to agree on which model to stand behind."
+            : "They point to opposite decisions.")
+          + `<br><br>Say what the other model costs you, name a criterion you can afford to give ground on, and the system will find the model that pays them back the most for it. You each get up to ${NV2_MAX_VERSION} offers.`,
+        null
+      );
     }
 
-    // Ask the worker/LLM to verbalize the Other-party's already-computed move (like
-    // the negotiation condition: the move is structural, the LLM only phrases it).
-    async function negotiateV2VerbalizeOtherMove(move, selfWeights, baseOtherWeights) {
-      const fallback = move.otherOffer || move.rationale || "Other-party responded to Self's concession.";
-      if (!OPENAI_PROXY_URL) return fallback;
-      const nextOther = normalizeWeights(move.nextOtherWeights);
-      const structuredResponse = {
-        accepted: Boolean(move.choice?.shared),
-        counterWeights: nextOther,
-        moves: staticMoves(decisionEffectiveWeights(baseOtherWeights), decisionEffectiveWeights(nextOther)),
-        explanation: { source: "structured_negotiatev2", text: fallback },
-        control: { source: "negotiatev2" },
-        structuredProposal: null,
+    function negotiateV2SelectedItems() {
+      if (!nv2EnsureForCurrentCase()) return [];
+      if (nv2.status === "agreed" && nv2.agreed?.model) {
+        return [
+          { role: "self", roleLabel: "Agreed model", model: nv2.agreed.model },
+          { role: "other", roleLabel: "Agreed model", model: nv2.agreed.model },
+        ];
+      }
+      return [
+        { role: "self", roleLabel: "Your position", model: nv2ViewedPosition("self")?.model || null },
+        { role: "other", roleLabel: "Other-party position", model: nv2ViewedPosition("other")?.model || null },
+      ];
+    }
+
+    // Kept for the shared renderers: a compact description of where the
+    // negotiation currently stands.
+    function negotiateV2CurrentVersion() {
+      if (!nv2) return null;
+      const selfPosition = nv2ViewedPosition("self");
+      const otherPosition = nv2ViewedPosition("other");
+      const label = nv2.status === "agreed"
+        ? `agreed at v${nv2.agreed?.version ?? 0}`
+        : `v${selfPosition?.version ?? 0} vs v${otherPosition?.version ?? 0}`;
+      const shared = nv2.status === "agreed";
+      const summary = shared
+        ? `Agreement: both sides stand behind model ${nv2ModelTag(nv2.agreed.model)} (${nv2PredictionLabel(nv2.agreed.model)}).`
+        : nv2.status === "impasse"
+          ? `No agreement after ${NV2_MAX_VERSION} rounds. Your final model ${nv2ModelTag(selfPosition?.model)} predicts ${nv2PredictionLabel(selfPosition?.model)}; theirs ${nv2ModelTag(otherPosition?.model)} predicts ${nv2PredictionLabel(otherPosition?.model)}.`
+          : `Your model ${nv2ModelTag(selfPosition?.model)} predicts ${nv2PredictionLabel(selfPosition?.model)}; the Other-party's model ${nv2ModelTag(otherPosition?.model)} predicts ${nv2PredictionLabel(otherPosition?.model)}.`;
+      return { label, shared, summary, status: nv2.status };
+    }
+
+    function nv2VersionOptionsForRole(role) {
+      return nv2Track(role).map((entry) => ({
+        label: `v${entry.version}`,
+        shared: nv2.status === "agreed" && entry === nv2Position(role),
+      }));
+    }
+
+    function negotiateV2VersionsByRole() {
+      if (!nv2) return { self: [], other: [] };
+      return { self: nv2VersionOptionsForRole("self"), other: nv2VersionOptionsForRole("other") };
+    }
+
+    function negotiateV2VersionIndexByRole() {
+      if (!nv2) return { self: 0, other: 0 };
+      return { self: nv2.self.viewIndex, other: nv2.other.viewIndex };
+    }
+
+    function applyNegotiateV2Version(role, index) {
+      if (!nv2 || negotiateV2Busy) return;
+      const side = role === "other" ? "other" : "self";
+      const track = nv2Track(side);
+      if (!track.length) return;
+      nv2[side].viewIndex = Math.max(0, Math.min(track.length - 1, Number(index) || 0));
+      nv2Rerender();
+    }
+
+    function nv2Rerender() {
+      renderOfferControls();
+      renderSummary();
+      renderReconciliation();
+      rerenderFeatureExplanationForCurrentWeights();
+      renderFinalDecisionOptions();
+    }
+
+    function nv2CriteriaSnapshot(model) {
+      return Object.fromEntries(criteriaOrder.map((key) => [key, nv2MetricValue(model, key)]));
+    }
+
+    function nv2ModelPayload(model) {
+      if (!model) return null;
+      return {
+        id: nv2ModelTag(model),
+        prediction: nv2PredictionLabel(model),
+        criteria: nv2CriteriaSnapshot(model),
       };
+    }
+
+    /* ---- ingredients for the Other-party's rhetoric -------------------
+       Integrative negotiation is carried by a small set of speech acts, and
+       each one needs a fact to stand on. These helpers extract those facts so
+       both the LLM and the offline fallback can build the same argument:
+         acknowledge  <- what the other side just gave up  (perspective-taking)
+         reciprocate  <- what I give back, and that it costs me (concession labelling)
+         preserve     <- the limit I hold, and the role reason for it
+         justify      <- the priority asymmetry that makes the swap pay
+         gain-frame   <- their improvement stated as a gain, not my loss
+       ------------------------------------------------------------------ */
+
+    // What the other side actually conceded on their way to this offer, and
+    // what it bought me. Basis for "I can see you moved on X".
+    function nv2TheirLastMove(side, theirPreviousModel, theirOfferModel) {
+      if (!theirPreviousModel || !theirOfferModel || theirPreviousModel === theirOfferModel) return null;
+      const gaveUp = criteriaOrder
+        .map((key) => {
+          const before = nv2MetricValue(theirPreviousModel, key);
+          const after = nv2MetricValue(theirOfferModel, key);
+          return { key, label: criteriaLabels[key] || key, before, after, drop: before != null && after != null ? before - after : 0 };
+        })
+        .filter((item) => item.drop > 0.001)
+        .sort((a, b) => b.drop - a.drop)[0] || null;
+      const gainedMe = nv2PaybackFor(nv2OtherSide(side), theirOfferModel, theirPreviousModel);
+      return { gaveUp, gainedMe: gainedMe && gainedMe.gain > 0.001 ? gainedMe : null };
+    }
+
+    // The limit I am holding and why. Stated as a role obligation rather than
+    // a preference — an interest-based refusal, not stubbornness.
+    function nv2ProtectedLimit(side, myModel, theirOfferModel) {
+      const key = topMetricKeyForWeights(nv2.weights[side]);
+      const keep = nv2MetricValue(myModel, key);
+      const underTheirs = nv2MetricValue(theirOfferModel, key);
+      return {
+        key,
+        label: criteriaLabels[key] || key,
+        keep,
+        under_their_offer: underTheirs,
+        at_risk: keep != null && underTheirs != null && underTheirs < keep - 0.001,
+      };
+    }
+
+    // The differing priorities that make trading worthwhile at all. This is the
+    // logrolling argument: we are not splitting one pie, we rank the slices
+    // differently, so a swap beats a compromise for both of us.
+    function nv2PriorityContrast(side) {
+      const mine = nv2.weights[side];
+      const theirs = nv2.weights[nv2OtherSide(side)];
+      const ranked = criteriaOrder
+        .map((key) => ({ key, label: criteriaLabels[key] || key, edge: (mine[key] || 0) - (theirs[key] || 0) }))
+        .sort((a, b) => b.edge - a.edge);
+      const iValueMore = ranked[0];
+      const theyValueMore = ranked[ranked.length - 1];
+      if (!iValueMore || !theyValueMore || iValueMore.key === theyValueMore.key) return null;
+      if (iValueMore.edge <= 0.01 || theyValueMore.edge >= -0.01) return null;
+      return { i_value_more: iValueMore.label, they_value_more: theyValueMore.label };
+    }
+
+    // How much ground I have already given across the whole negotiation —
+    // lets the reciprocity claim be specific instead of rhetorical.
+    function nv2MovementSoFar(side) {
+      const track = nv2Track(side);
+      const opening = track[0]?.model;
+      const current = track[track.length - 1]?.model;
+      if (!opening || !current) return null;
+      const rounds = track.filter((entry) => entry.act === "counter" || entry.act === "offer").length;
+      const key = topMetricKeyForWeights(nv2.weights[side]);
+      const from = nv2MetricValue(opening, key);
+      const to = nv2MetricValue(current, key);
+      return { rounds_moved: rounds, criterion: criteriaLabels[key] || key, from, to, given_up: from != null && to != null ? from - to : 0 };
+    }
+
+    function nv2PriorityOrder(side) {
+      const rowWeights = nv2.weights[side];
+      return criteriaOrder
+        .slice()
+        .sort((a, b) => (rowWeights[b] || 0) - (rowWeights[a] || 0))
+        .map((key) => criteriaLabels[key] || key);
+    }
+
+    // The Other-party payload is deliberately weight-free: the LLM sees
+    // criteria values, an ordinal priority list, and the move that was already
+    // decided for it. It verbalizes; it never chooses.
+    function nv2BuildPayload({ versionIndex, incomingModel, decision, move, previousModel, theirPreviousModel = null }) {
+      const offered = decision.accept ? incomingModel : move?.model;
+      const concession = decision.accept ? null : nv2ConcessionDetail("other", offered, previousModel, move.giveKey);
+      const payback = decision.accept ? null : nv2PaybackFor("other", offered, previousModel);
+      const complaint = decision.accept ? null : move.complaint;
+      const theirMove = nv2TheirLastMove("other", theirPreviousModel, incomingModel);
+      const limit = nv2ProtectedLimit("other", offered, incomingModel);
+      return {
+        protocol: "model_negotiation",
+        // Source these from the loaded case, not the DOM: the payload describes
+        // the case being negotiated, and the selects can lag or be absent.
+        dataset: activeData?.dataset || datasetSelect?.value || "",
+        dataset_label: activeData?.dataset_label || activeData?.dataset || datasetSelect?.value || "",
+        case_index: Number(activeData?.case?.test_case_index ?? caseSelect?.value),
+        round: versionIndex,
+        max_round: NV2_MAX_VERSION,
+        user_role: personaTitle(currentPersona || { label: "Self" }),
+        proxy_role: personaTitle(proxyPersona || { label: "Other-party" }),
+        criteria_labels: criteriaLabels,
+        my_priority_order: nv2PriorityOrder("other"),
+        their_priority_order: nv2PriorityOrder("self"),
+        case_features: activeData?.case?.features || {},
+        option_count: (nv2.options || []).length,
+        incoming_offer: nv2ModelPayload(incomingModel),
+        my_previous_position: nv2ModelPayload(previousModel),
+        my_response: decision.accept ? "accept" : "counter",
+        decision_reason: decision.reason,
+        counter_offer: decision.accept ? null : nv2ModelPayload(offered),
+        complaint: complaint ? { criterion: complaint.label, their_value: complaint.theirs, my_value: complaint.mine } : null,
+        concession: concession && concession.drop > 0.001 ? { criterion: concession.label, from: concession.before, to: concession.after } : null,
+        payback: payback && payback.gain > 0.001 ? { criterion: payback.label, from: payback.before, to: payback.after } : null,
+        // rhetorical ingredients
+        they_just_conceded: theirMove?.gaveUp ? { criterion: theirMove.gaveUp.label, from: theirMove.gaveUp.before, to: theirMove.gaveUp.after } : null,
+        it_gained_me: theirMove?.gainedMe ? { criterion: theirMove.gainedMe.label, from: theirMove.gainedMe.before, to: theirMove.gainedMe.after } : null,
+        what_i_must_keep: limit,
+        why_trading_works: nv2PriorityContrast("other"),
+        how_far_i_have_moved: nv2MovementSoFar("other"),
+        deadline_reached: versionIndex >= NV2_MAX_VERSION,
+        history: compactHistoryForProxy(),
+      };
+    }
+
+    async function nv2Verbalize(payload, fallback) {
+      if (!OPENAI_PROXY_URL) return { text: fallback, source: "fallback", reason: "no worker URL configured" };
       try {
         const response = await fetch(OPENAI_PROXY_URL, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(buildProxyPayload(selfWeights, structuredResponse)),
+          body: JSON.stringify(payload),
         });
         if (!response.ok) throw new Error(`${response.status} ${response.statusText}`);
         const raw = await response.json();
-        negotiationRound += 1;
-        return raw?.explanation?.text || fallback;
+        const text = raw?.explanation?.text;
+        if (!text) return { text: fallback, source: "fallback", reason: "worker returned no text" };
+        return { text, source: "llm" };
       } catch (error) {
-        negotiationRound += 1;
-        return `${fallback}<br><span class="muted">OpenAI verbalization fallback: ${escapeHtml(error.message)}</span>`;
+        return { text: fallback, source: "fallback", reason: error.message };
       }
     }
 
-    async function negotiateV2AdvanceVersion() {
-      if (negotiateV2Busy) return;
-      if (!negotiateV2Versions.length) resetNegotiateV2State();
-      const base = negotiateV2CurrentVersion();
-      const selfSacrifice = negotiateV2Draft.selfSacrifice;
-      const step = negotiateV2Draft.step;
-      const move = negotiateV2AutomaticCounterMove(base, selfSacrifice, step);
-      negotiateV2Draft.otherSacrifice = move.key;
+    // A worker outage silently swaps the LLM wording for the scripted one, and
+    // the two read almost alike. Label every turn so nobody has to guess after
+    // the fact which version a participant actually saw.
+    function nv2VoiceTag(voiced) {
+      if (!voiced) return "";
+      return voiced.source === "llm"
+        ? `<span class="nv2-voice llm" title="This reply was written by the language model from the structured move.">LLM</span>`
+        : `<span class="nv2-voice fallback" title="${escapeHtml(`Language model unavailable (${voiced.reason || "unknown"}); scripted wording used instead.`)}">scripted</span>`;
+    }
 
-      // ---- Phase A: Self states its concession; Self's model updates immediately ----
+    function nv2PackageRowsHtml(rows) {
+      return rows.filter(Boolean).map((row) => `
+        <div class="response-package-row">
+          <span class="response-package-role">${escapeHtml(row.role)}</span>
+          <span class="response-package-issue">${escapeHtml(row.issue)}</span>
+          <span class="response-package-value">${escapeHtml(row.value)}</span>
+        </div>
+      `).join("");
+    }
+
+    function nv2SelfOfferText({ offerModel, previousModel, targetModel, demandKey, giveKey }) {
+      const demandLabel = criteriaLabels[demandKey] || demandKey;
+      const theirDemandValue = nv2MetricValue(targetModel, demandKey);
+      const newDemandValue = nv2MetricValue(offerModel, demandKey);
+      const concession = nv2ConcessionDetail("self", offerModel, previousModel, giveKey);
+      const payback = nv2PaybackFor("self", offerModel, previousModel);
+      const parts = [];
+      parts.push(`Your model ${nv2ModelTag(targetModel)} only reaches ${fmtPct(theirDemandValue)} on <strong>${escapeHtml(demandLabel)}</strong>, which is what my role has to answer for.`);
+      if (concession.drop > 0.001) {
+        parts.push(concession.key === demandKey
+          // Same criterion on both sides of the sentence: say plainly that this
+          // is convergence from opposite ends, or it reads as self-contradiction.
+          ? `I am not asking you to close that whole gap — I am coming down on it myself, from ${fmtPct(concession.before)} to ${fmtPct(concession.after)}.`
+          : concession.asDeclared
+            ? `I can absorb ${escapeHtml(concession.label)} dropping from ${fmtPct(concession.before)} to ${fmtPct(concession.after)}.`
+            : `That costs me ${escapeHtml(concession.label)}, down from ${fmtPct(concession.before)} to ${fmtPct(concession.after)}, and I can live with it.`);
+      } else {
+        parts.push(`This one costs me nothing on any criterion, so there is no reason for either of us to hold it up.`);
+      }
+      parts.push(`So I put model ${nv2ModelTag(offerModel)} on the table: ${escapeHtml(demandLabel)} ${fmtPct(newDemandValue)}, predicting ${escapeHtml(nv2PredictionLabel(offerModel))}.`);
+      if (payback && payback.gain > 0.001) {
+        parts.push(`It should also work better for you: ${escapeHtml(payback.label)} goes ${fmtPct(payback.before)} → ${fmtPct(payback.after)}.`);
+      }
+      return parts.join(" ");
+    }
+
+    // Follows the same act sequence the LLM is asked for — acknowledge,
+    // reciprocate, preserve, justify the trade, gain-frame — so a participant
+    // who happens to hit the offline path gets the same argument, only stiffer.
+    function nv2OtherFallbackText(decision, move, incomingModel, previousModel, versionIndex, theirPreviousModel = null) {
+      const theirMove = nv2TheirLastMove("other", theirPreviousModel, incomingModel);
+      const acknowledge = theirMove?.gaveUp
+        ? `I can see what that cost you — you let ${escapeHtml(theirMove.gaveUp.label)} fall from ${fmtPct(theirMove.gaveUp.before)} to ${fmtPct(theirMove.gaveUp.after)} to get here.`
+        : null;
+
+      if (decision.accept) {
+        const parts = [];
+        if (acknowledge) parts.push(acknowledge);
+        if (theirMove?.gainedMe) {
+          parts.push(`That is what I needed: ${escapeHtml(theirMove.gainedMe.label)} is up to ${fmtPct(theirMove.gainedMe.after)}, which I can defend to the people I answer to.`);
+        }
+        parts.push(decision.reason === "deadline"
+          ? `We are out of rounds, and this clears the bar I set for myself, so I would rather close here than have us both walk away with nothing.`
+          : `Pushing for more would not get my side enough to be worth another round of your time.`);
+        parts.push(`So I accept model ${nv2ModelTag(incomingModel)}.`);
+        return parts.join(" ");
+      }
+
+      const complaint = move.complaint;
+      const limit = nv2ProtectedLimit("other", move.model, incomingModel);
+      const movement = nv2MovementSoFar("other");
+
+      if (move.stonewalled) {
+        const parts = [];
+        parts.push(movement && movement.given_up > 0.001
+          ? `I have already come down ${fmtPct(movement.given_up)} on ${escapeHtml(movement.criterion)} across this negotiation, and this round you did not move at all.`
+          : `You did not move this round, so I am not going to either.`);
+        if (complaint) parts.push(`${escapeHtml(complaint.label)} is still sitting at ${fmtPct(complaint.theirs)} — that is the part I answer for, and nothing about it has changed.`);
+        parts.push(`I am staying with model ${nv2ModelTag(move.model)}.`);
+        parts.push(versionIndex >= NV2_MAX_VERSION
+          ? `That leaves us without an agreement, which I do not think serves either of us.`
+          : `Put something new on the table and I will look at it.`);
+        return parts.join(" ");
+      }
+
+      const concession = nv2ConcessionDetail("other", move.model, previousModel, move.giveKey);
+      const payback = nv2PaybackFor("other", move.model, previousModel);
+      const contrast = nv2PriorityContrast("other");
+      const parts = [];
+      if (acknowledge) parts.push(acknowledge);
+      if (complaint) {
+        parts.push(`Where it still falls short for me is ${escapeHtml(complaint.label)}, at ${fmtPct(complaint.theirs)}.`);
+      }
+      if (concession.drop > 0.001) {
+        parts.push(`So I will meet you: I am letting ${escapeHtml(concession.label)} go from ${fmtPct(concession.before)} to ${fmtPct(concession.after)}, and that is real ground for my role, not a token.`);
+      }
+      if (limit.at_risk && limit.keep != null) {
+        parts.push(`What I cannot move is ${escapeHtml(limit.label)} — I need it held at ${fmtPct(limit.keep)}, because below that I am signing off on something I cannot defend.`);
+      }
+      if (contrast) {
+        parts.push(`This is worth doing precisely because we rank things differently: you weigh ${escapeHtml(contrast.they_value_more)} above ${escapeHtml(contrast.i_value_more)} and I weigh it the other way, so trading beats splitting the difference for both of us.`);
+      }
+      parts.push(`My counter is model ${nv2ModelTag(move.model)}, predicting ${escapeHtml(nv2PredictionLabel(move.model))}.`);
+      if (payback && payback.gain > 0.001) {
+        parts.push(`For you that is ${escapeHtml(payback.label)} up from ${fmtPct(payback.before)} to ${fmtPct(payback.after)}.`);
+      }
+      if (versionIndex >= NV2_MAX_VERSION) parts.push(`This is my last round, so it is this or no agreement.`);
+      return parts.join(" ");
+    }
+
+    function nv2Settle(model, version, how) {
+      nv2.status = "agreed";
+      nv2.agreed = { model, version, how };
+      nv2.pending = null;
+    }
+
+    function nv2CloseAsImpasse() {
+      nv2.status = "impasse";
+      // The standing offer survives the close: no more rounds does not mean the
+      // Other-party's last model is off the table, and taking a final offer is
+      // a normal way for a negotiation to end.
+      addHistory(
+        "system",
+        "No rounds left",
+        `You each used your ${NV2_MAX_VERSION} offers without converging.`
+          + (nv2.pending ? ` The Other-party's last model ${nv2ModelTag(nv2.pending.model)} is still on the table — take it or leave it.` : "")
+          + " Otherwise both final positions stay side by side and the final decision is yours.",
+        null
+      );
+    }
+
+    // Participant accepts the Other-party's standing offer. Still available once
+    // the rounds are spent: that is a final-offer acceptance, not a new round.
+    function nv2AcceptPendingOffer() {
+      if (!nv2 || negotiateV2Busy || nv2.status === "agreed" || !nv2.pending) return;
+      const pending = nv2.pending;
+      nv2PushPosition("self", { version: nv2NextVersion(), model: pending.model, act: "accept" });
+      nv2Settle(pending.model, pending.version, "user_accepted");
+      addHistory(
+        "user",
+        `Self accepts · v${pending.version}`,
+        `I accept model ${nv2ModelTag(pending.model)} (${escapeHtml(nv2PredictionLabel(pending.model))}) as the model we both stand behind.`,
+        null
+      );
+      addHistory("system", "Agreement reached", `Both sides now stand behind model ${nv2ModelTag(pending.model)}.`, null);
+      nv2Rerender();
+    }
+
+    // hold === true: restate the current model instead of conceding. This is a
+    // real bargaining act, not a no-op — it spends a round, signals a limit,
+    // and (because the Other-party reciprocates in kind) is the only route to
+    // a genuine impasse.
+    async function nv2SendSelfOffer({ hold = false } = {}) {
+      if (!nv2 || negotiateV2Busy || nv2.status !== "open") return;
+      const draft = nv2EnsureDraft();
+      const versionIndex = nv2NextVersion();
+      if (versionIndex > NV2_MAX_VERSION) {
+        nv2CloseAsImpasse();
+        nv2Rerender();
+        return;
+      }
+      const previousModel = nv2Position("self")?.model;
+      const targetModel = nv2Position("other")?.model;
+      const search = hold
+        ? { model: previousModel, tier: "hold", held: true }
+        : nv2SearchOffer("self", {
+            demandKey: draft.demandKey,
+            giveKey: draft.giveKey,
+            giveAmount: nv2GiveStep(draft.giveStep).value,
+            versionIndex,
+          });
+      const offerModel = search.model;
+
       negotiateV2Busy = true;
-      negotiateV2Phase = "self";
-      userWeights = normalizeWeights(move.nextSelfWeights);
-      weights = { ...userWeights };
-      addHistory("user", "Self concedes", move.selfOffer, userWeights);
-      renderOfferControls();
-      renderSummary();
-      renderReconciliation();
-      rerenderFeatureExplanationForCurrentWeights();
-      renderFinalDecisionOptions();
-
-      // ---- Phase B: Other-party thinks, replies with an LLM explanation, its model updates ----
-      showProxyThinking();
-      const explanationText = await negotiateV2VerbalizeOtherMove(move, move.nextSelfWeights, normalizeWeights(base?.otherWeights || proxyWeights));
-      removeProxyThinking();
-      proxyWeights = normalizeWeights(move.nextOtherWeights);
-      negotiateV2Phase = "settled";
-
-      const note = `Self gives room on ${criteriaLabels[selfSacrifice]} toward ${criteriaLabels[move.selfReceive]}; Other-party gives room on ${criteriaLabels[move.key]} toward ${criteriaLabels[move.receiveKey]}.`;
-      const version = negotiateV2CreateVersion({
-        selfWeights: move.nextSelfWeights,
-        otherWeights: move.nextOtherWeights,
-        selfSacrifice,
-        otherSacrifice: move.key,
-        selfReceive: move.selfReceive,
-        otherReceive: move.receiveKey,
-        rationale: move.rationale,
-        selfOffer: move.selfOffer,
-        otherOffer: move.otherOffer,
-        reciprocity: move.reciprocity,
-        note,
+      nv2.pending = null;
+      nv2PushPosition("self", {
+        version: versionIndex,
+        model: offerModel,
+        act: hold ? "hold" : "offer",
+        demandKey: draft.demandKey,
+        giveKey: draft.giveKey,
+        giveAmount: hold ? 0 : nv2GiveStep(draft.giveStep).value,
+        held: search.held,
       });
-      negotiateV2Versions.push(version);
-      negotiateV2VersionIndex = negotiateV2Versions.length - 1;
+      addHistory(
+        "user",
+        hold ? `Self holds · v${versionIndex}` : `Self offer · v${versionIndex}`,
+        hold
+          ? `I am staying with model ${nv2ModelTag(offerModel)}. Model ${nv2ModelTag(targetModel)} still leaves ${escapeHtml(criteriaLabels[draft.demandKey] || draft.demandKey)} at ${fmtPct(nv2MetricValue(targetModel, draft.demandKey))}, and I am not able to sign off on that. If you can close that gap, I will look again.`
+          : nv2SelfOfferText({ offerModel, previousModel, targetModel, demandKey: draft.demandKey, giveKey: draft.giveKey }),
+        null
+      );
+      nv2Rerender();
 
-      const otherTitle = version.shared ? "Other-party · consensus reached" : version.consensus ? "Other-party · agrees on decision" : "Other-party responds";
-      addHistory("proxy", otherTitle, explanationText, proxyWeights);
-      if (version.reciprocity) addHistory("system", version.label, version.reciprocity, null);
+      showProxyThinking();
+      // What Self's move was actually worth to the Other-party — the size of
+      // the concession it now has to answer.
+      const deliveredGain = nv2Utility(offerModel, "other") - nv2Utility(previousModel, "other");
+      const decision = nv2AcceptanceDecision("other", offerModel, versionIndex, deliveredGain);
+      const otherPrevious = nv2Position("other")?.model;
+      const move = decision.accept ? null : decision.plan;
+      const fallback = nv2OtherFallbackText(decision, move, offerModel, otherPrevious, versionIndex, previousModel);
+      const payload = nv2BuildPayload({ versionIndex, incomingModel: offerModel, decision, move, previousModel: otherPrevious, theirPreviousModel: previousModel });
+      const voiced = await nv2Verbalize(payload, fallback);
+      const text = `${voiced.text}${nv2VoiceTag(voiced)}`;
+      removeProxyThinking();
+
+      // Keep the provenance on the offer track too, so an exported transcript
+      // can be split by wording source without re-parsing the chat HTML.
+      nv2.voiceLog = [...(nv2.voiceLog || []), { version: versionIndex, source: voiced.source, reason: voiced.reason || null }];
+
+      if (decision.accept) {
+        nv2PushPosition("other", { version: versionIndex, model: offerModel, act: "accept", voice: voiced.source });
+        nv2Settle(offerModel, versionIndex, decision.reason);
+        addHistory("proxy", `Other-party accepts · v${versionIndex}`, text, null);
+        addHistory("system", "Agreement reached", `Both sides now stand behind model ${nv2ModelTag(offerModel)} (${escapeHtml(nv2PredictionLabel(offerModel))}).`, null);
+      } else {
+        nv2PushPosition("other", {
+          version: versionIndex,
+          model: move.model,
+          act: move.stonewalled ? "hold" : "counter",
+          demandKey: move.demandKey,
+          giveKey: move.giveKey,
+          voice: voiced.source,
+        });
+        nv2.pending = { from: "other", model: move.model, version: versionIndex };
+        addHistory("proxy", move.stonewalled ? `Other-party holds · v${versionIndex}` : `Other-party counter-offer · v${versionIndex}`, text, null);
+        // One firm round is a signal, not a breakdown — a participant should be
+        // able to hold once and still come back with an offer. Two rounds where
+        // neither side moves is a real deadlock.
+        nv2.mutualHolds = hold && move.stonewalled ? (nv2.mutualHolds || 0) + 1 : 0;
+        if (nv2.mutualHolds >= 2) nv2CloseAsImpasse();
+        else if (versionIndex >= NV2_MAX_VERSION) nv2CloseAsImpasse();
+      }
 
       negotiateV2Busy = false;
-      renderOfferControls();
-      renderSummary();
-      renderReconciliation();
-      rerenderFeatureExplanationForCurrentWeights();
-      renderFinalDecisionOptions();
+      nv2Rerender();
     }
 
-    function applyNegotiateV2Version(index) {
-      if (!negotiateV2Versions.length || negotiateV2Busy) return;
-      negotiateV2VersionIndex = Math.max(0, Math.min(negotiateV2Versions.length - 1, Number(index) || 0));
-      const version = negotiateV2CurrentVersion();
-      if (version) {
-        userWeights = normalizeWeights(version.selfWeights);
-        weights = { ...userWeights };
-        proxyWeights = normalizeWeights(version.otherWeights);
-      }
-      negotiateV2Phase = "settled";
-      renderOfferControls();
-      renderSummary();
-      renderReconciliation();
-      rerenderFeatureExplanationForCurrentWeights();
-      renderFinalDecisionOptions();
+    function nv2StatusLine() {
+      if (nv2.status === "agreed") return `Agreement reached at v${nv2.agreed.version}: model ${nv2ModelTag(nv2.agreed.model)}.`;
+      if (nv2.status === "impasse") return `No agreement after ${NV2_MAX_VERSION} rounds.`;
+      const next = nv2NextVersion();
+      return `Round ${Math.min(next, NV2_MAX_VERSION)} of ${NV2_MAX_VERSION}`;
     }
 
     function renderNegotiateV2Controls() {
       if (!offerComposer) return;
-      if (!negotiateV2Versions.length) resetNegotiateV2State();
-      const current = negotiateV2CurrentVersion();
-      const selfTopKey = topMetricKeyForWeights(userWeights);
-      const otherTopKey = topMetricKeyForWeights(proxyWeights || proxyIdealWeights());
-      const sacrificeTag = (key) => {
-        const tags = [];
-        if (key === selfTopKey) tags.push("★ your top priority");
-        if (key === otherTopKey) tags.push("◆ Other-party's top");
-        return tags.length ? ` — ${tags.join(", ")}` : "";
-      };
-      const optionHtml = criteriaOrder.map((key) => `<option value="${key}">${escapeHtml(criteriaLabels[key] + sacrificeTag(key))}</option>`).join("");
-      const chosenSacrifice = negotiateV2Draft.selfSacrifice || criteriaOrder[0];
-      const warning = chosenSacrifice === selfTopKey
-        ? `⚠ ${criteriaLabels[chosenSacrifice]} is what <strong>you</strong> care about most — giving ground here works against your own priority.`
-        : chosenSacrifice === otherTopKey
-          ? `⚠ ${criteriaLabels[chosenSacrifice]} is the <strong>Other-party's</strong> top concern — conceding it is unlikely to move you toward agreement.`
-          : "";
+      if (!nv2EnsureForCurrentCase()) return;
       offerComposer.classList.remove("locked");
+
+      if (nv2.status !== "open") {
+        const finalOffer = nv2.status === "impasse" && nv2.pending;
+        const closed = nv2.status === "agreed"
+          ? `Both sides stand behind model ${nv2ModelTag(nv2.agreed.model)}, predicting <strong>${escapeHtml(nv2PredictionLabel(nv2.agreed.model))}</strong>. Record your final decision on the left.`
+          : finalOffer
+            ? `No rounds left. The Other-party's final model ${nv2ModelTag(nv2.pending.model)} (${escapeHtml(nv2PredictionLabel(nv2.pending.model))}) is still on the table — take it, or leave both positions standing and decide for yourself.`
+            : `The negotiation closed without agreement. Both final models stay on the left — the final decision is yours.`;
+        offerComposer.innerHTML = `
+          <div class="composer-bubble negotiate-v2-composer">
+            <div class="composer-title">${escapeHtml(nv2StatusLine())}</div>
+            <div class="response-preview">${closed}</div>
+            ${finalOffer ? `<div class="composer-send-row"><div class="degree-summary"><div>Accepting their final offer ends the negotiation on their model.</div></div><div class="composer-actions"><button type="button" id="nv2AcceptButton" ${negotiateV2Busy ? "disabled" : ""}>Accept their final model</button></div></div>` : ""}
+          </div>
+        `;
+        if (finalOffer) document.getElementById("nv2AcceptButton")?.addEventListener("click", nv2AcceptPendingOffer);
+        return;
+      }
+
+      const draft = nv2EnsureDraft();
       const busy = negotiateV2Busy;
+      const targetModel = nv2Position("other")?.model;
+      const previousModel = nv2Position("self")?.model;
+      const complaints = nv2Complaints("self", targetModel);
+      const preview = nv2PreviewOffer();
+      const offerModel = preview?.model;
+      const concession = offerModel ? nv2ConcessionDetail("self", offerModel, previousModel, draft.giveKey) : null;
+      const payback = offerModel ? nv2PaybackFor("self", offerModel, previousModel) : null;
+      const giveOptions = nv2GiveOptions("self", draft.demandKey);
+
+      const demandHtml = complaints.map((item) => {
+        const detail = item.theirs != null ? ` — theirs ${Math.round(item.theirs * 100)}%, yours ${Math.round((item.mine ?? 0) * 100)}%` : "";
+        return `<option value="${item.key}" ${draft.demandKey === item.key ? "selected" : ""}>${escapeHtml(item.label + detail)}</option>`;
+      }).join("");
+      const giveHtml = giveOptions.map((item) => {
+        const tag = item.edge > 0.02 ? " — cheap for you, valuable to them" : item.mineWeight > 0.25 ? " — you rated this highly" : "";
+        return `<option value="${item.key}" ${draft.giveKey === item.key ? "selected" : ""}>${escapeHtml(item.label + tag)}</option>`;
+      }).join("");
+      const stepHtml = NV2_GIVE_STEPS.map((item) =>
+        `<option value="${item.key}" ${draft.giveStep === item.key ? "selected" : ""}>${escapeHtml(item.label)}</option>`
+      ).join("");
+
+      const packageRows = nv2PackageRowsHtml([
+        { role: "You object to", issue: criteriaLabels[draft.demandKey] || draft.demandKey, value: `their ${fmtPct(nv2MetricValue(targetModel, draft.demandKey))} → ${fmtPct(nv2MetricValue(offerModel, draft.demandKey))}` },
+        concession && concession.drop > 0.001
+          ? { role: "You give up", issue: concession.label, value: `${fmtPct(concession.before)} → ${fmtPct(concession.after)}` }
+          : { role: "You give up", issue: "nothing measurable", value: "free improvement" },
+        payback && payback.gain > 0.001 ? { role: "They gain", issue: payback.label, value: `${fmtPct(payback.before)} → ${fmtPct(payback.after)}` } : null,
+      ]);
+
+      const previewLine = !offerModel
+        ? "No model in the option set fits this package."
+        : preview.held
+          ? `No model improves on your current position under this package — sending it restates model ${nv2ModelTag(offerModel)} and spends a round.`
+          : `Offer: model ${nv2ModelTag(offerModel)}, predicting <strong>${escapeHtml(nv2PredictionLabel(offerModel))}</strong>.`;
+
+      const pendingHtml = nv2.pending ? `
+        <div class="negotiate-v2-pending">
+          The Other-party is standing on model ${nv2ModelTag(nv2.pending.model)} (${escapeHtml(nv2PredictionLabel(nv2.pending.model))}).
+          Accept it, or answer with an offer of your own.
+        </div>
+      ` : "";
+
       offerComposer.innerHTML = `
         <div class="composer-bubble negotiate-v2-composer">
-          <div class="composer-title">Negotiate acceptable models</div>
-          <div class="foresight-prompt">Current version: <strong>${escapeHtml(current?.label || "v0")}</strong>${current?.shared ? " · consensus reached" : ""}</div>
+          <div class="composer-title">Negotiate which model you both stand behind</div>
+          <div class="foresight-prompt">${escapeHtml(nv2StatusLine())}</div>
+          ${pendingHtml}
+          <div class="response-package">${packageRows}</div>
           <div class="response-config">
             <div class="response-field">
-              <label for="negotiateV2TopGive">Give on your top priority (${escapeHtml(criteriaLabels[selfTopKey] || "")})</label>
-              <select id="negotiateV2TopGive" ${busy ? "disabled" : ""}>
-                <option value="none">No — protect it</option>
-                <option value="little">A little</option>
-                <option value="moderate">Moderate</option>
-              </select>
+              <label for="nv2DemandSelect">Their model fails you on</label>
+              <select id="nv2DemandSelect" ${busy ? "disabled" : ""}>${demandHtml}</select>
             </div>
             <div class="response-field">
-              <label for="negotiateV2SelfSacrifice">Self can sacrifice</label>
-              <select id="negotiateV2SelfSacrifice" ${busy ? "disabled" : ""}>${optionHtml}</select>
+              <label for="nv2GiveSelect">You can give ground on</label>
+              <select id="nv2GiveSelect" ${busy ? "disabled" : ""}>${giveHtml}</select>
             </div>
             <div class="response-field">
-              <label for="negotiateV2Step">Concession size</label>
-              <select id="negotiateV2Step" ${busy ? "disabled" : ""}>
-                <option value="0.05">Small</option>
-                <option value="0.1">Medium</option>
-                <option value="0.16">Large</option>
-              </select>
+              <label for="nv2StepSelect">How much</label>
+              <select id="nv2StepSelect" ${busy ? "disabled" : ""}>${stepHtml}</select>
             </div>
           </div>
-          ${warning ? `<div class="negotiate-v2-warning">${warning}</div>` : ""}
-          <div class="response-preview">${escapeHtml(current?.summary || "Initial multi-optimal state")}</div>
+          <div class="response-preview">${previewLine}</div>
           <div class="composer-send-row">
-            <div class="degree-summary"><div>Pick what Self gives ground on and send it. Self's model updates first, then the Other-party replies and its model moves too — repeat until both recommend the same model.</div></div>
-            <div class="composer-actions"><button type="button" id="negotiateV2AdvanceButton" class="primary-button" ${busy ? "disabled" : ""}>${busy ? "Other-party is responding…" : "Send Self's concession"}</button></div>
+            <div class="degree-summary"><div>Name what their model costs you and what you can afford to lose; the system finds the model that repays them most for it. They will accept it or answer with their own.</div></div>
+            <div class="composer-actions">
+              ${nv2.pending ? `<button type="button" id="nv2AcceptButton" ${busy ? "disabled" : ""}>Accept their model</button>` : ""}
+              <button type="button" id="nv2HoldButton" ${busy ? "disabled" : ""} title="Restate your current model without conceding. This spends a round.">Hold firm</button>
+              <button type="button" id="nv2SendButton" class="primary-button" ${busy || !offerModel ? "disabled" : ""}>${busy ? "Other-party is responding…" : "Send offer"}</button>
+            </div>
           </div>
         </div>
       `;
-      const selfSelect = document.getElementById("negotiateV2SelfSacrifice");
-      const stepSelect = document.getElementById("negotiateV2Step");
-      const topGiveSelect = document.getElementById("negotiateV2TopGive");
-      if (selfSelect) selfSelect.value = negotiateV2Draft.selfSacrifice || criteriaOrder[0];
-      if (stepSelect) stepSelect.value = String(negotiateV2Draft.step || 0.1);
-      if (topGiveSelect) topGiveSelect.value = negotiateV2Draft.topGive || "none";
-      if (topGiveSelect) topGiveSelect.addEventListener("change", (event) => {
-        negotiateV2Draft.topGive = event.target.value || "none";
-        renderOfferControls();
-        renderSummary();
-        renderReconciliation();
-        rerenderFeatureExplanationForCurrentWeights();
-        renderFinalDecisionOptions();
+
+      const demandSelect = document.getElementById("nv2DemandSelect");
+      const giveSelect = document.getElementById("nv2GiveSelect");
+      const stepSelect = document.getElementById("nv2StepSelect");
+      if (demandSelect) demandSelect.addEventListener("change", (event) => {
+        nv2.draft.demandKey = event.target.value;
+        if (nv2.draft.giveKey === nv2.draft.demandKey) nv2.draft.giveKey = null;
+        renderNegotiateV2Controls();
       });
-      if (selfSelect) selfSelect.addEventListener("change", (event) => {
-        negotiateV2Draft.selfSacrifice = event.target.value;
-        renderOfferControls();
+      if (giveSelect) giveSelect.addEventListener("change", (event) => {
+        nv2.draft.giveKey = event.target.value;
+        renderNegotiateV2Controls();
       });
       if (stepSelect) stepSelect.addEventListener("change", (event) => {
-        negotiateV2Draft.step = Number(event.target.value) || 0.1;
-        renderOfferControls();
+        nv2.draft.giveStep = event.target.value;
+        renderNegotiateV2Controls();
       });
-      const advanceButton = document.getElementById("negotiateV2AdvanceButton");
-      if (advanceButton) advanceButton.addEventListener("click", negotiateV2AdvanceVersion);
+      document.getElementById("nv2SendButton")?.addEventListener("click", () => nv2SendSelfOffer());
+      document.getElementById("nv2HoldButton")?.addEventListener("click", () => nv2SendSelfOffer({ hold: true }));
+      document.getElementById("nv2AcceptButton")?.addEventListener("click", nv2AcceptPendingOffer);
     }
 
     function renderOfferControls() {
