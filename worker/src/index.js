@@ -101,7 +101,7 @@ function validatePayload(payload) {
   if (!Number.isFinite(Number(payload.case_index))) throw new Error("Missing case_index");
   if (isModelNegotiation(payload)) {
     if (!payload.incoming_offer || typeof payload.incoming_offer !== "object") throw new Error("Missing incoming_offer");
-    if (payload.my_response !== "accept" && payload.my_response !== "counter") throw new Error("my_response must be accept or counter");
+    if (!["accept", "counter", "hold"].includes(payload.my_response)) throw new Error("my_response must be accept, counter or hold");
     if (payload.my_response === "counter" && !payload.counter_offer) throw new Error("Missing counter_offer");
     return;
   }
@@ -180,9 +180,13 @@ function modelNegotiationSystemPrompt() {
     "(5) JUSTIFY THE TRADE — from why_trading_works, explain that you two rank these criteria differently, so swapping makes both sides better off than meeting in the middle. This is the heart of the message: the deal is good because your priorities differ, not because someone caved.",
     "(6) GAIN-FRAME — from payback, state what your counter-offer does for THEM as an improvement, in their terms. End on their gain, never on your own.",
     "",
+    "Describe only movement that appears in this turn's fields. The history is background: never mine it for a concession and never credit the other side with one they did not make this turn.",
+    "",
+    "If their_move is \"hold\", the other side deliberately did NOT move: they kept the same model and conceded nothing. In that case act (1) ACKNOWLEDGE and act (6) GAIN-FRAME are forbidden — there is no concession to acknowledge and no trade to sweeten. Do not thank them, do not say you hear what it cost them, do not describe them as giving anything up. Say plainly that they held their position, hold yours in return, restate the limit and the reason for it, and invoke how_far_i_have_moved if you have already conceded. Leave the door open unless deadline_reached is true.",
+    "If my_response is \"hold\", you are restating your existing model, not offering a new one. Never present it as a fresh concession or a new counter-offer.",
+    "",
     "If how_far_i_have_moved shows you have already conceded across rounds, you may invoke it once to ask for reciprocity — state it as a fact, not a grievance.",
     "When accepting: acknowledge their movement, say which criterion it finally brought far enough and to what number, then give the honest reason you are accepting (no counter of yours would do better, or the deadline makes settling better than walking away).",
-    "When holding firm because they did not move: say so plainly, restate the limit and the reason for it, and leave the door open unless deadline_reached is true.",
     "If deadline_reached is true, say this is the last round.",
     "",
     "Stay in role, first person, plain language a non-technical stakeholder would use. Warm but not soft; you are trying to reach a deal, not to win. 3 to 5 sentences, at most 110 words. No lists, no headings, no markdown, no restating the payload as data."
@@ -227,7 +231,8 @@ function buildModelNegotiationPrompt(payload) {
     models_on_the_table: Number(payload.option_count || 0),
     their_offer: sanitizeModelSnapshot(payload.incoming_offer),
     my_previous_position: sanitizeModelSnapshot(payload.my_previous_position),
-    my_response: payload.my_response === "accept" ? "accept" : "counter",
+    their_move: payload.their_move === "hold" ? "hold" : "offer",
+    my_response: ["accept", "counter", "hold"].includes(payload.my_response) ? payload.my_response : "counter",
     my_counter_offer: sanitizeModelSnapshot(payload.counter_offer),
     why: String(payload.decision_reason || "").slice(0, 60),
     // one field per speech act, so a null field simply drops that act
@@ -258,6 +263,7 @@ function buildModelNegotiationPrompt(payload) {
     "Voice this stakeholder's reply in the model negotiation below.",
     "All criteria values are shares between 0 and 1; render them as percentages.",
     "Each speech act in your instructions maps to one field: (1) ACKNOWLEDGE -> they_just_conceded, (2) LOCATE THE GAP -> complaint, (3) RECIPROCATE -> concession, (4) PRESERVE -> what_i_must_keep, (5) JUSTIFY THE TRADE -> why_trading_works, (6) GAIN-FRAME -> payback. A null field means skip that act entirely.",
+    "Check their_move before writing anything. If it is \"hold\" the other side stood still and conceded nothing this turn, so they_just_conceded is null and you must not invent a concession for them from the history or from earlier rounds.",
     "Skip act (4) unless what_i_must_keep.actually_at_risk is true — defending a limit nobody attacked sounds evasive.",
     "my_priority_order and their_priority_order are ordinal only — use them to decide what to emphasise, never quote them as numbers or weights.",
     "why explains the accept/counter decision: no_better_counter means countering would not improve your position; deadline means rounds ran out; can_improve and below_reservation mean you are countering.",

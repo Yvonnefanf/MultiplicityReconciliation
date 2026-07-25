@@ -1101,8 +1101,14 @@
     function nv2EnsureDraft() {
       if (!nv2) return null;
       const target = nv2Position("other")?.model;
-      if (!criteriaOrder.includes(nv2.draft.demandKey)) {
-        nv2.draft.demandKey = nv2Complaints("self", target)[0]?.key || rankedCriteria?.[0] || criteriaOrder[0];
+      const complaints = nv2Complaints("self", target);
+      const real = complaints.filter((item) => item.gap > 0.005);
+      // Reset a stale demand too, not just a missing one: as the models move, a
+      // criterion can stop being a grievance, and leaving it selected would
+      // desync the dropdown (which no longer lists it) from the draft state.
+      const stillValid = (real.length ? real : complaints).some((item) => item.key === nv2.draft.demandKey);
+      if (!criteriaOrder.includes(nv2.draft.demandKey) || !stillValid) {
+        nv2.draft.demandKey = (real[0] || complaints[0])?.key || rankedCriteria?.[0] || criteriaOrder[0];
       }
       if (!criteriaOrder.includes(nv2.draft.giveKey) || nv2.draft.giveKey === nv2.draft.demandKey) {
         nv2.draft.giveKey = nv2LogrollGiveKey("self", nv2.draft.demandKey) || criteriaOrder.find((key) => key !== nv2.draft.demandKey) || criteriaOrder[0];
@@ -1342,7 +1348,7 @@
     // The Other-party payload is deliberately weight-free: the LLM sees
     // criteria values, an ordinal priority list, and the move that was already
     // decided for it. It verbalizes; it never chooses.
-    function nv2BuildPayload({ versionIndex, incomingModel, decision, move, previousModel, theirPreviousModel = null }) {
+    function nv2BuildPayload({ versionIndex, incomingModel, decision, move, previousModel, theirPreviousModel = null, theyHeld = false }) {
       const offered = decision.accept ? incomingModel : move?.model;
       const concession = decision.accept ? null : nv2ConcessionDetail("other", offered, previousModel, move.giveKey);
       const payback = decision.accept ? null : nv2PaybackFor("other", offered, previousModel);
@@ -1367,7 +1373,11 @@
         option_count: (nv2.options || []).length,
         incoming_offer: nv2ModelPayload(incomingModel),
         my_previous_position: nv2ModelPayload(previousModel),
-        my_response: decision.accept ? "accept" : "counter",
+        // Whether the other side actually moved this turn. Without this the
+        // model sees an ordinary counter situation, finds past concessions in
+        // the history, and credits them to a turn where nothing was conceded.
+        their_move: theyHeld ? "hold" : "offer",
+        my_response: decision.accept ? "accept" : (move?.stonewalled ? "hold" : "counter"),
         decision_reason: decision.reason,
         counter_offer: decision.accept ? null : nv2ModelPayload(offered),
         complaint: complaint ? { criterion: complaint.label, their_value: complaint.theirs, my_value: complaint.mine } : null,
@@ -1392,7 +1402,20 @@
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(payload),
         });
-        if (!response.ok) throw new Error(`${response.status} ${response.statusText}`);
+        if (!response.ok) {
+          // Surface the worker's own message. A bare "400" is indistinguishable
+          // between a stale worker, a bad payload and a missing key; the body
+          // says which, and this tooltip is the only place anyone will see it.
+          const body = await response.text().catch(() => "");
+          let detail = "";
+          try {
+            const parsed = JSON.parse(body);
+            detail = [parsed?.error, parsed?.detail].filter(Boolean).join(": ");
+          } catch {
+            detail = body.slice(0, 140);
+          }
+          throw new Error(`HTTP ${response.status}${response.statusText ? ` ${response.statusText}` : ""}${detail ? ` — ${detail}` : ""}`);
+        }
         const raw = await response.json();
         const text = raw?.explanation?.text;
         if (!text) return { text: fallback, source: "fallback", reason: "worker returned no text" };
@@ -1604,7 +1627,7 @@
       const otherPrevious = nv2Position("other")?.model;
       const move = decision.accept ? null : decision.plan;
       const fallback = nv2OtherFallbackText(decision, move, offerModel, otherPrevious, versionIndex, previousModel);
-      const payload = nv2BuildPayload({ versionIndex, incomingModel: offerModel, decision, move, previousModel: otherPrevious, theirPreviousModel: previousModel });
+      const payload = nv2BuildPayload({ versionIndex, incomingModel: offerModel, decision, move, previousModel: otherPrevious, theirPreviousModel: previousModel, theyHeld: hold || search.held });
       const voiced = await nv2Verbalize(payload, fallback);
       const text = `${voiced.text}${nv2VoiceTag(voiced)}`;
       removeProxyThinking();
@@ -1682,7 +1705,13 @@
       const payback = offerModel ? nv2PaybackFor("self", offerModel, previousModel) : null;
       const giveOptions = nv2GiveOptions("self", draft.demandKey);
 
-      const demandHtml = complaints.map((item) => {
+      // Only offer criteria the participant can actually object to — ones where
+      // their own model does better than the Other-party's. Listing the rest
+      // lets them build incoherent packages ("I object to the thing you are
+      // already winning"), which the search then cannot satisfy.
+      const realComplaints = complaints.filter((item) => item.gap > 0.005);
+      const demandOptions = realComplaints.length ? realComplaints : complaints;
+      const demandHtml = demandOptions.map((item) => {
         const detail = item.theirs != null ? ` — theirs ${Math.round(item.theirs * 100)}%, yours ${Math.round((item.mine ?? 0) * 100)}%` : "";
         return `<option value="${item.key}" ${draft.demandKey === item.key ? "selected" : ""}>${escapeHtml(item.label + detail)}</option>`;
       }).join("");
@@ -1695,10 +1724,21 @@
       ).join("");
 
       const packageRows = nv2PackageRowsHtml([
-        { role: "You object to", issue: criteriaLabels[draft.demandKey] || draft.demandKey, value: `their ${fmtPct(nv2MetricValue(targetModel, draft.demandKey))} → ${fmtPct(nv2MetricValue(offerModel, draft.demandKey))}` },
-        concession && concession.drop > 0.001
+        // When the concession lands on the criterion being demanded, the two
+        // rows describe one movement from opposite ends and both end on the
+        // same number. Collapse them into a single converging row.
+        concession && concession.drop > 0.001 && concession.key === draft.demandKey
+          ? {
+              role: "You object to",
+              issue: concession.label,
+              value: `their ${fmtPct(nv2MetricValue(targetModel, draft.demandKey))} → ${fmtPct(nv2MetricValue(offerModel, draft.demandKey))}, you come down from ${fmtPct(concession.before)}`,
+            }
+          : { role: "You object to", issue: criteriaLabels[draft.demandKey] || draft.demandKey, value: `their ${fmtPct(nv2MetricValue(targetModel, draft.demandKey))} → ${fmtPct(nv2MetricValue(offerModel, draft.demandKey))}` },
+        concession && concession.drop > 0.001 && concession.key !== draft.demandKey
           ? { role: "You give up", issue: concession.label, value: `${fmtPct(concession.before)} → ${fmtPct(concession.after)}` }
-          : { role: "You give up", issue: "nothing measurable", value: "free improvement" },
+          : concession && concession.drop > 0.001
+            ? null
+            : { role: "You give up", issue: "nothing measurable", value: "free improvement" },
         payback && payback.gain > 0.001 ? { role: "They gain", issue: payback.label, value: `${fmtPct(payback.before)} → ${fmtPct(payback.after)}` } : null,
       ]);
 
@@ -1708,19 +1748,29 @@
           ? `No model improves on your current position under this package — sending it restates model ${nv2ModelTag(offerModel)} and spends a round.`
           : `Offer: model ${nv2ModelTag(offerModel)}, predicting <strong>${escapeHtml(nv2PredictionLabel(offerModel))}</strong>.`;
 
-      const pendingHtml = nv2.pending ? `
-        <div class="negotiate-v2-pending">
-          The Other-party is standing on model ${nv2ModelTag(nv2.pending.model)} (${escapeHtml(nv2PredictionLabel(nv2.pending.model))}).
-          Accept it, or answer with an offer of your own.
-        </div>
-      ` : "";
+      const pendingHtml = nv2.pending
+        ? `<span class="negotiate-v2-pending">they hold ${nv2ModelTag(nv2.pending.model)} (${escapeHtml(nv2PredictionLabel(nv2.pending.model))})</span>`
+        : "";
+
+      // Everything the participant does not need at a glance — the per-criterion
+      // breakdown of the package and the explanation of how a round works —
+      // lives behind one "..." affordance so the controls stay readable.
+      const detailsHtml = `
+        <span class="composer-help nv2-details" tabindex="0" aria-label="What this offer contains">…
+          <span class="composer-help-text">
+            <div class="nv2-details-title">This offer</div>
+            <div class="response-package">${packageRows}</div>
+            <div class="nv2-details-note">Name what their model costs you and what you can afford to lose; the system finds the model that repays them most for it. They will accept it or answer with their own.</div>
+          </span>
+        </span>`;
 
       offerComposer.innerHTML = `
         <div class="composer-bubble negotiate-v2-composer">
-          <div class="composer-title">Negotiate which model you both stand behind</div>
-          <div class="foresight-prompt">${escapeHtml(nv2StatusLine())}</div>
-          ${pendingHtml}
-          <div class="response-package">${packageRows}</div>
+          <div class="composer-title">
+            <span>Negotiate which model you both stand behind</span>
+            ${detailsHtml}
+          </div>
+          <div class="foresight-prompt">${escapeHtml(nv2StatusLine())}${nv2.pending ? " · " : ""}${pendingHtml}</div>
           <div class="response-config">
             <div class="response-field">
               <label for="nv2DemandSelect">Their model fails you on</label>
@@ -1728,16 +1778,16 @@
             </div>
             <div class="response-field">
               <label for="nv2GiveSelect">You can give ground on</label>
-              <select id="nv2GiveSelect" ${busy ? "disabled" : ""}>${giveHtml}</select>
+              <select id="nv2GiveSelect" title="The criterion you are willing to let slip in order to move the Other-party. Everything you did not name here is protected far more tightly." ${busy ? "disabled" : ""}>${giveHtml}</select>
             </div>
             <div class="response-field">
-              <label for="nv2StepSelect">How much</label>
-              <select id="nv2StepSelect" ${busy ? "disabled" : ""}>${stepHtml}</select>
+              <label for="nv2StepSelect">…by how much</label>
+              <select id="nv2StepSelect" title="How far the criterion on the left may slip. It also sets the bar your offer has to clear for the Other-party: a bigger concession promises them a bigger gain. It does not affect what you are objecting to." ${busy ? "disabled" : ""}>${stepHtml}</select>
             </div>
           </div>
           <div class="response-preview">${previewLine}</div>
           <div class="composer-send-row">
-            <div class="degree-summary"><div>Name what their model costs you and what you can afford to lose; the system finds the model that repays them most for it. They will accept it or answer with their own.</div></div>
+            <div class="degree-summary"></div>
             <div class="composer-actions">
               ${nv2.pending ? `<button type="button" id="nv2AcceptButton" ${busy ? "disabled" : ""}>Accept their model</button>` : ""}
               <button type="button" id="nv2HoldButton" ${busy ? "disabled" : ""} title="Restate your current model without conceding. This spends a round.">Hold firm</button>
