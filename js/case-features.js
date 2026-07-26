@@ -3,6 +3,26 @@
    classic script; all top-level declarations share one global scope. */
 
     const FEATURE_DISPLAY_LIMIT = 6;
+    // Fixed row order for the input attributes, applied in every condition.
+    // Ordering by |SHAP| made the rows reshuffle between cases, models and
+    // conditions, so nothing could be compared across panels at a glance.
+    // Labels not listed here (other datasets) keep the old |SHAP| ordering.
+    const FEATURE_DISPLAY_ORDER = ["Prior offenses", "Charge severity", "Risk score factor", "Age", "Race", "Sex"];
+
+    function featureOrderIndex(label) {
+      const index = FEATURE_DISPLAY_ORDER.indexOf(String(label));
+      return index === -1 ? FEATURE_DISPLAY_ORDER.length : index;
+    }
+
+    // Sort into the fixed order, falling back to magnitude for any attribute the
+    // fixed list does not cover, then keep the leading rows.
+    function orderRowsForDisplay(pairs, magnitudeOf) {
+      return pairs
+        .slice()
+        .sort((a, b) => featureOrderIndex(a.row?.label) - featureOrderIndex(b.row?.label)
+          || (magnitudeOf(b) - magnitudeOf(a)))
+        .slice(0, FEATURE_DISPLAY_LIMIT);
+    }
 
     function escapeHtml(value) {
       return String(value)
@@ -33,6 +53,20 @@
       return String(value);
     }
 
+    // "Misdemeanor" / "Felony" are legal terms of art that a lay participant
+    // should not have to decode mid-task, and the only thing the decision turns
+    // on is how serious the charge was. Lead with the severity; keep the legal
+    // term in the hover text so precision is not lost.
+    function chargeSeverity(rawFeatures) {
+      const isMisdemeanor = Number(rawFeatures?.Misdemeanor) === 1;
+      return {
+        value: isMisdemeanor ? "Less serious" : "More serious",
+        hint: isMisdemeanor
+          ? "Less serious charge (misdemeanor)"
+          : "More serious charge (felony)",
+      };
+    }
+
     function readableCaseFeatures(dataset, rawFeatures) {
       const raw = rawFeatures || {};
       if (dataset === "compas") {
@@ -40,14 +74,14 @@
         const race = raceKeys.find((key) => Number(raw[key]) === 1) || "White";
         const age = Number(raw["Age below 25"]) === 1 ? "< 25" : Number(raw["Age above 45"]) === 1 ? "> 45" : "25-45";
         const sex = Number(raw.Female) === 1 ? "Female" : "Male";
-        const charge = Number(raw.Misdemeanor) === 1 ? "Misdemeanor" : "Felony";
+        const charge = chargeSeverity(raw);
         const priors = raw["Number of priors"] ?? "Unknown";
         const scoreFactor = Number(raw["Score factor"]) === 1 ? "Present" : "Not present";
         return [
           { label: "Age", value: age },
           { label: "Race", value: race },
           { label: "Sex", value: sex },
-          { label: "Charge", value: charge },
+          { label: "Charge severity", value: charge.value, hint: charge.hint },
           { label: "Prior offenses", value: formatFeatureValue("Number of priors", priors) },
           { label: "Risk score factor", value: scoreFactor }
         ];
@@ -82,7 +116,7 @@
           { label: "Age", value: age, keys: ageKeys },
           { label: "Race", value: race, keys: raceShapKeys },
           { label: "Sex", value: Number(raw.Female) === 1 ? "Female" : "Male", keys: ["Female"] },
-          { label: "Charge", value: Number(raw.Misdemeanor) === 1 ? "Misdemeanor" : "Felony", keys: ["Misdemeanor"] },
+          { label: "Charge severity", value: chargeSeverity(raw).value, hint: chargeSeverity(raw).hint, keys: ["Misdemeanor"] },
           { label: "Prior offenses", value: formatFeatureValue("Number of priors", raw["Number of priors"] ?? "Unknown"), keys: ["Number of priors"] },
           { label: "Risk score factor", value: Number(raw["Score factor"]) === 1 ? "Present" : "Not present", keys: ["Score factor"] },
         ];
@@ -161,6 +195,76 @@
       `;
     }
 
+    // Per-model SHAP values for one feature across the models in a group. The
+    // group's stored pattern only keeps the mean, but every model's attribution
+    // is available, so the spread can be shown rather than averaged away.
+    function groupShapValues(groupModels, shapPatterns, keys) {
+      const byModel = shapPatterns?.by_model;
+      if (!byModel) return [];
+      return (groupModels || [])
+        .map((model) => byModel[String(model?.seed)]?.features)
+        .filter(Boolean)
+        .map((features) => shapValueFor(features, keys))
+        .filter((value) => Number.isFinite(value));
+    }
+
+    // Beeswarm placement: bin along the x axis and fan colliding points out
+    // symmetrically, so a dense cluster reads as dense instead of as one dot.
+    // Deterministic (no random jitter) so the plot is stable across re-renders.
+    //
+    // Offsets are returned in PX, deliberately. A percentage margin on an
+    // absolutely positioned element resolves against the containing block's
+    // WIDTH, not its height, so a "12%" offset became ~55px on a 456px-wide
+    // plot and threw points into the neighbouring row.
+    function beeswarmOffsets(xs, { binWidth = 1.8, step = 4, cap = 12 } = {}) {
+      const binCounts = new Map();
+      return xs
+        .slice()
+        .sort((a, b) => a.x - b.x)
+        .map((point) => {
+          const bin = Math.round(point.x / binWidth);
+          const seen = binCounts.get(bin) || 0;
+          binCounts.set(bin, seen + 1);
+          const raw = Math.ceil(seen / 2) * step;
+          const offset = seen === 0 ? 0 : Math.min(cap, raw) * (seen % 2 === 1 ? -1 : 1);
+          return { ...point, offset };
+        });
+    }
+
+    function shapSummaryPoints(values, maxAbs) {
+      const scaleMax = Math.max(Number(maxAbs) || 0, 0.001);
+      const points = values.map((value) => {
+        const clamped = Math.max(-scaleMax, Math.min(scaleMax, value));
+        return { x: 50 + (clamped / scaleMax) * 46, value };
+      });
+      return beeswarmOffsets(points, { binWidth: 1.8, step: 4, cap: 12 });
+    }
+
+    // One row of a SHAP summary (beeswarm) plot: each dot is one model in the
+    // group. Replaces the single mean bar in the aggregate conditions, where a
+    // lone bar is indistinguishable from the single-model view.
+    function renderShapSummaryRow(values, maxAbs, meanValue, featureLabel = "") {
+      if (!values.length) return renderSingleInfluenceBar(meanValue, maxAbs, 0);
+      const scaleMax = Math.max(Number(maxAbs) || 0, 0.001);
+      const points = shapSummaryPoints(values, maxAbs);
+      const mean = Number(meanValue);
+      const meanX = 50 + (Math.max(-scaleMax, Math.min(scaleMax, Number.isFinite(mean) ? mean : 0)) / scaleMax) * 46;
+      const positive = values.filter((value) => value > 0).length;
+      const min = Math.min(...values);
+      const max = Math.max(...values);
+      const title = `${featureLabel ? `${featureLabel}: ` : ""}${values.length} models`
+        + ` | mean ${compactShap(mean)}`
+        + ` | range ${compactShap(min)} to ${compactShap(max)}`
+        + ` | ${positive} push toward the higher-risk class, ${values.length - positive} toward the lower`;
+      return `
+        <div class="single-influence-row shap-summary-row" title="${escapeHtml(title)}">
+          <span class="single-influence-axis"></span>
+          ${points.map((point) => `<span class="shap-summary-dot ${point.value >= 0 ? "high" : "low"}" style="left:${point.x.toFixed(1)}%; margin-top:${point.offset.toFixed(0)}px"></span>`).join("")}
+          <span class="shap-summary-mean" style="left:${meanX.toFixed(1)}%"></span>
+        </div>
+      `;
+    }
+
     function renderSingleEvalMetric(label, value, error = 0) {
       const numeric = Math.max(0, Math.min(1, Number(value) || 0));
       const pct = Math.round(numeric * 100);
@@ -190,6 +294,53 @@
 
     function performanceRowIsSimilar(statsList) {
       return Array.isArray(statsList) && statsList.length > 0 && statsList.every(performanceDeltaIsSimilar);
+    }
+
+    // Distribution counterpart of renderPerformanceComparisonCell, for the
+    // conditions that aggregate a whole group of models: one dot per model on a
+    // 0-100% axis, with the group mean and the all-model baseline marked. A
+    // single bar here is indistinguishable from the single-model conditions and
+    // hides exactly the disagreement these conditions exist to show.
+    function renderPerformanceDistributionCell(stats, baselineLabel = "baseline", extraClass = "") {
+      const values = (stats?.values || []).map(Number).filter(Number.isFinite);
+      if (!values.length) return renderPerformanceComparisonCell(stats, baselineLabel, extraClass);
+      const toPct = (value) => Math.max(0, Math.min(100, Number(value) * 100));
+      const points = beeswarmOffsets(values.map((value) => ({ x: toPct(value), value })), { binWidth: 2.6, step: 4, cap: 8 });
+      const meanValue = Number(stats?.value);
+      const hasMean = Number.isFinite(meanValue);
+      const overallValue = Number(stats?.overallValue);
+      const hasOverall = Number.isFinite(overallValue);
+      const delta = Number(stats?.delta);
+      const isComparable = Number.isFinite(delta);
+      const absDelta = isComparable ? Math.abs(delta) : 0;
+      const direction = !isComparable || absDelta < 0.005 ? "same" : delta > 0 ? "better" : "worse";
+      const deltaSymbol = direction === "better" ? "&#9650;" : direction === "worse" ? "&#9660;" : "&#8776;";
+      const deltaText = isComparable ? `${Math.abs(delta * 100).toFixed(1).replace(/\.0$/, "")}%` : "-";
+      const min = Math.min(...values);
+      const max = Math.max(...values);
+      const spread = Math.max(0, Number(stats?.spread) || 0);
+      const label = stats?.item?.label || "Group";
+      const title = `${label} - ${stats?.item?.metricLabel || "metric"}: ${values.length} models`
+        + `${hasMean ? ` | mean ${(meanValue * 100).toFixed(1)}%` : ""}`
+        + ` | range ${(min * 100).toFixed(1)}% to ${(max * 100).toFixed(1)}%`
+        + ` | SD +/- ${(spread * 100).toFixed(1)}pt`
+        + `${hasOverall ? ` | ${baselineLabel} ${(overallValue * 100).toFixed(1)}%` : ""}`;
+      return `
+        <div class="exposure-performance-cell distribution class-${stats?.item?.classId} ${escapeHtml(extraClass)}" title="${escapeHtml(title)}">
+          <div class="exposure-performance-bar" aria-label="${escapeHtml(title)}">
+            <div class="exposure-performance-plot">
+              <div class="exposure-performance-swarm">
+                ${hasOverall ? `<span class="exposure-performance-baseline-tick" style="left:${toPct(overallValue).toFixed(1)}%"></span>` : ""}
+                ${points.map((point) => `<span class="exposure-performance-dot ${direction}" style="left:${point.x.toFixed(1)}%; margin-top:${point.offset.toFixed(0)}px"></span>`).join("")}
+                ${hasMean ? `<span class="exposure-performance-mean" style="left:${toPct(meanValue).toFixed(1)}%"></span>` : ""}
+              </div>
+            </div>
+            <div class="exposure-performance-compare">
+              <span class="exposure-performance-delta ${direction}"><span class="exposure-performance-arrow">${deltaSymbol}</span> ${escapeHtml(deltaText)}</span>
+            </div>
+          </div>
+        </div>
+      `;
     }
 
     function renderPerformanceComparisonCell(stats, baselineLabel = "baseline", extraClass = "") {
@@ -290,10 +441,7 @@
       const allRows = hasExplanation ? readableShapRows(dataset, rawFeatures, shapPatterns) : fallbackRows;
       const allValues = allRows.map((row) => shapValueFor(influencePattern.features, row.keys));
       const rowPairs = allRows.map((row, index) => ({ row, value: allValues[index] }));
-      const topPairs = rowPairs
-        .slice()
-        .sort((a, b) => Math.abs(b.value) - Math.abs(a.value))
-        .slice(0, FEATURE_DISPLAY_LIMIT);
+      const topPairs = orderRowsForDisplay(rowPairs, (pair) => Math.abs(pair.value));
       const visiblePairs = topPairs.length ? topPairs : rowPairs.slice(0, FEATURE_DISPLAY_LIMIT);
       const rows = visiblePairs.map((pair) => pair.row);
       const shapValues = visiblePairs.map((pair) => pair.value);
@@ -307,7 +455,7 @@
       const lowLabel = labelNames?.[0] || "Type 1";
       const highLabel = labelNames?.[1] || "Type 2";
       const evalMetricDefs = [
-        { label: "Subgroup Acc.", localKeys: ["subgroup_accuracy", "local_accuracy"], modelKeys: ["subgroup_accuracy", "local_accuracy"], overallKeys: ["test_accuracy"], rankKey: "accuracy" },
+        { label: "Accuracy", localKeys: ["subgroup_accuracy", "local_accuracy"], modelKeys: ["subgroup_accuracy", "local_accuracy"], overallKeys: ["test_accuracy"], rankKey: "accuracy" },
         { label: "Individual Fairness.", localKeys: ["local_consistency"], modelKeys: ["local_consistency"], overallKeys: ["global_consistency", "test_consistency", "overall_consistency", "overall_local_consistency"], rankKey: "local_consistency" },
         { label: "CF fairness", localKeys: ["counterfactual_fairness"], modelKeys: ["counterfactual_fairness"], overallKeys: ["global_counterfactual_fairness", "test_counterfactual_fairness", "overall_counterfactual_fairness"], rankKey: "counterfactual_fairness" },
         { label: "Catch Truly High-Risk", localKeys: ["subgroup_tpr", "local_tpr", "local_true_positive_rate", "local_recall", "local_sensitivity"], modelKeys: ["subgroup_tpr", "local_tpr", "local_true_positive_rate", "local_recall", "local_sensitivity"], overallKeys: ["tpr"], rankKey: "tpr" },
@@ -377,7 +525,7 @@
               <div class="single-diagram-heading single-value-heading">Value</div>
               ${visiblePairs.map((pair) => `
                 <div class="single-attr-cell" title="${escapeHtml(pair.row.label)}">${escapeHtml(pair.row.label)}</div>
-                <div class="single-value-cell" title="${escapeHtml(pair.row.value)}">${escapeHtml(pair.row.value)}</div>
+                <div class="single-value-cell" title="${escapeHtml(pair.row.hint || pair.row.value)}">${escapeHtml(pair.row.value)}</div>
               `).join("")}
             </div>
           </div>
@@ -392,7 +540,7 @@
                     <div class="single-diagram-heading single-value-heading">Value</div>
                     ${visiblePairs.map((pair) => `
                       <div class="single-attr-cell" title="${escapeHtml(pair.row.label)}">${escapeHtml(pair.row.label)}</div>
-                      <div class="single-value-cell" title="${escapeHtml(pair.row.value)}">${escapeHtml(pair.row.value)}</div>
+                      <div class="single-value-cell" title="${escapeHtml(pair.row.hint || pair.row.value)}">${escapeHtml(pair.row.value)}</div>
                     `).join("")}
                   </div>
                   <div class="single-influence-box exposure-influence-column">
@@ -540,19 +688,24 @@
         const score = Math.max(...values.map((value) => Math.abs(value)), 0);
         return { row, values, score };
       });
-      const visiblePairs = rowPairs
-        .slice()
-        .sort((a, b) => b.score - a.score)
-        .slice(0, FEATURE_DISPLAY_LIMIT);
+      const visiblePairs = orderRowsForDisplay(rowPairs, (pair) => pair.score);
+      // Individual models reach further out than any group mean, so the axis has
+      // to be sized on the per-model values too. Scaling on the means alone
+      // clamped the tails onto the plot edge and piled them up there.
+      const perModelExtremes = shapPatterns?.by_model
+        ? ordered.flatMap((item) => visiblePairs.flatMap((pair) =>
+            groupShapValues(item.groupModels, shapPatterns, pair.row.keys).map((value) => Math.abs(value))))
+        : [];
       const maxAbs = Math.max(
         Number(shapPatterns.max_abs_value) || 0,
         ...visiblePairs.flatMap((pair) => pair.values.map((value) => Math.abs(value))),
+        ...perModelExtremes,
         0.001
       );
       const lowLabel = labelNames?.[0] || "Type 1";
       const highLabel = labelNames?.[1] || "Type 2";
       const evalMetricDefs = [
-        { label: "Subgroup Acc.", localKey: "subgroup_accuracy", overallKey: "test_accuracy", rankKey: "accuracy" },
+        { label: "Accuracy", localKey: "subgroup_accuracy", overallKey: "test_accuracy", rankKey: "accuracy" },
         { label: "Individual Fairness", localKey: "local_consistency", overallKey: "local_consistency", rankKey: "local_consistency" },
         { label: "CF fairness", localKey: "counterfactual_fairness", overallKey: "counterfactual_fairness", rankKey: "counterfactual_fairness" },
         { label: "Catch Truly High-Risk", localKey: "subgroup_tpr", overallKey: "tpr", rankKey: "tpr" },
@@ -572,17 +725,23 @@
       const showNegotiationWeights = Boolean(options?.showNegotiationWeights);
       const negotiationUserWeights = options?.userWeights || userWeights || weights;
       const negotiationProxyWeights = options?.proxyWeights || proxyWeights || weights;
+      // These conditions aggregate a whole group of models, so the explanation
+      // is drawn as a SHAP summary plot (one dot per model) rather than a single
+      // mean bar -- a lone bar looks identical to the single-model conditions
+      // and hides the disagreement that is the point of the group view.
+      const hasPerModelShap = Boolean(shapPatterns?.by_model);
       const influenceColumns = ordered.map((item) => `
         <div class="single-influence-box exposure-influence-column">
           <div class="single-diagram-heading">${escapeHtml(item.label)} (${Math.round(item.count)}/100)</div>
-          <div class="single-framed-plot single-influence-plot exposure-influence-plot" style="grid-template-rows: repeat(${visiblePairs.length}, var(--single-row-height));">
-            ${visiblePairs.map((pair) => renderSingleInfluenceBar(
-              shapValueFor(item.pattern?.features, pair.row.keys),
-              maxAbs,
-              shapErrorFor(item.pattern, pair.row.keys)
-            )).join("")}
+          <div class="single-framed-plot single-influence-plot exposure-influence-plot ${hasPerModelShap ? "shap-summary-plot" : ""}" style="grid-template-rows: repeat(${visiblePairs.length}, var(--single-row-height));">
+            ${visiblePairs.map((pair) => {
+              const meanValue = shapValueFor(item.pattern?.features, pair.row.keys);
+              if (!hasPerModelShap) return renderSingleInfluenceBar(meanValue, maxAbs, shapErrorFor(item.pattern, pair.row.keys));
+              return renderShapSummaryRow(groupShapValues(item.groupModels, shapPatterns, pair.row.keys), maxAbs, meanValue, pair.row.label);
+            }).join("")}
           </div>
           <div class="single-influence-labels"><span>${escapeHtml(lowLabel)}</span><span>${escapeHtml(highLabel)}</span></div>
+          ${hasPerModelShap ? `<div class="shap-summary-legend"><span class="perf-key-item"><span class="perf-key-dot"></span>one of the ${Math.round(item.count)} models</span><span class="perf-key-item"><span class="perf-key-mean"></span>solid = group mean SHAP</span></div>` : ""}
         </div>
       `).join("");
       const globalModelMean = (key) => mean((models || []).map((model) => model?.[key]));
@@ -593,23 +752,42 @@
         const fallback = item.group?.criteria?.[metric.rankKey] ?? summaryByClass.get(String(item.classId))?.[`avg_${metric.localKey}`];
         const localValue = avg ?? fallback;
         const overallValue = globalModelMean(metric.overallKey);
-        return { item, value: localValue, spread, overallValue, delta: Number(localValue) - Number(overallValue) };
+        // Carry the per-model values through so the cell can draw the spread
+        // instead of collapsing the group to its mean.
+        return {
+          item: { ...item, metricLabel: metric.label },
+          values: numericValues(values),
+          value: localValue,
+          spread,
+          overallValue,
+          delta: Number(localValue) - Number(overallValue),
+        };
       };
-      const performanceRows = evalMetrics.map((metric) => {
+      const performanceRows = evalMetrics.map((metric, index) => {
         const stats = ordered.map((item) => evalStats(item, metric));
         const highlightClass = exposureMetricHighlightClass(metric, highlight);
         const mutedClass = performanceRowIsSimilar(stats) ? "metric-muted" : "";
         const rowClass = [highlightClass, mutedClass].filter(Boolean).join(" ");
+        // Rows are already sorted by the participant's own ranking; tag the two
+        // ends so the ordering is legible rather than merely true.
+        const rankTag = index === 0
+          ? `<span class="criteria-rank-tag top"></span>`
+          : index === evalMetrics.length - 1
+            ? `<span class="criteria-rank-tag bottom"></span>`
+            : "";
+        const otherTag = highlightClass.includes("metric-highlight-other")
+          ? `<span class="criteria-other-tag"></span>`
+          : "";
         return `
           <div class="exposure-performance-row ${mutedClass}">
-            <div class="exposure-performance-label ${rowClass}">${escapeHtml(metric.label)}</div>
-            ${stats.map((stat) => renderPerformanceComparisonCell(stat, "global models average overall", rowClass)).join("")}
+            <div class="exposure-performance-label ${rowClass}">${escapeHtml(metric.label)}${rankTag}${otherTag}</div>
+            ${stats.map((stat) => renderPerformanceDistributionCell(stat, "all-model average", rowClass)).join("")}
           </div>
         `;
       }).join("");
       const performanceSubheaders = `
         <div class="exposure-performance-label exposure-performance-subheader-spacer"></div>
-        ${ordered.map(() => `<div class="exposure-performance-subheader"><span>Score</span><span>vs. Avg.</span></div>`).join("")}
+        ${ordered.map(() => `<div class="exposure-performance-subheader"><span>Spread across models</span><span>vs. Avg.</span></div>`).join("")}
       `;
       const userReliabilityValues = ordered.map((item) => performanceTableReliability(item, negotiationUserWeights));
       const proxyReliabilityValues = ordered.map((item) => performanceTableReliability(item, negotiationProxyWeights));
@@ -627,7 +805,9 @@
           </div>
         `
         : "";
-      const performanceGridColumns = `180px repeat(${ordered.length}, 150px)`;
+      // Wider than the single-model table: a swarm of ~80 dots needs room that
+      // an 82px bar track does not have.
+      const performanceGridColumns = `180px repeat(${ordered.length}, 210px)`;
       return `
         <div class="single-explanation-diagram exposure-explanation-diagram" aria-label="Exposure condition prediction explanation">
           <div class="exposure-input-case-panel" aria-label="Input case attributes">
@@ -637,7 +817,7 @@
               <div class="single-diagram-heading single-value-heading">Value</div>
               ${visiblePairs.map((pair) => `
                 <div class="single-attr-cell" title="${escapeHtml(pair.row.label)}">${escapeHtml(pair.row.label)}</div>
-                <div class="single-value-cell" title="${escapeHtml(pair.row.value)}">${escapeHtml(pair.row.value)}</div>
+                <div class="single-value-cell" title="${escapeHtml(pair.row.hint || pair.row.value)}">${escapeHtml(pair.row.value)}</div>
               `).join("")}
             </div>
           </div>
@@ -645,8 +825,8 @@
           <div class="exposure-performance-panel" aria-label="Prediction performance metrics">
             <div class="single-diagram-heading exposure-performance-heading">
               Performance on Subgroup: <span class="exposure-performance-subgroup">${escapeHtml(subgroupDescription(dataset, rawFeatures))}</span>
-              <span class="exposure-performance-help" tabindex="0" aria-label="Performance bar legend">?
-                <span class="exposure-performance-help-text"><span class="better">Green</span> bars are better and <span class="worse">red</span> bars are worse than global models' average overall metric; the number after each bar is the difference from avg. Hover for exact subgroup value. Full bar = 100%.</span>
+              <span class="exposure-performance-help" tabindex="0" aria-label="Performance plot legend">?
+                <span class="exposure-performance-help-text">Each dot is one model in the group, placed by its score on that criterion (axis runs 0-100%). The <strong>solid black line</strong> is this group's mean; the <strong>grey dashed line</strong> is the average across all 100 candidate models. Dots are <span class="better">green</span> where the group mean beats that average and <span class="worse">red</span> where it falls below. The number on the right is the gap between the two lines. Hover any cell for the exact range and spread.</span>
               </span>
             </div>
             
@@ -662,7 +842,7 @@
                       <div class="single-diagram-heading single-value-heading">Value</div>
                       ${visiblePairs.map((pair) => `
                         <div class="single-attr-cell" title="${escapeHtml(pair.row.label)}">${escapeHtml(pair.row.label)}</div>
-                        <div class="single-value-cell" title="${escapeHtml(pair.row.value)}">${escapeHtml(pair.row.value)}</div>
+                        <div class="single-value-cell" title="${escapeHtml(pair.row.hint || pair.row.value)}">${escapeHtml(pair.row.value)}</div>
                       `).join("")}
                     </div>
                     ${influenceColumns}
@@ -671,6 +851,11 @@
               ${performanceSubheaders}
               ${performanceRows}
               ${reliabilityRows}
+            </div>
+            <div class="exposure-performance-key" aria-label="Performance plot key">
+              <span class="perf-key-item"><span class="perf-key-dot"></span>one model in the group</span>
+              <span class="perf-key-item"><span class="perf-key-mean"></span>solid = this group's mean</span>
+              <span class="perf-key-item"><span class="perf-key-baseline"></span>dashed = average of all 100 models</span>
             </div>
           </div>
         </div>
@@ -689,10 +874,7 @@
         const values = patterns.map((pattern) => shapValueFor(pattern.features, row.keys));
         return { row, values, score: Math.max(...values.map((value) => Math.abs(value)), 0) };
       });
-      const visiblePairs = rowPairs
-        .slice()
-        .sort((a, b) => b.score - a.score)
-        .slice(0, FEATURE_DISPLAY_LIMIT);
+      const visiblePairs = orderRowsForDisplay(rowPairs, (pair) => pair.score);
       const maxAbs = Math.max(
         Number(shapPatterns?.max_abs_value) || 0,
         ...visiblePairs.flatMap((pair) => pair.values.map((value) => Math.abs(value))),
@@ -701,7 +883,7 @@
       const lowLabel = labelNames?.[0] || "Type 1";
       const highLabel = labelNames?.[1] || "Type 2";
       const evalMetricDefs = [
-        { label: "Subgroup Acc.", localKeys: ["subgroup_accuracy", "local_accuracy"], modelKeys: ["subgroup_accuracy", "local_accuracy"], rankKey: "accuracy" },
+        { label: "Accuracy", localKeys: ["subgroup_accuracy", "local_accuracy"], modelKeys: ["subgroup_accuracy", "local_accuracy"], rankKey: "accuracy" },
         { label: "Individual Fairness", localKeys: ["local_consistency"], modelKeys: ["local_consistency"], rankKey: "local_consistency" },
         { label: "CF fairness", localKeys: ["counterfactual_fairness"], modelKeys: ["counterfactual_fairness"], rankKey: "counterfactual_fairness" },
         { label: "Catch Truly High-Risk", localKeys: ["subgroup_tpr", "local_tpr", "local_true_positive_rate", "local_recall", "local_sensitivity"], modelKeys: ["subgroup_tpr", "local_tpr", "local_true_positive_rate", "local_recall", "local_sensitivity"], rankKey: "tpr" },
@@ -719,6 +901,7 @@
       const metricValueForModel = (model, metric) => firstFiniteMetricValue(model, metric.modelKeys || metric.localKeys);
       const baselineLabel = "all models subgroup/local average";
       const performanceRows = evalMetrics.map((metric) => {
+        const highlightClass = exposureMetricHighlightClass(metric, options?.highlight || {});
         const baselineValues = (models || []).map((model) => metricValueForModel(model, metric));
         const overallValue = mean(baselineValues);
         const spread = sampleStd(baselineValues);
@@ -739,8 +922,8 @@
         const mutedClass = performanceRowIsSimilar(stats) ? "metric-muted" : "";
         return `
           <div class="exposure-performance-row ${mutedClass}">
-            <div class="exposure-performance-label ${mutedClass}">${escapeHtml(metric.label)}</div>
-            ${stats.map((stat) => renderPerformanceComparisonCell(stat, baselineLabel, mutedClass)).join("")}
+            <div class="exposure-performance-label ${mutedClass} ${highlightClass}">${escapeHtml(metric.label)}${highlightClass.includes("metric-highlight-other") ? `` : ""}</div>
+            ${stats.map((stat) => renderPerformanceComparisonCell(stat, baselineLabel, `${mutedClass} ${highlightClass}`)).join("")}
           </div>
         `;
       }).join("");
@@ -754,7 +937,7 @@
         const role = roleTagLabel[item.role] || item.role || "";
         const current = Number(options.versionIndexByRole?.[item.role]) || 0;
         const optionsHtml = versions.map((version, index) =>
-          `<option value="${index}" ${index === current ? "selected" : ""}>${escapeHtml(role)} · ${escapeHtml(version.label)}${version.shared ? " ✓" : ""}</option>`
+          `<option value="${index}" ${index === current ? "selected" : ""}>${escapeHtml(version.label)}${version.shared ? " ✓" : ""}</option>`
         ).join("");
         return `<select class="negotiate-v2-model-version-select" data-role="${escapeHtml(item.role || "")}" title="This is the model ${escapeHtml(role)} stood behind at the selected round. Switch to review an earlier offer.">${optionsHtml}</select>`;
       };
@@ -775,7 +958,7 @@
                   <div class="single-diagram-heading single-value-heading">Value</div>
                   ${visiblePairs.map((pair) => `
                     <div class="single-attr-cell" title="${escapeHtml(pair.row.label)}">${escapeHtml(pair.row.label)}</div>
-                    <div class="single-value-cell" title="${escapeHtml(pair.row.value)}">${escapeHtml(pair.row.value)}</div>
+                    <div class="single-value-cell" title="${escapeHtml(pair.row.hint || pair.row.value)}">${escapeHtml(pair.row.value)}</div>
                   `).join("")}
                 </div>
                 <div class="single-influence-box exposure-influence-column">
@@ -806,7 +989,7 @@
               <div class="single-diagram-heading single-value-heading">Value</div>
               ${visiblePairs.map((pair) => `
                 <div class="single-attr-cell" title="${escapeHtml(pair.row.label)}">${escapeHtml(pair.row.label)}</div>
-                <div class="single-value-cell" title="${escapeHtml(pair.row.value)}">${escapeHtml(pair.row.value)}</div>
+                <div class="single-value-cell" title="${escapeHtml(pair.row.hint || pair.row.value)}">${escapeHtml(pair.row.value)}</div>
               `).join("")}
             </div>
           </div>
@@ -818,7 +1001,7 @@
               </span>
             </div>
             <div class="exposure-performance-table multi-optimal-table" style="grid-template-columns: ${performanceGridColumns};">
-              <div class="exposure-performance-label exposure-performance-criteria-heading">Criteria</div>
+              <div class="exposure-performance-label exposure-performance-criteria-heading">Criteria (Ordered)</div>
               ${activeItems.map(modelHeader).join("")}
               <div class="exposure-performance-label exposure-performance-subheader-spacer"></div>
               ${activeItems.map(() => `<div class="exposure-performance-subheader"><span>Score</span><span>vs. Avg.</span></div>`).join("")}
@@ -898,7 +1081,7 @@
               return `
                 <tr>
                   <td class="attr-cell" title="${escapeHtml(row.label)}">${escapeHtml(row.label)}</td>
-                  <td class="value-cell" title="${escapeHtml(row.value)}">${escapeHtml(row.value)}</td>
+                  <td class="value-cell" title="${escapeHtml(row.hint || row.value)}">${escapeHtml(row.value)}</td>
                   <td class="pattern-cell">${renderPatternCell(lowValue, "low", maxAbs, "Low-risk pattern", low.count)}</td>
                   <td class="pattern-cell">${renderPatternCell(highValue, "high", maxAbs, "High-risk pattern", high.count)}</td>
                 </tr>

@@ -168,15 +168,16 @@ function modelNegotiationSystemPrompt() {
   return [
     "You speak as one stakeholder in a two-party negotiation over which of several equally-accurate ML models to stand behind for one case.",
     "Return only JSON matching the schema. You write explanation.text and nothing else; every decision in the payload is already final.",
-    "Never invent, change, or second-guess the model being offered, the accept/counter decision, or any number. Restate only what the payload contains, and omit any move whose field is null rather than inventing a substitute.",
-    "Never mention criteria weights, weight percentages, utilities, scores, or any internal parameter. Speak about criteria as named performance numbers (percentages) and about models by their id.",
+    "Never invent, change, or second-guess the model being offered or the accept/counter decision. Restate only what the payload contains, and omit any move whose field is null rather than inventing a substitute.",
+    "Speak the way a stakeholder speaks, not the way a dashboard reports. Write NO numbers of any kind about the criteria: no percentages, no decimals, no point differences, no rankings, no \"from X to Y\". The payload gives you each movement as a plain-language size, and that phrase is the only quantity you are allowed to express. A reply containing a percentage is wrong even if the figure would have been correct.",
+    "Never mention criteria weights, utilities, scores, or any internal parameter. Refer to criteria by their names and to models by their id.",
     "Never say that either side changed its values or priorities. Priorities are fixed; what moves is which model each side is willing to live with.",
     "",
     "You are an integrative (interest-based) negotiator, not a haggler. A counter-offer must run these speech acts in this order, one clause or sentence each, skipping any whose payload field is null:",
-    "(1) ACKNOWLEDGE — from they_just_conceded, name what the other side gave up and show you registered the cost to them. Perspective-taking first; never open with your own complaint.",
-    "(2) LOCATE THE GAP — from complaint, name the one criterion where their offer still fails you, with its number. State it as an obligation of your role, not as a preference or a demand.",
-    "(3) RECIPROCATE — from concession, name what you are giving up in return, with both numbers, and mark that it is a genuine cost to you. An unlabelled concession is not read as one.",
-    "(4) PRESERVE — from what_i_must_keep, name the one thing you will not trade and give the reason you cannot defend going below it. Never phrase this as a threat or an ultimatum.",
+    "(1) ACKNOWLEDGE — from they_just_conceded, name the criterion the other side gave ground on, say how much ground in its own words, and show you registered the cost to them. Perspective-taking first; never open with your own complaint.",
+    "(2) LOCATE THE GAP — from complaint, name the one criterion where their offer still fails you and how far off it is in its own words. State it as an obligation of your role, not as a preference or a demand.",
+    "(3) RECIPROCATE — from concession, name what you are giving up in return and how much, and mark that it is a genuine cost to you. An unlabelled concession is not read as one.",
+    "(4) PRESERVE — from what_i_must_keep, name the one thing you will not trade, say what their offer would cost you there, and give the reason you cannot defend going below it. Never phrase this as a threat or an ultimatum.",
     "(5) JUSTIFY THE TRADE — from why_trading_works, explain that you two rank these criteria differently, so swapping makes both sides better off than meeting in the middle. This is the heart of the message: the deal is good because your priorities differ, not because someone caved.",
     "(6) GAIN-FRAME — from payback, state what your counter-offer does for THEM as an improvement, in their terms. End on their gain, never on your own.",
     "",
@@ -186,31 +187,39 @@ function modelNegotiationSystemPrompt() {
     "If my_response is \"hold\", you are restating your existing model, not offering a new one. Never present it as a fresh concession or a new counter-offer.",
     "",
     "If how_far_i_have_moved shows you have already conceded across rounds, you may invoke it once to ask for reciprocity — state it as a fact, not a grievance.",
-    "When accepting: acknowledge their movement, say which criterion it finally brought far enough and to what number, then give the honest reason you are accepting (no counter of yours would do better, or the deadline makes settling better than walking away).",
+    "When accepting: acknowledge their movement, say which criterion it finally brought far enough, then give the honest reason you are accepting (no counter of yours would do better, or the deadline makes settling better than walking away).",
     "If deadline_reached is true, say this is the last round.",
     "",
     "Stay in role, first person, plain language a non-technical stakeholder would use. Warm but not soft; you are trying to reach a deal, not to win. 3 to 5 sentences, at most 110 words. No lists, no headings, no markdown, no restating the payload as data."
   ].join(" ");
 }
 
+/* Magnitudes reach this protocol as words, not values — the client bands every
+   movement before it leaves the browser (see NV2_SIZE_BANDS). The vocabulary is
+   closed on this side too: an unrecognised phrase is dropped rather than passed
+   through, so nothing but these phrases can ever reach the model as a size. */
+const NV2_AMOUNT_WORDS = new Set(["a little", "a fair amount", "a lot"]);
+const NV2_SHORTFALL_WORDS = new Set(["a little short of", "well short of", "far short of"]);
+
+function pickPhrase(raw, allowed) {
+  const phrase = String(raw || "").trim().toLowerCase();
+  return allowed.has(phrase) ? phrase : null;
+}
+
 function sanitizeModelSnapshot(raw) {
   if (!raw || typeof raw !== "object") return null;
   return {
     id: String(raw.id || "").slice(0, 20),
-    prediction: String(raw.prediction || "").slice(0, 80),
-    criteria: Object.fromEntries(CRITERIA_ORDER.map((key) => [key, raw.criteria?.[key] == null ? null : clamp01(Number(raw.criteria[key]))]))
+    prediction: String(raw.prediction || "").slice(0, 80)
   };
 }
 
+// A movement: which criterion, and how big it felt. No endpoints.
 function sanitizeCriterionMove(raw) {
   if (!raw || typeof raw !== "object") return null;
-  const value = (item) => item == null ? null : clamp01(Number(item));
   return {
     criterion: String(raw.criterion || "").slice(0, 120),
-    from: value(raw.from),
-    to: value(raw.to),
-    their_value: value(raw.their_value),
-    my_value: value(raw.my_value)
+    size: pickPhrase(raw.size, NV2_AMOUNT_WORDS)
   };
 }
 
@@ -238,13 +247,15 @@ function buildModelNegotiationPrompt(payload) {
     // one field per speech act, so a null field simply drops that act
     they_just_conceded: sanitizeCriterionMove(payload.they_just_conceded),
     it_gained_me: sanitizeCriterionMove(payload.it_gained_me),
-    complaint: sanitizeCriterionMove(payload.complaint),
+    complaint: payload.complaint ? {
+      criterion: String(payload.complaint.criterion || "").slice(0, 120),
+      how_far_off: pickPhrase(payload.complaint.how_far_off, NV2_SHORTFALL_WORDS)
+    } : null,
     concession: sanitizeCriterionMove(payload.concession),
     what_i_must_keep: payload.what_i_must_keep ? {
-      criterion: String(payload.what_i_must_keep.label || "").slice(0, 120),
-      hold_at: payload.what_i_must_keep.keep == null ? null : clamp01(Number(payload.what_i_must_keep.keep)),
-      their_offer_would_put_it_at: payload.what_i_must_keep.under_their_offer == null ? null : clamp01(Number(payload.what_i_must_keep.under_their_offer)),
-      actually_at_risk: Boolean(payload.what_i_must_keep.at_risk)
+      criterion: String(payload.what_i_must_keep.criterion || "").slice(0, 120),
+      their_offer_would_cost_me: pickPhrase(payload.what_i_must_keep.their_offer_would_cost_me, NV2_AMOUNT_WORDS),
+      actually_at_risk: Boolean(payload.what_i_must_keep.actually_at_risk)
     } : null,
     why_trading_works: payload.why_trading_works ? {
       i_value_more: String(payload.why_trading_works.i_value_more || "").slice(0, 120),
@@ -253,7 +264,7 @@ function buildModelNegotiationPrompt(payload) {
     how_far_i_have_moved: payload.how_far_i_have_moved ? {
       rounds_moved: Number(payload.how_far_i_have_moved.rounds_moved || 0),
       criterion: String(payload.how_far_i_have_moved.criterion || "").slice(0, 120),
-      given_up: clamp01(Number(payload.how_far_i_have_moved.given_up))
+      given_up: pickPhrase(payload.how_far_i_have_moved.given_up, NV2_AMOUNT_WORDS)
     } : null,
     payback: sanitizeCriterionMove(payload.payback),
     history: sanitizeHistory(payload.history || [])
@@ -261,8 +272,9 @@ function buildModelNegotiationPrompt(payload) {
 
   return [
     "Voice this stakeholder's reply in the model negotiation below.",
-    "All criteria values are shares between 0 and 1; render them as percentages.",
+    "There are no criteria values in this payload, by design. Every magnitude is already a phrase — \"a little\", \"a fair amount\", \"a lot\" for a movement, \"a little short of\", \"well short of\", \"far short of\" for a gap. Use the phrase you are given, or a close synonym of the same strength. Never convert one into a number, a percentage, or a rank, and never invent a value to make the sentence more concrete.",
     "Each speech act in your instructions maps to one field: (1) ACKNOWLEDGE -> they_just_conceded, (2) LOCATE THE GAP -> complaint, (3) RECIPROCATE -> concession, (4) PRESERVE -> what_i_must_keep, (5) JUSTIFY THE TRADE -> why_trading_works, (6) GAIN-FRAME -> payback. A null field means skip that act entirely.",
+    "A null size or how_far_off inside an otherwise present field means you may name the criterion but must not characterise how big the move was.",
     "Check their_move before writing anything. If it is \"hold\" the other side stood still and conceded nothing this turn, so they_just_conceded is null and you must not invent a concession for them from the history or from earlier rounds.",
     "Skip act (4) unless what_i_must_keep.actually_at_risk is true — defending a limit nobody attacked sounds evasive.",
     "my_priority_order and their_priority_order are ordinal only — use them to decide what to emphasise, never quote them as numbers or weights.",

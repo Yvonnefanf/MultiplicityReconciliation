@@ -139,6 +139,17 @@
       elicitedWeights = inferWeightsFromPairwise();
     }
 
+    // Never render a non-zero weight as "0%". "0%" reads as "this criterion has
+    // no influence whatsoever", which is a much stronger claim than a coarse
+    // ranking plus four categorical comparisons can support.
+    function formatPriorityWeight(weight) {
+      const value = Number(weight) || 0;
+      if (value <= 0) return "0%";
+      const pct = value * 100;
+      if (pct < 0.95) return "<1%";
+      return `${Math.round(pct)}%`;
+    }
+
     function renderWeightPreview(previewWeights) {
       return criteriaOrder.map((key) => {
         const pct = Math.round((previewWeights[key] || 0) * 100);
@@ -267,8 +278,8 @@
       const lowerKey = rankedCriteria[pairwiseIndex + 1];
       const answered = answeredPairCount();
       const complete = answered === pairwiseAnswers.length;
-      pairwiseTitle.textContent = "How much more important?";
-      pairwiseSubtitle.innerHTML = `You ranked <strong>${escapeHtml(criteriaLabels[higherKey])}</strong> above <strong>${escapeHtml(criteriaLabels[lowerKey])}</strong>. How much more important is it to you?`;
+      pairwiseTitle.textContent = "How much more weight?";
+      pairwiseSubtitle.innerHTML = `You ranked <strong>${escapeHtml(criteriaLabels[higherKey])}</strong> above <strong>${escapeHtml(criteriaLabels[lowerKey])}</strong>. How much more weight should it receive?`;
       pairwiseCounter.textContent = `${pairwiseIndex + 1} / ${pairwiseAnswers.length}`;
       preferenceBackButton.innerHTML = `<span class="chevron left" aria-hidden="true"></span> Previous pair`;
       preferenceBackButton.disabled = pairwiseIndex === 0;
@@ -288,7 +299,7 @@
             <div class="criterion-description">${escapeHtml(criteriaDescriptions[lowerKey])}</div>
           </div>
         </div>
-        <p class="pair-question">Compared to ${escapeHtml(criteriaLabels[lowerKey])}, how important is ${escapeHtml(criteriaLabels[higherKey])} to you?</p>
+       
         <div class="intensity-options">
           ${intensityOptions.map((option) => `
             <label class="intensity-option">
@@ -317,8 +328,8 @@
       pairwiseNav.style.display = "none";
       startReconciliationButton.style.display = "none";
       const orderedRows = rankedCriteria.map((key, index) => ({ key, index, weight: elicitedWeights[key] || 0 }));
-      pairwiseTitle.textContent = "Your computed priorities";
-      pairwiseSubtitle.textContent = `These priorities were derived from your ranking and adjacent comparisons. Confirm them to start reconciliation as a ${personaRolePhrase(currentPersona)}.`;
+      pairwiseTitle.textContent = "Estimated priority weights";
+      pairwiseSubtitle.textContent = `These are approximate weights, estimated from your ranking and the comparisons you just made. Confirm them to start reconciliation as a ${personaRolePhrase(currentPersona)}.`;
       pairwiseCounter.textContent = "Review";
       pairwiseContent.innerHTML = `
         <div class="computed-card">
@@ -332,13 +343,13 @@
                     <span class="computed-name">${escapeHtml(criteriaLabels[row.key])}</span>
                     <span class="computed-desc">${escapeHtml(criteriaDescriptions[row.key])}</span>
                   </div>
-                  <div class="computed-pct">${pct}%</div>
-                  <div class="computed-track"><div class="computed-fill" style="width:${pct}%"></div></div>
+                  <div class="computed-pct">${escapeHtml(formatPriorityWeight(row.weight))}</div>
+                  <div class="computed-track"><div class="computed-fill" style="width:${row.weight > 0 ? Math.max(pct, 1) : 0}%"></div></div>
                 </div>
               `;
             }).join("")}
           </div>
-          <p class="computed-note">These priorities are read-only - they were calculated from your ranking and adjacent comparisons.</p>
+          <p class="computed-note">These weights approximate your stated preferences and will be used to compare candidate AI models. They are read-only - they were estimated from your ranking and adjacent comparisons.</p>
         </div>
         <div class="review-actions">
           <button id="reviewBackButton" type="button" class="review-button secondary"><span class="chevron left" aria-hidden="true"></span> Edit comparisons</button>

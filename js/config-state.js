@@ -2,6 +2,7 @@
    Part of the Negotiated Rashomon Reconciliation app. Loaded as an ordered
    classic script; all top-level declarations share one global scope. */
 
+    const conditionSelect = document.getElementById("conditionSelect");
     const datasetSelect = document.getElementById("datasetSelect");
     const caseSelect = document.getElementById("caseSelect");
     const datasetHint = document.getElementById("datasetHint");
@@ -60,9 +61,42 @@
       return SINGLE_MODEL_SEED_BY_DATASET[dataset] ?? null;
     }
     const STUDY_CONDITIONS = ["single", "singleoptimal", "multioptimal", "aggregate", "negotiatev2", "exposure", "informed", "negotiation"];
+    // Selectable conditions, grouped the way they differ mechanically. `key` is
+    // the internal condition name used everywhere else; `label` is display only.
+    //
+    // exposure and informed are NOT two aggregation methods: they run the same
+    // group-level aggregation (all candidate models are clustered by predicted
+    // class, each group scored as the weighted sum of its criteria) and differ
+    // only in whether the other stakeholder's weights and benefits are shown.
+    // That is a different aggregation from `aggregate`, which blends the two
+    // selected optimal models' predicted probabilities instead.
+    const STUDY_CONDITION_GROUPS = [
+      {
+        label: "Core conditions",
+        options: [
+          { key: "single", label: "1 · Ignore" },
+          { key: "singleoptimal", label: "2 · Single optimal" },
+          { key: "multioptimal", label: "3 · Multi optimal" },
+          { key: "aggregate", label: "4 · Aggregate" },
+          { key: "negotiatev2", label: "5 · Negotiation" },
+        ],
+      },
+      {
+        label: "Group-reliability conditions",
+        options: [
+          { key: "exposure", label: "Exposure · your weights only" },
+          { key: "informed", label: "Informed · both weights shown" },
+        ],
+      },
+    ];
+    const STUDY_CONDITION_OPTIONS = STUDY_CONDITION_GROUPS.flatMap((group) => group.options);
+    // `negotiation` is deliberately absent: it is a different, still-reachable
+    // legacy condition, so aliasing it to negotiatev2 would silently hijack it.
+    const STUDY_CONDITION_ALIASES = { ignore: "single", negotiate: "negotiatev2", nv2: "negotiatev2" };
     const DEFAULT_STUDY_CONDITION = "negotiatev2";
     const configuredStudyCondition = String(new URLSearchParams(window.location.search).get("condition") || "").toLowerCase().replace(/[-_\s]/g, "");
-    const activeStudyCondition = STUDY_CONDITIONS.includes(configuredStudyCondition) ? configuredStudyCondition : DEFAULT_STUDY_CONDITION;
+    const requestedStudyCondition = STUDY_CONDITION_ALIASES[configuredStudyCondition] || configuredStudyCondition;
+    const activeStudyCondition = STUDY_CONDITIONS.includes(requestedStudyCondition) ? requestedStudyCondition : DEFAULT_STUDY_CONDITION;
     document.body.classList.add(`condition-${activeStudyCondition}`);
 
     function studyCondition() {
@@ -287,11 +321,11 @@
 
     const LOCAL_SCOPE_SIZE = 30;
     const criteriaDescriptions = {
-      accuracy: "Accuracy: overall share of test cases the model classifies correctly.",
-      tpr: "Local TPR: within the 30 nearest similar cases, correctly identify people who are likely to re-offend.",
-      tnr: "Local TNR: within the 30 nearest similar cases, protect low-risk people from being wrongly labeled as high risk.",
-      local_consistency: "Individual fairness: similar nearby cases should receive the same kind of prediction.",
-      counterfactual_fairness: "CF fairness: the prediction changes little when race or gender information is switched."
+      accuracy: "How often the AI makes the correct prediction across all cases.",
+      tpr: "Correctly identify people who are likely to re-offend.",
+      tnr: "Protect low-risk people from being wrongly labeled as high risk.",
+      local_consistency: "People with similar backgrounds and circumstances should receive similar predictions.",
+      counterfactual_fairness: "Predictions should be similar regardless of race."
     };
 
     const personaRankDefaults = {
@@ -316,11 +350,26 @@
     }
     window.primaryCriterionKeyForPersona = primaryCriterionKeyForPersona;
 
+    // Verbal intensities and the ratios they stand for. Ratios are applied along
+    // the ranking chain (w_i = ratio * w_{i+1}), so four adjacent judgements
+    // compound across the whole scale.
+    //
+    // Saaty's 1-3-5-7-9, kept deliberately for the spread it produces: gentler
+    // SWARA-style steps (1-1.25-1.5-2-3) were measured and moved the opening
+    // disagreement rate by only ~1.6pp, which did not justify flattening the
+    // elicited weights. The labels below are Saaty's own verbal anchors so the
+    // wording matches the number it maps to -- calling 3x "a little more" would
+    // misdescribe what the participant is choosing.
+    //
+    // The cost is real and is handled at the display layer, not here: this scale
+    // drives the last criterion under 0.5% in 414 of 625 possible answer
+    // combinations, so formatPriorityWeight() renders those as "<1%" rather than
+    // "0%", which would claim the criterion has no influence at all.
     const intensityOptions = [
-      { key: "same", label: "About the same", ratio: 1 },
-      { key: "slightly", label: "Slightly more", ratio: 3 },
-      { key: "moderately", label: "Moderately more", ratio: 5 },
-      { key: "much", label: "Much more", ratio: 7 },
-      { key: "critically", label: "Critically more", ratio: 9 }
+      { key: "same", label: "Equally important", ratio: 1 },
+      { key: "slightly", label: "Moderately more", ratio: 1.5 },
+      { key: "moderately", label: "Strongly more", ratio: 2.25 },
+      { key: "much", label: "Very strongly more", ratio: 3.375 },
+      { key: "critically", label: "Extremely more", ratio: 5 }
     ];
 

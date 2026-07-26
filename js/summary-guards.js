@@ -180,7 +180,7 @@
             <div class="single-model-kicker">${escapeHtml(title)}</div>
             <div class="single-model-heading"><strong>Model #${escapeHtml(model.seed ?? model.id ?? "-")}</strong>: ${escapeHtml(predictedLabel)}</div>
             <div class="single-model-metrics">
-              ${singleMetric("Subgroup Acc.", model.subgroup_accuracy ?? model.local_accuracy)}
+              ${singleMetric("Accuracy", model.subgroup_accuracy ?? model.local_accuracy)}
               ${singleMetric("Subgroup TPR", model.subgroup_tpr ?? model.local_tpr)}
               ${singleMetric("Subgroup TNR", model.subgroup_tnr ?? model.local_tnr)}
               ${singleMetric("Individual fairness", model.local_consistency)}

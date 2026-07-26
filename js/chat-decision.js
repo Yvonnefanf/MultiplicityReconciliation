@@ -474,7 +474,7 @@
         otherReminder = `<span class="informed-reminder-other">Other stakeholder (${escapeHtml(otherRole)}) thinks ${escapeHtml(otherMetric)} is important.</span>`;
       }
       reconcileIdentityBanner.innerHTML = `
-        <span class="reconcile-identity-user">You are acting as a <strong>${escapeHtml(rolePhrase)}</strong>, and the criterion Self cares about most is <strong>${escapeHtml(criterionLabel)}</strong>.</span>
+        <span class="reconcile-identity-user">You are acting as a <strong>${escapeHtml(rolePhrase)}</strong>, and the criterion you care about most is <strong>${escapeHtml(criterionLabel)}</strong>.</span>
         ${otherReminder}
       `;
       reconcileIdentityBanner.classList.remove("hidden");

@@ -46,6 +46,13 @@
       padding: 16px 18px;
     }
     #topToolbar { display: none !important; }
+    /* Study-condition switcher. Fixed to the viewport so it survives every
+       stage, and muted so it never reads as part of the participant's task. */
+    .condition-switcher { align-items: center; background: rgba(255, 255, 255, .92); border: 1px solid #d4e0ea; border-radius: 999px; display: flex; gap: 6px; right: 12px; padding: 4px 10px 4px 12px; position: fixed; top: 12px; z-index: 1; }
+    .condition-switcher label { color: var(--muted); font-size: 10px; font-weight: 800; letter-spacing: .06em; text-transform: uppercase; }
+    .condition-switcher select { appearance: auto; background: transparent; border: 0; color: var(--ink); cursor: pointer; font-family: inherit; font-size: 12px; font-weight: 750; padding: 2px 0; }
+    .condition-switcher select:focus-visible { outline: 2px solid var(--blue); outline-offset: 2px; }
+    @media (max-width: 900px) { .condition-switcher { left: 8px; top: 8px; } }
     label { display: block; margin-bottom: 6px; color: var(--muted); font-size: 13px; font-weight: 650; }
     select { width: 100%; }
     select {
@@ -284,7 +291,7 @@
     .preview-track { height: 10px; background: #edf1f5; border-radius: 999px; overflow: hidden; }
     .preview-fill { height: 100%; background: var(--blue); border-radius: 999px; }
     .reconciliation-shell { color: #2d271f; display: grid; }
-    .reconcile-identity-banner { border: 1px solid #b9ceff; border-radius: 8px; color: #245fba; display: grid; font-size: 12px; gap: 3px; justify-self: start; line-height: 1.18; margin: 0; max-width: 760px; padding: 5px 9px; text-align: left; }
+    .reconcile-identity-banner { border: 1px solid #b9ceff; border-radius: 8px; color: #245fba; display: grid; font-size: 14px; gap: 3px; justify-self: start; line-height: 1.18; margin: 0; max-width: 760px; padding: 5px 9px; text-align: left; }
     .reconcile-identity-banner strong { font-weight: 850; }
     .reconcile-identity-banner .informed-reminder-other { display: block; line-height: 1.15; max-width: 760px; color: var(--proxy);}
     .reconcile-hero { display: grid; gap: 10px; max-width: 980px; }
@@ -538,10 +545,35 @@
     body.condition-negotiation .features:has(.exposure-detail-wrap:focus-within),
     body.condition-negotiation .features:has(.exposure-performance-help:hover),
     body.condition-negotiation .features:has(.exposure-performance-help:focus-within) { overflow: visible; position: relative; z-index: 60; }
-    .exposure-explanation-diagram { --single-row-height: 32px; align-items: start; grid-template-columns: 240px 500px; min-width: 1080px; row-gap: 18px; }
+    /* Taller rows than the single-model views: the swarm needs breathing room
+       around it so adjacent features do not blur together. The variable drives
+       the attribute list and the plot alike, so the two stay aligned. */
+    .exposure-explanation-diagram { align-items: start; grid-template-columns: 240px 500px; min-width: 1080px; row-gap: 18px; }
     .exposure-influence-column { min-width: 0; }
     .exposure-influence-column .single-diagram-heading { line-height: 1.15; min-height: var(--single-heading-gap); }
     .exposure-influence-plot { padding-left: 22px; padding-right: 22px; margin-top: -8px; }
+    /* SHAP summary (beeswarm): one dot per model in the group. Dots are small
+       and translucent so a dense cluster reads as density, and the mean line
+       stays legible on top of ~80 overlapping points. */
+    .shap-summary-row { overflow: hidden; }
+    .shap-summary-dot { border-radius: 50%; height: 5px; margin-left: -2.5px; opacity: .5; pointer-events: none; position: absolute; top: 50%; transform: translateY(-50%); width: 5px; }
+    .shap-summary-dot.high { background: #ef2b2f; }
+    .shap-summary-dot.low { background: #3f87df; }
+    /* The mean line spans only the swarm band, not the whole row, so the gap
+       between features stays visually empty and the rows read as separate. */
+    .shap-summary-mean { background: #111; height: 26px; margin-left: -1px; position: absolute; top: 50%; transform: translateY(-50%); width: 2px; z-index: 4; }
+    /* Shared key marks: the swatches are the real marks at the real colours, so
+       "solid" and "dashed" are shown rather than only named. */
+    .exposure-performance-key { color: var(--muted); display: flex; flex-wrap: wrap; font-size: 10px; gap: 4px 16px; margin-top: 10px; padding-left: 2px; }
+    .shap-summary-legend { color: var(--muted); display: flex; flex-wrap: wrap; font-size: 10px; gap: 4px 12px; justify-content: center; line-height: 1.3; margin-top: 6px; }
+    .perf-key-item { align-items: center; display: inline-flex; gap: 5px; white-space: nowrap; }
+    .perf-key-dot { background: #7a8794; border-radius: 50%; display: inline-block; height: 5px; opacity: .6; width: 5px; }
+    .perf-key-mean { background: #111; display: inline-block; height: 12px; width: 2px; }
+    .perf-key-baseline { border-left: 2px dashed #6b7683; display: inline-block; height: 12px; width: 0; }
+    .shap-summary-plot .single-influence-axis { opacity: .35; width: 1px; }
+    /* Hairline between features. With a tight swarm inside a taller row, this
+       is what makes one feature's dots read as one group. */
+    .shap-summary-plot .single-influence-row + .single-influence-row { border-top: 1px solid #edf1f5; }
     .exposure-input-case-panel { align-self: start; display: grid; gap: 7px; justify-items: center; }
     .exposure-input-case-heading { font-size: 16px; line-height: 1.1; text-align: center; }
     .exposure-input-case-list { justify-self: center; }
@@ -581,13 +613,14 @@
     .informed-reminder-user { background: #e8f3ff; border-left: 4px solid #7cb8f2; padding: 4px 7px; }
     .informed-reminder-other { background: var(--proxy-bg); border-left: 4px solid var(--proxy); padding: 4px 7px; }
     .exposure-performance-row { display: contents; }
-    .exposure-performance-label.metric-highlight-user,
+    .exposure-performance-label.metric-highlight-user { border-radius: 0; }
+    /* The other stakeholder's top criterion, banded across the whole row in
+       every multi-stakeholder condition. The band has to survive the muted
+       styling below, which is why it is restated there. */
     .exposure-performance-label.metric-highlight-other,
-    .exposure-performance-label.metric-highlight-user.metric-highlight-other,
-    .exposure-performance-label.metric-highlight-user,
-    .exposure-performance-label.metric-highlight-other { border-radius: 0; padding: 0; }
-    .exposure-performance-cell.metric-highlight-user,
-    .exposure-performance-cell.metric-highlight-other { border-radius: 0; padding: 0; }
+    .exposure-performance-cell.metric-highlight-other { background: #fdf0dd; }
+    .exposure-performance-label.metric-highlight-other { box-shadow: inset 3px 0 0 #e08a1e; }
+    .criteria-other-tag { background: #f6b352; border-radius: 999px; color: #4a2f05; display: block; font-size: 9px; font-weight: 800; letter-spacing: .03em; margin-top: 2px; padding: 1px 6px; text-transform: uppercase; width: fit-content; }
     .exposure-performance-label.metric-muted,
     .exposure-performance-cell.metric-muted,
     .exposure-performance-weight-cell.metric-muted,
@@ -597,8 +630,11 @@
     .exposure-performance-cell.metric-muted .exposure-performance-fill,
     .exposure-performance-cell.metric-muted .exposure-performance-value-marker { opacity: .18; }
     .exposure-performance-cell.metric-muted,
-    .exposure-performance-cell.metric-muted.metric-highlight-user,
-    .exposure-performance-cell.metric-muted.metric-highlight-other { background: transparent; }
+    .exposure-performance-cell.metric-muted.metric-highlight-user { background: transparent; }
+    /* A criterion the models barely differ on is still the other side's core
+       concern, so the band stays -- just softened to match the muted row. */
+    .exposure-performance-cell.metric-muted.metric-highlight-other,
+    .exposure-performance-label.metric-muted.metric-highlight-other { background: #fdf7ee; }
     
     .exposure-performance-label { align-items: center; color: #333; display: flex; font-family: Arial, Helvetica, sans-serif; font-size: 14px; font-weight: 500; justify-content: flex-end; line-height: 1.05; min-height: 32px; padding: 0 8px; text-align: right; }
     body.condition-exposure .exposure-performance-label,
@@ -646,6 +682,21 @@
     .exposure-performance-fill.same { background: #8f8f8f; }
     .exposure-performance-value-marker { background: #000; bottom: -2px; display: block; position: absolute; top: -3px; transform: translateX(-50%); width: 3px; z-index: 3; }
     .exposure-performance-compare { display: grid; gap: 1px; justify-content: start; min-width: 0; }
+    /* Distribution variant of the performance cell: one dot per model in the
+       group, on a 0-100% axis, with the group mean and the all-model baseline. */
+    .exposure-performance-cell.distribution { min-height: 40px; }
+    .exposure-performance-cell.distribution .exposure-performance-bar { grid-template-columns: 140px 56px; }
+    .exposure-performance-swarm { background: linear-gradient(#f2f4f7, #f2f4f7) no-repeat center/100% 1px; height: 26px; position: relative; width: 100%; }
+    .exposure-performance-dot { border-radius: 50%; height: 5px; margin-left: -2.5px; opacity: .45; pointer-events: none; position: absolute; top: 50%; transform: translateY(-50%); width: 5px; }
+    .exposure-performance-dot.better { background: #4e9c2c; }
+    .exposure-performance-dot.worse { background: #d32b2b; }
+    .exposure-performance-dot.same { background: #7a8794; }
+    .exposure-performance-mean { background: #111; height: 20px; margin-left: -1px; position: absolute; top: 50%; transform: translateY(-50%); width: 2px; z-index: 4; }
+    /* Baseline is a hollow tick so it never reads as one of the models. */
+    .exposure-performance-baseline-tick { border-left: 2px dashed #6b7683; height: 24px; margin-left: -1px; position: absolute; top: 50%; transform: translateY(-50%); z-index: 3; }
+    .exposure-performance-cell.distribution.metric-muted .exposure-performance-dot,
+    .exposure-performance-cell.distribution.metric-muted .exposure-performance-mean,
+    .exposure-performance-cell.distribution.metric-muted .exposure-performance-baseline-tick { opacity: .18; }
     .exposure-performance-delta { color: #777; display: block; font-family: Arial, Helvetica, sans-serif; font-size: 13px; font-variant-numeric: tabular-nums; font-weight: 800; line-height: 1; text-align: left; }
     .exposure-performance-arrow { display: inline-block; font-size: 11px; line-height: .8; vertical-align: 1px; }
     .exposure-performance-delta.better { color: #5fa53f; }
@@ -774,9 +825,9 @@
     body.condition-multioptimal .negotiation-panel { display: none; }
     .multi-optimal-group { align-items: center; display: grid; gap: 2px; justify-items: center; min-height: 58px; position: relative; }
     .multi-optimal-role { align-items: center; color: #111; column-gap: 6px; display: flex; font-size: 14px; font-weight: 900; justify-content: center; row-gap: 3px; }
-    .multi-optimal-model-line { align-items: center; display: flex; flex-wrap: wrap; font-size: 15px; font-weight: 900; justify-content: center; column-gap: 6px; row-gap: 4px; justify-self: center; line-height: 1.15; position: relative; width: max-content; }
+    .multi-optimal-model-line { align-items: center; display: flex; flex-wrap: wrap; font-size: 14px; font-weight: 900; justify-content: center; column-gap: 6px; row-gap: 4px; justify-self: center; line-height: 1.15; position: relative; width: max-content; }
     .multi-optimal-model-line > span:first-child { display: block; white-space: nowrap; }
-    .negotiate-v2-model-version-select { appearance: auto; background: #eef3f8; border: 1px solid #c7d7e4; border-radius: 999px; color: #2d4356; cursor: pointer; font-size: 12px; font-weight: 800; max-width: 88px; padding: 0 2px; }
+    .negotiate-v2-model-version-select { appearance: auto; background: #eef3f8; border: 1px solid #c7d7e4; border-radius: 999px; color: #2d4356; cursor: pointer; font-size: 12px; font-weight: 800; width: 40px; height:20px; padding: 0 2px; }
     .negotiate-v2-model-version-select:hover { border-color: #8fb0c7; }
     .multi-optimal-detail-wrap { margin-left: 0; position: relative; }
     /* Model #id is itself the hover trigger for the SHAP popover, styled as a link */
@@ -996,7 +1047,7 @@
     .contributor { color: var(--muted); font-size: 12px; line-height: 1.35; margin-top: 10px; }
     .consensus-hint { border: 1.5px solid var(--line); border-left: 4px solid var(--green); border-radius: 16px; background: rgba(255, 253, 249, .64); margin-top: 12px; padding: 12px 14px; }
     .final-decision-panel { display: grid; gap: 10px; margin-top: 0; padding: 14px; }
-    .final-decision-status-banner { border: 1.5px solid #d8cfbf; border-left: 5px solid var(--green); border-radius: 8px; color: var(--ink); font-size: 12px; font-weight: 750; line-height: 1.25; padding: 7px 9px; }
+    .final-decision-status-banner { border: 1.5px solid #d8cfbf; border-left: 5px solid var(--green); border-radius: 8px; color: var(--ink); font-size: 14px; font-weight: 750; line-height: 1.25; padding: 7px 9px; }
     .final-decision-status-banner.conflict { border-left-color: var(--red); }
     .final-decision-status-banner strong { font-weight: 950; }
     .final-decision-header { align-items: center; display: flex; gap: 10px; justify-content: space-between; }
@@ -1048,6 +1099,10 @@
   </style>
 </head>
 <body>
+  <div class="condition-switcher" id="conditionSwitcher">
+    <label for="conditionSelect">Condition</label>
+    <select id="conditionSelect"></select>
+  </div>
   <main>
     <!-- <h1>Negotiated Rashomon Reconciliation</h1> -->
     <section class="toolbar hidden" id="topToolbar">
@@ -1208,16 +1263,16 @@
     </section>
   </main>
 
-  <script src="js/config-state.js?v=20260725-nv2-model-negotiation"></script>
-  <script src="js/utils-salience.js?v=20260725-nv2-model-negotiation"></script>
-  <script src="js/case-features.js?v=20260725-nv2-model-negotiation"></script>
-  <script src="js/persona-persistence.js?v=20260725-nv2-model-negotiation"></script>
-  <script src="js/profiles-stakes.js?v=20260725-nv2-model-negotiation"></script>
-  <script src="js/elicitation.js?v=20260725-nv2-model-negotiation"></script>
-  <script src="js/negotiation-ui.js?v=20260725-nv2-model-negotiation"></script>
-  <script src="js/summary-guards.js?v=20260725-nv2-model-negotiation"></script>
-  <script src="js/negotiation-engine.js?v=20260725-nv2-model-negotiation"></script>
-  <script src="js/chat-decision.js?v=20260725-nv2-model-negotiation"></script>
-  <script src="js/main.js?v=20260725-nv2-model-negotiation"></script>
+  <script src="js/config-state.js?v=20260726-nv2-plain-language"></script>
+  <script src="js/utils-salience.js?v=20260726-nv2-plain-language"></script>
+  <script src="js/case-features.js?v=20260726-nv2-plain-language"></script>
+  <script src="js/persona-persistence.js?v=20260726-nv2-plain-language"></script>
+  <script src="js/profiles-stakes.js?v=20260726-nv2-plain-language"></script>
+  <script src="js/elicitation.js?v=20260726-nv2-plain-language"></script>
+  <script src="js/negotiation-ui.js?v=20260726-nv2-plain-language"></script>
+  <script src="js/summary-guards.js?v=20260726-nv2-plain-language"></script>
+  <script src="js/negotiation-engine.js?v=20260726-nv2-plain-language"></script>
+  <script src="js/chat-decision.js?v=20260726-nv2-plain-language"></script>
+  <script src="js/main.js?v=20260726-nv2-plain-language"></script>
 </body>
 </html>

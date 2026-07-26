@@ -47,12 +47,21 @@
       return proxyPersona;
     }
 
+    // The criterion the other stakeholder cares most about. Every
+    // multi-stakeholder condition highlights this one, and the reconcile banner
+    // names it in prose, so both read it from here rather than deriving it
+    // separately and risking two different answers on screen at once.
+    function otherStakeholderTopCriterion() {
+      const other = proxyPersona || ensureDifferentProxyPersona();
+      return window.primaryCriterionKeyForPersona?.(other)
+        || topMetricKeyForWeights(other?.weights || proxyWeights || {});
+    }
+
     function informedExposureOptions() {
       ensureDifferentProxyPersona();
       const userKey = rankedCriteria[0] || criteriaOrder[0];
-      const otherKey = topMetricKeyForWeights(proxyPersona?.weights || {});
       return {
-        highlight: { userKey, otherKey },
+        highlight: { userKey, otherKey: otherStakeholderTopCriterion() },
       };
     }
 
@@ -98,9 +107,13 @@
                 { role: "other", roleLabel: "Other-party optimal", model: selectedSingleOptimalModel(otherWeights) },
               ];
             })();
+        // multioptimal, aggregate and negotiatev2 all put a second stakeholder
+        // on screen, so they get the same "what the other side cares about"
+        // highlight that informed has.
+        const multiHighlight = { highlight: { otherKey: otherStakeholderTopCriterion() } };
         const multiOptions = isNegotiateV2Condition()
-          ? { versionTag: true, versionsByRole: negotiateV2VersionsByRole(), versionIndexByRole: negotiateV2VersionIndexByRole() }
-          : {};
+          ? { ...multiHighlight, versionTag: true, versionsByRole: negotiateV2VersionsByRole(), versionIndexByRole: negotiateV2VersionIndexByRole() }
+          : multiHighlight;
         return renderMultiOptimalCaseFeaturePattern(dataset, activeData.case.features, activeData.shap_patterns, activeData.label_names, activeData.models, selectedItems, multiOptions);
       }
       if (studyCondition() === "exposure") {
@@ -205,6 +218,34 @@
         }
       });
     }
+    function renderConditionSwitcher() {
+      if (!conditionSelect) return;
+      const optionHtml = (option) =>
+        `<option value="${escapeHtml(option.key)}" ${option.key === activeStudyCondition ? "selected" : ""}>${escapeHtml(option.label)}</option>`;
+      const groups = STUDY_CONDITION_GROUPS.map((group) =>
+        `<optgroup label="${escapeHtml(group.label)}">${group.options.map(optionHtml).join("")}</optgroup>`
+      );
+      // A condition reached by URL but not offered here still has to be shown,
+      // otherwise the switcher would silently mislabel the page it is on.
+      if (!STUDY_CONDITION_OPTIONS.some((option) => option.key === activeStudyCondition)) {
+        groups.push(`<optgroup label="Legacy">${optionHtml({ key: activeStudyCondition, label: `${activeStudyCondition} (legacy)` })}</optgroup>`);
+      }
+      conditionSelect.innerHTML = groups.join("");
+      conditionSelect.addEventListener("change", () => {
+        if (conditionSelect.value === activeStudyCondition) return;
+        // The condition is read once at load: it sets a body class, the proxy
+        // persona, the composer and the per-condition state. Re-rendering in
+        // place would leave half of that stale, so switch by reloading.
+        // Keep stage, dataset, case and persona. The elicitation is stored in
+        // sessionStorage under a key that has no condition in it, so it
+        // survives the reload and stage 3 lands back on reconcile.
+        const params = new URLSearchParams(window.location.search);
+        params.set("condition", conditionSelect.value);
+        window.location.search = params.toString();
+      });
+    }
+    renderConditionSwitcher();
+
     if (datasetSelect) {
       datasetSelect.addEventListener("change", () => {
         replaceUrlParams({ dataset: datasetSelect.value, case: null, stage: "1" });
