@@ -1211,7 +1211,8 @@
           + (sameClass
             ? "They already point to the same decision, so you only need to agree on which model to stand behind."
             : "They point to opposite decisions.")
-          + `<br><br>Say what the other model costs you, name a criterion you can afford to give ground on, and the system will find the model that pays them back the most for it. You each get up to ${NV2_MAX_VERSION} offers.`,
+          + `<br><br>Say what the other model costs you, name a criterion you can afford to give ground on, and the system will find the model that pays them back the most for it. `
+          + `You do not have to move first: "Let them open" hands the first offer to the ${escapeHtml(otherRole)} and costs you nothing. You get up to ${NV2_MAX_VERSION} offers.`,
         null
       );
     }
@@ -1360,7 +1361,7 @@
       const opening = track[0]?.model;
       const current = track[track.length - 1]?.model;
       if (!opening || !current) return null;
-      const rounds = track.filter((entry) => entry.act === "counter" || entry.act === "offer").length;
+      const rounds = track.filter((entry) => ["counter", "offer", "open_offer"].includes(entry.act)).length;
       const key = topMetricKeyForWeights(nv2.weights[side]);
       const from = nv2MetricValue(opening, key);
       const to = nv2MetricValue(current, key);
@@ -1378,9 +1379,12 @@
     // The Other-party payload is deliberately weight-free: the LLM sees
     // criteria values, an ordinal priority list, and the move that was already
     // decided for it. It verbalizes; it never chooses.
-    function nv2BuildPayload({ versionIndex, incomingModel, decision, move, previousModel, theirPreviousModel = null, theyHeld = false }) {
+    function nv2BuildPayload({ versionIndex, incomingModel, decision, move, previousModel, theirPreviousModel = null, theyHeld = false, opening = false }) {
       const offered = decision.accept ? incomingModel : move?.model;
-      const concession = decision.accept ? null : nv2ConcessionDetail("other", offered, previousModel, move.giveKey);
+      // An opening concedes nothing — there is no offer to concede against. The
+      // ground it gives up against the Other-party's own ideal is real, but it
+      // belongs to the gain-frame act (payback), not to reciprocation.
+      const concession = decision.accept || opening ? null : nv2ConcessionDetail("other", offered, previousModel, move.giveKey);
       const payback = decision.accept ? null : nv2PaybackFor("other", offered, previousModel);
       const complaint = decision.accept ? null : move.complaint;
       const theirMove = nv2TheirLastMove("other", theirPreviousModel, incomingModel);
@@ -1407,8 +1411,10 @@
         // Whether the other side actually moved this turn. Without this the
         // model sees an ordinary counter situation, finds past concessions in
         // the history, and credits them to a turn where nothing was conceded.
-        their_move: theyHeld ? "hold" : "offer",
-        my_response: decision.accept ? "accept" : (move?.stonewalled ? "hold" : "counter"),
+        // "opening" is the third case: they have not offered anything at all
+        // yet, which is not the same as standing still.
+        their_move: opening ? "opening" : theyHeld ? "hold" : "offer",
+        my_response: opening ? "open" : decision.accept ? "accept" : (move?.stonewalled ? "hold" : "counter"),
         decision_reason: decision.reason,
         counter_offer: decision.accept ? null : nv2ModelPayload(offered),
         // Every magnitude below is a phrase, never a value. The LLM cannot
@@ -1584,6 +1590,29 @@
       return parts.join(" ");
     }
 
+    // An opening is not a counter: there is nothing to acknowledge, nothing to
+    // reciprocate and no gap in an offer that has not been made. What it does
+    // have is a position, a reason for it, and — if the Other-party started
+    // below its own ideal — an opening concession worth pointing at.
+    function nv2OtherOpeningText(move, previousModel) {
+      const complaint = move.complaint && move.complaint.gap > 0.001 ? move.complaint : null;
+      const payback = nv2PaybackFor("other", move.model, previousModel);
+      const contrast = nv2PriorityContrast("other");
+      const parts = [];
+      parts.push(`Let me put the first model on the table so you can see where my side stands.`);
+      if (complaint) {
+        parts.push(`What I have to answer for in this case is ${escapeHtml(complaint.label)}, and the model you would pick on your own leaves it ${nv2Shortfall(complaint.gap)} what I can sign off on.`);
+      }
+      parts.push(`So I am opening with model ${nv2ModelTag(move.model)}, predicting ${escapeHtml(nv2PredictionLabel(move.model))}.`);
+      if (payback && payback.gain > 0.001) {
+        parts.push(`I have not gone straight to my own best case either — against that, this one already gives you ${escapeHtml(payback.label)} up ${nv2Amount(payback.gain)}.`);
+      }
+      parts.push(contrast
+        ? `We rank these differently — you weigh ${escapeHtml(contrast.they_value_more)} above ${escapeHtml(contrast.i_value_more)} and I weigh it the other way — so tell me what this costs you and where you can give ground, and there should be a trade in it for both of us.`
+        : `Tell me what this costs you and where you can give ground, and I will see what I can move.`);
+      return parts.join(" ");
+    }
+
     function nv2Settle(model, version, how) {
       nv2.status = "agreed";
       nv2.agreed = { model, version, how };
@@ -1598,7 +1627,7 @@
       addHistory(
         "system",
         "No rounds left",
-        `You each used your ${NV2_MAX_VERSION} offers without converging.`
+        `You used all ${NV2_MAX_VERSION} of your offers without converging.`
           + (nv2.pending ? ` The Other-party's last model ${nv2ModelTag(nv2.pending.model)} is still on the table — take it or leave it.` : "")
           + " Otherwise both final positions stay side by side and the final decision is yours.",
         null
@@ -1619,6 +1648,83 @@
         null
       );
       addHistory("system", "Agreement reached", `Both sides now stand behind model ${nv2ModelTag(pending.model)}.`, null);
+      nv2Rerender();
+    }
+
+    // Only before anything has been put on the table by either side. Once an
+    // offer exists, "who opens" is settled and the question stops being asked.
+    function nv2CanRequestOtherOpening() {
+      return Boolean(nv2)
+        && nv2.status === "open"
+        && !nv2.pending
+        && nv2Track("self").length === 1
+        && nv2Track("other").length === 1;
+    }
+
+    /* Hand the first move to the Other-party.
+
+       In an alternating-offers protocol the opener frames everything that
+       follows: they name the criterion in dispute and set the anchor the reply
+       has to argue against. Forcing Self to open makes the participant concede
+       first in every session, which is both a worse experience and a confound —
+       we cannot tell a concession made from conviction from one made because
+       somebody had to go first. So this is a third opening act alongside
+       offering and holding.
+
+       It costs Self none of its offers: rounds are counted off the Self track,
+       and this only adds to the Other-party's. The Other-party opens below its
+       own ideal for the same reason a real negotiator does — an opening that is
+       simply "my favourite model" gives the other side nothing to work with. */
+    async function nv2RequestOtherOpening() {
+      if (!nv2CanRequestOtherOpening() || negotiateV2Busy) return;
+      const versionIndex = nv2Track("other").length;
+      const selfAnchor = nv2Position("self")?.model;
+      const previousModel = nv2Position("other")?.model;
+
+      negotiateV2Busy = true;
+      addHistory(
+        "user",
+        "Self asks them to open",
+        `Before I put anything on the table, I want to hear where you stand and what this case looks like from your side.`,
+        null
+      );
+      nv2Rerender();
+      showProxyThinking();
+
+      // Same machinery as any other turn: the move is chosen here, the wording
+      // is chosen downstream. There is no acceptance branch — an opening has
+      // nothing to accept, and Self's own best model is not an offer.
+      const planned = nv2AutoMove("other", selfAnchor, versionIndex, null);
+      // An empty option set leaves the search with nothing to pick; opening on
+      // its own anchor is still a coherent opening, so resolve the model once
+      // and let the wording and the payload describe the same thing.
+      const move = { ...planned, model: planned.model || previousModel };
+      const offerModel = move.model;
+      const fallback = nv2OtherOpeningText(move, previousModel);
+      const payload = nv2BuildPayload({
+        versionIndex,
+        incomingModel: selfAnchor,
+        decision: { accept: false, reason: "opening" },
+        move,
+        previousModel,
+        theirPreviousModel: null,
+        opening: true,
+      });
+      const voiced = await nv2Verbalize(payload, fallback);
+      removeProxyThinking();
+      nv2.voiceLog = [...(nv2.voiceLog || []), { version: versionIndex, source: voiced.source, reason: voiced.reason || null }];
+
+      nv2PushPosition("other", {
+        version: versionIndex,
+        model: offerModel,
+        act: "open_offer",
+        demandKey: move.demandKey,
+        giveKey: move.giveKey,
+        voice: voiced.source,
+      });
+      nv2.pending = { from: "other", model: offerModel, version: versionIndex };
+      addHistory("proxy", `Other-party opening offer · v${versionIndex}`, `${voiced.text}${nv2VoiceTag(voiced)}`, null);
+      negotiateV2Busy = false;
       nv2Rerender();
     }
 
@@ -1685,22 +1791,27 @@
       // can be split by wording source without re-parsing the chat HTML.
       nv2.voiceLog = [...(nv2.voiceLog || []), { version: versionIndex, source: voiced.source, reason: voiced.reason || null }];
 
+      // Version numbers count a side's own positions, not the shared round.
+      // Without an opening the two tracks advance in lockstep and this is the
+      // round number; after one it is the round plus the opening, which is what
+      // the version dropdown has to show if it is not to list v1 twice.
+      const otherVersion = nv2Track("other").length;
       if (decision.accept) {
-        nv2PushPosition("other", { version: versionIndex, model: offerModel, act: "accept", voice: voiced.source });
+        nv2PushPosition("other", { version: otherVersion, model: offerModel, act: "accept", voice: voiced.source });
         nv2Settle(offerModel, versionIndex, decision.reason);
-        addHistory("proxy", `Other-party accepts · v${versionIndex}`, text, null);
+        addHistory("proxy", `Other-party accepts · v${otherVersion}`, text, null);
         addHistory("system", "Agreement reached", `Both sides now stand behind model ${nv2ModelTag(offerModel)} (${escapeHtml(nv2PredictionLabel(offerModel))}).`, null);
       } else {
         nv2PushPosition("other", {
-          version: versionIndex,
+          version: otherVersion,
           model: move.model,
           act: move.stonewalled ? "hold" : "counter",
           demandKey: move.demandKey,
           giveKey: move.giveKey,
           voice: voiced.source,
         });
-        nv2.pending = { from: "other", model: move.model, version: versionIndex };
-        addHistory("proxy", move.stonewalled ? `Other-party holds · v${versionIndex}` : `Other-party counter-offer · v${versionIndex}`, text, null);
+        nv2.pending = { from: "other", model: move.model, version: otherVersion };
+        addHistory("proxy", move.stonewalled ? `Other-party holds · v${otherVersion}` : `Other-party counter-offer · v${otherVersion}`, text, null);
         // One firm round is a signal, not a breakdown — a participant should be
         // able to hold once and still come back with an offer. Two rounds where
         // neither side moves is a real deadlock.
@@ -1791,11 +1902,13 @@
         payback && payback.gain > 0.001 ? { role: "They gain", issue: payback.label, value: `${fmtPct(payback.before)} → ${fmtPct(payback.after)}` } : null,
       ]);
 
+      const canRequestOpening = nv2CanRequestOtherOpening();
       const previewLine = !offerModel
         ? "No model in the option set fits this package."
         : preview.held
           ? `No model improves on your current position under this package — sending it restates model ${nv2ModelTag(offerModel)} and spends a round.`
-          : `Offer: model ${nv2ModelTag(offerModel)}, predicting <strong>${escapeHtml(nv2PredictionLabel(offerModel))}</strong>.`;
+          : `Offer: model ${nv2ModelTag(offerModel)}, predicting <strong>${escapeHtml(nv2PredictionLabel(offerModel))}</strong>.`
+            + (canRequestOpening ? ` You do not have to go first — you can let them open instead, which costs you none of your ${NV2_MAX_VERSION} offers.` : "");
 
       const pendingHtml = nv2.pending
         ? `<span class="negotiate-v2-pending">they hold ${nv2ModelTag(nv2.pending.model)} (${escapeHtml(nv2PredictionLabel(nv2.pending.model))})</span>`
@@ -1839,6 +1952,7 @@
             <div class="degree-summary"></div>
             <div class="composer-actions">
               ${nv2.pending ? `<button type="button" id="nv2AcceptButton" ${busy ? "disabled" : ""}>Accept their model</button>` : ""}
+              ${canRequestOpening ? `<button type="button" id="nv2OtherOpensButton" ${busy ? "disabled" : ""} title="Hand the first move to the Other-party. They put a model on the table and you answer it. This does not use up any of your own offers.">Let them open</button>` : ""}
               <button type="button" id="nv2HoldButton" ${busy ? "disabled" : ""} title="Restate your current model without conceding. This spends a round.">Hold firm</button>
               <button type="button" id="nv2SendButton" class="primary-button" ${busy || !offerModel ? "disabled" : ""}>${busy ? "Other-party is responding…" : "Send offer"}</button>
             </div>
@@ -1864,6 +1978,7 @@
       });
       document.getElementById("nv2SendButton")?.addEventListener("click", () => nv2SendSelfOffer());
       document.getElementById("nv2HoldButton")?.addEventListener("click", () => nv2SendSelfOffer({ hold: true }));
+      document.getElementById("nv2OtherOpensButton")?.addEventListener("click", nv2RequestOtherOpening);
       document.getElementById("nv2AcceptButton")?.addEventListener("click", nv2AcceptPendingOffer);
     }
 

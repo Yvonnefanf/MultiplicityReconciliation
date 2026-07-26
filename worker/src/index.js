@@ -185,6 +185,7 @@ function modelNegotiationSystemPrompt() {
     "",
     "If their_move is \"hold\", the other side deliberately did NOT move: they kept the same model and conceded nothing. In that case act (1) ACKNOWLEDGE and act (6) GAIN-FRAME are forbidden — there is no concession to acknowledge and no trade to sweeten. Do not thank them, do not say you hear what it cost them, do not describe them as giving anything up. Say plainly that they held their position, hold yours in return, restate the limit and the reason for it, and invoke how_far_i_have_moved if you have already conceded. Leave the door open unless deadline_reached is true.",
     "If my_response is \"hold\", you are restating your existing model, not offering a new one. Never present it as a fresh concession or a new counter-offer.",
+    "If their_move is \"opening\" the other side has made no offer at all — they asked you to go first, and their_offer is simply the model they would pick unilaterally, not a proposal. You are opening the negotiation. Acts (1) ACKNOWLEDGE and (3) RECIPROCATE are forbidden: nobody has conceded anything to you and you are not answering a move. Open by saying you will go first, name from complaint what your role has to answer for in this case, put your model on the table, and close by inviting them to say what it costs them and where they can give ground. If payback is present you may note that you have not opened at your own ideal. Never thank them, never imply they moved, never call this a counter-offer.",
     "",
     "If how_far_i_have_moved shows you have already conceded across rounds, you may invoke it once to ask for reciprocity — state it as a fact, not a grievance.",
     "When accepting: acknowledge their movement, say which criterion it finally brought far enough, then give the honest reason you are accepting (no counter of yours would do better, or the deadline makes settling better than walking away).",
@@ -240,8 +241,8 @@ function buildModelNegotiationPrompt(payload) {
     models_on_the_table: Number(payload.option_count || 0),
     their_offer: sanitizeModelSnapshot(payload.incoming_offer),
     my_previous_position: sanitizeModelSnapshot(payload.my_previous_position),
-    their_move: payload.their_move === "hold" ? "hold" : "offer",
-    my_response: ["accept", "counter", "hold"].includes(payload.my_response) ? payload.my_response : "counter",
+    their_move: ["hold", "opening"].includes(payload.their_move) ? payload.their_move : "offer",
+    my_response: ["accept", "counter", "hold", "open"].includes(payload.my_response) ? payload.my_response : "counter",
     my_counter_offer: sanitizeModelSnapshot(payload.counter_offer),
     why: String(payload.decision_reason || "").slice(0, 60),
     // one field per speech act, so a null field simply drops that act
@@ -278,7 +279,7 @@ function buildModelNegotiationPrompt(payload) {
     "Check their_move before writing anything. If it is \"hold\" the other side stood still and conceded nothing this turn, so they_just_conceded is null and you must not invent a concession for them from the history or from earlier rounds.",
     "Skip act (4) unless what_i_must_keep.actually_at_risk is true — defending a limit nobody attacked sounds evasive.",
     "my_priority_order and their_priority_order are ordinal only — use them to decide what to emphasise, never quote them as numbers or weights.",
-    "why explains the accept/counter decision: no_better_counter means countering would not improve your position; deadline means rounds ran out; can_improve and below_reservation mean you are countering.",
+    "why explains the accept/counter decision: no_better_counter means countering would not improve your position; deadline means rounds ran out; can_improve and below_reservation mean you are countering; opening means you are making the first offer of the negotiation.",
     JSON.stringify(safePayload, null, 2)
   ].join("\n\n");
 }
