@@ -494,10 +494,14 @@
           valueScope: baselineModels ? "selected model subgroup/local score" : "this model subgroup score",
         };
         const mutedClass = performanceRowIsSimilar([stats]) ? "metric-muted" : "";
+        // Only one stakeholder is on screen here, but their top criterion still
+        // gets the same blue band and Self tag as in the multi conditions, so
+        // "this is the one you said matters most" reads the same throughout.
+        const highlightClass = exposureMetricHighlightClass(metric, options?.highlight || {});
         return `
           <div class="exposure-performance-row ${mutedClass}">
-            <div class="exposure-performance-label ${mutedClass}">${escapeHtml(metric.label)}</div>
-            ${renderPerformanceComparisonCell(stats, baselineLabel, mutedClass)}
+            <div class="exposure-performance-label ${mutedClass} ${highlightClass}">${criterionOwnerTags(metric, options?.highlight || {})}${escapeHtml(metric.label)}</div>
+            ${renderPerformanceComparisonCell(stats, baselineLabel, `${mutedClass} ${highlightClass}`)}
           </div>
         `;
       }).join("");
@@ -938,7 +942,7 @@
           </div>
         `;
       }).join("");
-      const performanceGridColumns = `180px repeat(${activeItems.length}, 150px)`;
+      const performanceGridColumns = `220px repeat(${activeItems.length}, 150px)`;
       const roleTagLabel = { self: "self", other: "other" };
       const versionTagHtml = (item) => {
         if (!options.versionTag) return "";

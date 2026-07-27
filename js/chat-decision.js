@@ -311,14 +311,15 @@
       ].join("\n");
     }
 
-    function renderAggregateRecommendationBanner() {
+    // Aggregate shows exactly the multi-optimal banner with this block appended
+    // after it, so the two conditions differ by the slider alone.
+    function aggregateRecommendationHtml() {
       const rec = aggregateRecommendation();
       const selfPct = Math.round(rec.selfShare * 100);
       const otherPct = 100 - selfPct;
       const highProbText = Number.isFinite(rec.highProb) ? fmtProb(rec.highProb) : "-";
       const tooltip = aggregateRecommendationTooltip(rec);
-      finalDecisionStatusBanner.classList.remove("hidden", "conflict");
-      finalDecisionStatusBanner.innerHTML = `
+      return `
         <div class="aggregate-rec" title="${escapeHtml(tooltip)}">
           <div class="aggregate-rec-row aggregate-slider-row">
             <span class="aggregate-side self">Self importance <strong>${selfPct}%</strong></span>
@@ -333,6 +334,9 @@
           </div>
         </div>
       `;
+    }
+
+    function wireAggregateRecommendationSlider() {
       const slider = finalDecisionStatusBanner.querySelector("#aggregateSelfSlider");
       if (slider) {
         const updateAggregateBannerInPlace = () => {
@@ -399,10 +403,6 @@
         finalDecisionStatusBanner.innerHTML = "";
         return;
       }
-      if (isAggregateCondition()) {
-        renderAggregateRecommendationBanner();
-        return;
-      }
       if (isNegotiateV2Condition()) {
         renderNegotiateV2StatusBanner();
         return;
@@ -417,16 +417,19 @@
       const otherLabel = activeData?.label_names?.[otherClassId] || otherWinner?.label || `Class ${otherClassId}`;
       const versionPrefix = versionLabel ? `${escapeHtml(versionLabel)}: ` : "";
       finalDecisionStatusBanner.classList.remove("hidden", "conflict");
+      const extraHtml = isAggregateCondition() ? aggregateRecommendationHtml() : "";
       if (selfWinner && otherWinner && selfClassId === otherClassId) {
-        finalDecisionStatusBanner.innerHTML = `Consensus reached: ${versionPrefix}both Self and Other-party identify <strong>${escapeHtml(selfLabel)}</strong> as the optimal prediction.`;
+        finalDecisionStatusBanner.innerHTML = `Consensus reached: ${versionPrefix}both Self and Other-party identify <strong>${escapeHtml(selfLabel)}</strong> as the optimal prediction.${extraHtml}`;
+        wireAggregateRecommendationSlider();
         return;
       }
       finalDecisionStatusBanner.classList.add("conflict");
       if (selfWinner && otherWinner) {
-        finalDecisionStatusBanner.innerHTML = `Warning: no consensus yet. ${versionPrefix}Self optimal prediction is <strong>${escapeHtml(selfLabel)}</strong>, while Other-party optimal prediction is <strong>${escapeHtml(otherLabel)}</strong>. Their optimal predictions still conflict, so continue negotiating criteria concessions.`;
+        finalDecisionStatusBanner.innerHTML = `Warning: no consensus yet. ${versionPrefix}Self optimal prediction is <strong>${escapeHtml(selfLabel)}</strong>, while Other-party optimal prediction is <strong>${escapeHtml(otherLabel)}</strong>. Their optimal predictions still conflict, so continue negotiating criteria concessions.${extraHtml}`;
       } else {
-        finalDecisionStatusBanner.innerHTML = `Warning: no consensus yet. ${versionPrefix}the optimal prediction cannot be computed for both sides.`;
+        finalDecisionStatusBanner.innerHTML = `Warning: no consensus yet. ${versionPrefix}the optimal prediction cannot be computed for both sides.${extraHtml}`;
       }
+      wireAggregateRecommendationSlider();
     }
     function renderFinalDecisionOptions() {
       renderFinalDecisionStatusBanner();
@@ -541,11 +544,7 @@
         const otherModel = selectedSingleOptimalModel(proxyWeights || proxyIdealWeights());
         const selfLabel = activeData?.label_names?.[selfModel?.pred_class] || `Class ${selfModel?.pred_class}`;
         const otherLabel = activeData?.label_names?.[otherModel?.pred_class] || `Class ${otherModel?.pred_class}`;
-        if (isAggregateCondition()) {
-          const rec = aggregateRecommendation();
-          decisionLabel.textContent = rec.label;
-          decisionReason.textContent = `The aggregate recommendation combines Self optimal model #${selfModel?.seed ?? "-"} and Other-party optimal model #${otherModel?.seed ?? "-"} using stakeholder importance and model reliability as aggregation weights.`;
-        } else if (selfModel && otherModel && Number(selfModel.pred_class) === Number(otherModel.pred_class)) {
+        if (selfModel && otherModel && Number(selfModel.pred_class) === Number(otherModel.pred_class)) {
           decisionLabel.textContent = selfLabel;
           decisionReason.textContent = `Self optimal model #${selfModel.seed} and Other-party optimal model #${otherModel.seed} both predict ${selfLabel}. Make the final decision after reviewing both model explanations.`;
         } else if (selfModel && otherModel) {

@@ -440,7 +440,7 @@
     body.condition-single .single-model-probability, body.condition-singleoptimal .single-model-probability { background: #fff; border: 2px solid #000; border-radius: 0; }
     body.condition-single .single-model-probability strong, body.condition-singleoptimal .single-model-probability strong { color: #1f559e; }
     body.condition-single .single-model-metric, body.condition-singleoptimal .single-model-metric { border-top: 2px solid #000; }
-    .single-explanation-diagram { --single-row-height: 30px; --single-heading-gap: 24px; --single-plot-border: 4px; align-items: start; background: #fff; display: grid; gap: 10px; grid-template-columns: 320px 180px 40px 200px 320px; min-width: 1560px; padding: 8px 0 18px; }
+    .single-explanation-diagram { --single-row-height: 30px; --single-heading-gap: 24px; --single-plot-border: 4px; align-items: start; background: #fff; display: grid; grid-template-columns: 320px 180px 40px 200px 320px; min-width: 1560px; padding: 8px 0 18px; }
     /* Single / single-optimal: input case, prediction and performance are three
        columns of ONE grid, so the panel headings share a row, the
        Attribute/Value and Criteria/Score heads share the next, and the body rows
@@ -605,7 +605,7 @@
     .exposure-detail-wrap { display: inline-flex; margin-left: 8px; position: relative; vertical-align: middle; }
     .exposure-detail-button { align-items: center; background: #416ab4; border: 2px solid #1e3769; border-radius: 50%; color: #fff; display: inline-flex; font-family: Arial, Helvetica, sans-serif; font-size: 13px; font-weight: 900; height: 24px; justify-content: center; line-height: 1; padding: 0; width: 24px; }
     .exposure-detail-button:hover, .exposure-detail-button:focus-visible { background: #416ab4; border-color: #1e3769; color: #fff; outline: none; }
-    .exposure-performance-help { align-items: center; border: 1.5px solid #aaa; border-radius: 50%; color: #777; cursor: help; display: inline-flex; font-family: Arial, Helvetica, sans-serif; font-size: 11px; font-style: normal; font-weight: 900; height: 17px; justify-content: center; line-height: 1; margin-left: 6px; position: relative; vertical-align: 2px; width: 17px; }
+    .exposure-performance-help { align-items: center; border: 1.5px solid #aaa; border-radius: 50%; color: #777; cursor: help; display: inline-flex; font-family: Arial, Helvetica, sans-serif; font-size: 11px; font-style: normal; font-weight: 900; height: 17px; justify-content: center; line-height: 1; margin-left: 6px; position: relative; vertical-align: 2px; width: 17px; top:-90px;}
     .exposure-performance-help:hover, .exposure-performance-help:focus-visible { border-color: #555; color: #333; outline: none; }
     .exposure-performance-help-text { background: #fff; border: 1.5px solid #cfcfcf; box-shadow: 0 12px 28px rgba(0, 0, 0, .14); color: #555; display: none; font-size: 12px; font-weight: 650; left: 50%; line-height: 1.3; min-width: 330px; padding: 8px 10px; position: absolute; text-align: left; top: calc(100% + 8px); transform: translateX(-10%); width: 360px; z-index: 130; }
     .exposure-performance-help:hover .exposure-performance-help-text, .exposure-performance-help:focus-within .exposure-performance-help-text { display: block; }
@@ -627,13 +627,18 @@
     .exposure-explanation-diagram .exposure-performance-heading { position: static; width: auto; }
     .exposure-performance-subgroup { color: #111; font-family: Arial, Helvetica, sans-serif; font-size: inherit; font-style: italic; font-weight: 900; line-height: inherit; margin-bottom: 0; }
     .exposure-performance-table { align-items: center; display: grid; gap: 8px 18px; grid-template-columns: 320px 240px 240px; }
-    .exposure-explanation-diagram .exposure-performance-table { background: #fff; gap: 0px 18px; padding: 8px 0 0; }
+    .exposure-explanation-diagram .exposure-performance-table { background: #fff; gap: 0px; padding: 8px 0 0; }
     .single-performance-note { margin-left: 0; }
     .informed-reminder { color: #333; display: grid; gap: 3px; font-family: Arial, Helvetica, sans-serif; font-size: 13px; font-weight: 700; line-height: 1.25; margin: -1px 0 4px; }
     .informed-reminder-user { background: #e8f3ff; border-left: 4px solid #7cb8f2; padding: 4px 7px; }
     .informed-reminder-other { background: var(--proxy-bg); border-left: 4px solid var(--proxy); padding: 4px 7px; }
     .exposure-performance-row { display: contents; }
-    .exposure-performance-label.metric-highlight-user { border-radius: 0; }
+    /* The participant's own top criterion, banded across the whole row in the
+       blue their side carries everywhere else. Same treatment as the other
+       side's band below, so the two read as one pair of markers. */
+    .exposure-performance-label.metric-highlight-user,
+    .exposure-performance-cell.metric-highlight-user { background: #e8f3ff; }
+    .exposure-performance-label.metric-highlight-user { border-radius: 0; box-shadow: inset 3px 0 0 #245fba; }
     /* The other stakeholder's top criterion, banded across the whole row in
        every multi-stakeholder condition. The band has to survive the muted
        styling below, which is why it is restated there. */
@@ -649,10 +654,11 @@
     .exposure-performance-label.metric-muted,
     .exposure-performance-cell.metric-muted,
     .exposure-performance-weight-cell.metric-muted { color: #dedede !important; font-weight: 700; text-decoration: none; }
-    .exposure-performance-cell.metric-muted,
-    .exposure-performance-cell.metric-muted.metric-highlight-user { background: transparent; }
-    /* A criterion the models barely differ on is still the other side's core
+    .exposure-performance-cell.metric-muted { background: transparent; }
+    /* A criterion the models barely differ on is still that side's core
        concern, so the band stays -- just softened to match the muted row. */
+    .exposure-performance-cell.metric-muted.metric-highlight-user,
+    .exposure-performance-label.metric-muted.metric-highlight-user { background: #eef6fd; }
     .exposure-performance-cell.metric-muted.metric-highlight-other,
     .exposure-performance-label.metric-muted.metric-highlight-other { background: #fdf7ee; }
     
@@ -821,8 +827,8 @@
        grid whose columns are [caption][criteria labels][one per model], so the
        case box and brace stay centred over the model columns and the caption
        sits beside the table. Column widths come from the inline template. */
-    .multi-optimal-diagram { align-items: start; column-gap: 18px; justify-content: center; min-width: 0; row-gap: 10px; }
-    .multi-optimal-case-box { border: 2.5px solid #4a4a4a; justify-self: center; padding: 4px 26px 16px; width: max-content; }
+    .multi-optimal-diagram { align-items: start; justify-content: center; min-width: 0; row-gap: 10px; }
+    .multi-optimal-case-box { border: 1px solid rgb(133, 133, 133); justify-self: center; width: max-content; }
     .multi-optimal-case-list { justify-self: center; }
     .multi-optimal-brace { height: 40px; line-height: 0; width: 100%; }
     .multi-optimal-brace svg { height: 100%; width: 100%; }
@@ -852,29 +858,10 @@
     .multi-optimal-popover-ai .single-ai-box { font-size: 15px; min-width: 130px; padding: 14px 16px; }
     .multi-optimal-summary { display: grid; gap: 16px; grid-template-columns: repeat(2, minmax(0, 1fr)); }
 
-    body.condition-aggregate { background: #fff; }
-    body.condition-aggregate main { width: min(1580px, calc(100vw - 60px)); }
-    body.condition-aggregate.reconcile-mode { background: #fff; }
-    body.condition-aggregate .reconciliation-shell { color: #000; }
-    body.condition-aggregate .grid { grid-template-columns: minmax(0, 1fr); }
-    body.condition-aggregate .negotiation-panel { display: none; }
-    body.condition-aggregate .left-stack { gap: 18px; grid-template-rows: auto auto; }
-    body.condition-aggregate .panel,
-    body.condition-aggregate .case-prediction-panel,
-    body.condition-aggregate .final-decision-panel { background: #fff; border-radius: 0; box-shadow: none; }
-    body.condition-aggregate .case-prediction-panel { border: 0; padding: 0; }
-    body.condition-aggregate .case-section { border-bottom: 0; overflow: visible; padding: 8px 0 10px; }
-    body.condition-aggregate .prediction-section { display: none; }
-    body.condition-aggregate .features { overflow-x: auto; overflow-y: visible; }
-    body.condition-aggregate .features:has(.exposure-detail-wrap:hover),
-    body.condition-aggregate .features:has(.exposure-detail-wrap:focus-within),
-    body.condition-aggregate .features:has(.exposure-performance-help:hover),
-    body.condition-aggregate .features:has(.exposure-performance-help:focus-within) { overflow: visible; position: relative; z-index: 60; }
-    body.condition-aggregate .final-decision-header h2 { color: #000; font-size: 22px; font-weight: 900; }
-    body.condition-aggregate .final-decision-option { background: #fff; border: 2px solid #000; border-radius: 0; color: #000; min-height: 42px; }
-    body.condition-aggregate .final-decision-option:has(input:checked) { background: #fff; color: #000; outline: 3px solid #000; }
-    body.condition-aggregate .final-decision-next { background: #000; border-color: #000; border-radius: 0; color: #fff; }
-    .aggregate-rec { display: grid; gap: 9px; }
+    /* No body.condition-aggregate layout rules: the body carries
+       condition-multioptimal as well, so aggregate inherits that condition's
+       styling in full. What follows is the importance slider it adds. */
+    .aggregate-rec { border-top: 1.5px solid #d8d8d8; display: grid; gap: 9px; margin-top: 10px; padding-top: 10px; }
     .aggregate-rec-row { align-items: center; display: grid; gap: 10px; }
     .aggregate-slider-row { grid-template-columns: minmax(150px, auto) minmax(220px, 1fr) minmax(150px, auto); }
     .aggregate-side { color: #333; font-size: 13px; font-weight: 850; white-space: nowrap; }
@@ -911,12 +898,15 @@
     .nv2-voice.fallback { background: #f3f0e8; border: 1px solid #d6c9a8; color: #7a6224; }
     .negotiate-v2-composer .response-package { margin-top: 7px; }
     .multi-optimal-version-note { color: #555; font-size: 12px; font-weight: 850; margin: 0 0 8px; text-align: center; }
-    .composer { background: transparent; border: 0; display: grid; flex: 0 0 auto; justify-items: end; margin-top: auto; padding: 0; }
+    /* The composer reads as a single input surface rather than a chat bubble
+       from the participant: one quiet white card, the prose it holds set at
+       reading size, and every control on the bottom row reduced to a pill or a
+       circle so the row scans as a toolbar under the text. */
+    .composer { background: transparent; border: 0; display: grid; flex: 0 0 auto; justify-items: stretch; margin-top: auto; padding: 0; }
     .composer.locked { background: transparent; }
-    .composer-bubble { background: #eaf1f6; border: 1.5px solid #c7d7e4; border-radius: 16px 16px 6px 16px; box-shadow: 0 8px 18px rgba(45, 39, 31, .08); max-width: 100%; padding: 7px; position: relative; width: min(100%, 720px); }
-    .composer-bubble::after { border-left: 9px solid #c7d7e4; border-top: 9px solid transparent; bottom: 8px; content: ""; position: absolute; right: -9px; }
-    .composer.locked .composer-bubble { background: #eef3f7; border-color: #d4e0ea; }
-    .composer-title { align-items: center; color: var(--muted); display: inline; font-size: 11px; font-weight: 850; gap: 7px; justify-content: space-between; letter-spacing: 0; margin-bottom: 5px; text-transform: none; }
+    .composer-bubble { background: #fff; border: 1px solid #e4e2dd; border-radius: 18px; box-shadow: none; max-width: 100%; padding: 16px 18px 12px; position: relative; width: 100%; }
+    .composer.locked .composer-bubble { background: #faf9f7; border-color: #e8e6e1; }
+    .composer-title { align-items: center; color: #1c1b19; display: flex; font-size: 15px; font-weight: 650; gap: 8px; justify-content: space-between; letter-spacing: 0; line-height: 1.45; margin-bottom: 8px; text-transform: none; }
     .composer-speaker { align-items: center; display: inline-flex; gap: 7px; }
     .composer-avatar { align-items: center; background: var(--blue); border-radius: 999px; color: #fff; display: inline-flex; font-size: 9px; font-weight: 900; height: 20px; justify-content: center; width: 20px; }
     .composer-send-row { align-items: center; display: flex; gap: 8px; justify-content: space-between; margin-top: 6px; }
@@ -980,6 +970,50 @@
     .response-preview strong { color: var(--ink); font-size: 10px; }
     .composer-bubble .composer-send-row { align-items: center; margin-top: 5px; }
     .composer-bubble .degree-summary { font-size: 10px; line-height: 1.15; }
+
+    /* --- Composer surface, restyled ------------------------------------- *
+       Everything below only changes how the composer looks; the markup it
+       styles is unchanged. Prose sits at reading size at the top, and the
+       controls collapse into one toolbar row: pills for anything with a label,
+       circles for anything that is only an icon, and one filled dark button as
+       the single send affordance. */
+    .composer-bubble .foresight-prompt { color: #57544e; display: block; font-size: 13px; font-weight: 600; line-height: 1.45; margin: 0 0 10px; }
+    .composer-bubble .response-preview,
+    .negotiate-v2-composer .response-preview { background: transparent; border: 0; border-radius: 0; color: #1c1b19; font-size: 16px; font-weight: 500; line-height: 1.5; margin: 0 0 12px; padding: 0; }
+    .composer-bubble .response-preview strong { color: #1c1b19; font-size: inherit; font-weight: 750; }
+    /* Model tags and the pending-offer marker are the composer's inline
+       mentions, so they carry the accent colour rather than a boxed chip. */
+    .composer-bubble .negotiate-v2-pending { background: #e4f4f1; border: 1px solid #c7e7e1; color: #15706a; font-size: 11px; font-weight: 750; letter-spacing: .01em; padding: 2px 9px; }
+
+    /* The three package selects: label above, pill below, in a quiet grey. */
+    .composer-bubble .response-config { align-items: end; gap: 10px; margin-bottom: 12px; }
+    .composer-bubble .response-field { gap: 4px; }
+    .composer-bubble .response-field label { color: #86827a; font-size: 11px; font-weight: 700; letter-spacing: .01em; }
+    .composer-bubble .response-field select { background: #fff; border: 1px solid #e4e2dd; border-radius: 999px; color: #33312d; font-size: 12px; font-weight: 650; min-height: 34px; padding: 4px 12px; }
+    .composer-bubble .response-field select:focus-visible { border-color: #b9b5ac; outline: 0; }
+    .composer-bubble .response-field select:disabled { background: #f7f6f3; color: #a8a49c; }
+
+    /* Toolbar row. The summary column keeps the buttons pushed right, exactly
+       as before -- it just no longer competes with them for attention. */
+    .composer-bubble .composer-send-row { border-top: 1px solid #f0eeea; gap: 10px; margin-top: 0; padding-top: 10px; }
+    .composer-bubble .degree-summary { color: #8b877f; font-size: 11px; line-height: 1.3; }
+    .composer-bubble .composer-actions { align-items: center; flex-wrap: nowrap; gap: 8px; }
+    .composer-bubble .composer-actions button { background: #fff; border: 1px solid #e4e2dd; border-radius: 999px; color: #4a4740; font-size: 12px; font-weight: 700; min-height: 36px; padding: 6px 15px; white-space: nowrap; }
+    .composer-bubble .composer-actions button:hover:not(:disabled) { background: #faf9f7; border-color: #cfcbc2; color: #1c1b19; }
+    .composer-bubble .composer-actions button:disabled { color: #b5b1a9; cursor: not-allowed; }
+    /* Send is the one thing on the row that is not optional, so it is the one
+       filled shape -- same dark circle-weight as the reference, kept as a pill
+       because the button carries a text label. */
+    .composer-bubble .composer-actions .primary-button,
+    .composer-bubble .composer-actions .primary-button:hover:not(:disabled) { background: #171614; border-color: #171614; color: #fff; font-size: 12px; min-height: 36px; padding: 6px 18px; }
+    .composer-bubble .composer-actions .primary-button:disabled { background: #d9d6d0; border-color: #d9d6d0; color: #fbfaf8; }
+
+    /* Icon-only affordance ("…"), drawn as one of the round toolbar buttons. */
+    .composer-bubble .composer-help,
+    .composer-help.nv2-details { background: #fff; border: 1px solid #e4e2dd; border-radius: 50%; color: #6f6b64; height: 30px; width: 30px; }
+    .composer-help.nv2-details { font-size: 14px; height: 30px; letter-spacing: 0; padding-bottom: 6px; width: 30px; }
+    .composer-bubble .composer-help:hover { background: #faf9f7; border-color: #cfcbc2; color: #1c1b19; }
+    .composer-bubble .composer-help-text { background: #fff; border: 1px solid #e4e2dd; border-radius: 14px; box-shadow: 0 14px 34px rgba(28, 27, 25, .12); color: #33312d; font-weight: 600; padding: 12px 14px; }
     @media (max-width: 900px) { .response-act-grid, .opening-act-grid, .response-config, .response-package { grid-template-columns: 1fr; } .response-package-row { grid-template-columns: 64px minmax(0, 1fr); } .response-package-value { grid-column: 2; text-align: left; } }
     @media (max-width: 900px) { .foresight-card { grid-template-columns: 1fr; } .foresight-offer { text-align: left; } }
     .reliability-cell strong { color: var(--green); font-size: 18px; }
@@ -1264,7 +1298,7 @@
         </section>
 
         <section class="panel negotiation-panel">
-          <h2>Self–Other-party Negotiation</h2>
+   
           <p class="panel-note"></p>
           <div class="trace-grid">
             <div class="trace-step">

@@ -84,8 +84,12 @@
     function renderFeatureExplanation(dataset, selectedModel) {
       if (isSingleCondition()) {
         const displayModel = isSingleOptimalCondition() ? selectedSingleOptimalModel(userWeights) : selectedModel;
+        // No second stakeholder here, so only the participant's own top
+        // criterion is marked -- same highlight the other conditions use.
+        const singleHighlight = { highlight: { userKey: rankedCriteria[0] || criteriaOrder[0] } };
         const singleOptions = isSingleOptimalCondition()
           ? {
+              ...singleHighlight,
               mode: "singleOptimal",
               baselineModels: activeData.models || [],
               baselineLabel: "all models subgroup/local average",
@@ -93,7 +97,7 @@
               helpText: 'Each number is the selected model\'s subgroup/local score on that criterion, as a percentage (100% is perfect). Hover any number for the average subgroup/local score across all candidate models and how far this model sits from it.',
               useModelMetricFallback: false,
             }
-          : {};
+          : singleHighlight;
         return renderSingleCaseFeaturePattern(dataset, activeData.case.features, activeData.shap_patterns, activeData.label_names, modelWithGlobalMetrics(displayModel), activeData.summary, singleOptions);
       }
       if (isMultiOptimalCondition()) {

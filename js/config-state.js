@@ -97,6 +97,10 @@
     const requestedStudyCondition = STUDY_CONDITION_ALIASES[configuredStudyCondition] || configuredStudyCondition;
     const activeStudyCondition = STUDY_CONDITIONS.includes(requestedStudyCondition) ? requestedStudyCondition : DEFAULT_STUDY_CONDITION;
     document.body.classList.add(`condition-${activeStudyCondition}`);
+    // aggregate IS multioptimal plus an importance slider, so it carries the
+    // multioptimal class too and inherits that condition's styling wholesale
+    // rather than keeping a parallel copy that can drift.
+    if (activeStudyCondition === "aggregate") document.body.classList.add("condition-multioptimal");
 
     function studyCondition() {
       return activeStudyCondition;
