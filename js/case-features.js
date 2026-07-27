@@ -286,6 +286,10 @@
     }
 
     const PERFORMANCE_SIMILAR_DELTA = 0.03;
+    // Greying out criteria the models barely differ on is off for now: every
+    // criterion row renders at full contrast. Flip this back to true to restore
+    // the muted styling.
+    const MUTE_SIMILAR_PERFORMANCE_ROWS = false;
 
     function performanceDeltaIsSimilar(stats) {
       const delta = Number(stats?.delta);
@@ -293,54 +297,47 @@
     }
 
     function performanceRowIsSimilar(statsList) {
+      if (!MUTE_SIMILAR_PERFORMANCE_ROWS) return false;
       return Array.isArray(statsList) && statsList.length > 0 && statsList.every(performanceDeltaIsSimilar);
     }
 
+    // Every condition now reports performance as a bare number: no track, no
+    // swarm, no vs-average column. The comparison detail stays in the hover
+    // title so it is still recoverable without competing with the score.
+    function renderPerformanceValueCell(text, title, ariaLabel, classNames) {
+      const classes = ["exposure-performance-cell", ...classNames.filter(Boolean)].join(" ");
+      return `
+        <div class="${escapeHtml(classes)}" title="${escapeHtml(title)}">
+          <span class="exposure-performance-score" aria-label="${escapeHtml(ariaLabel)}">${escapeHtml(text)}</span>
+        </div>
+      `;
+    }
+
     // Distribution counterpart of renderPerformanceComparisonCell, for the
-    // conditions that aggregate a whole group of models: one dot per model on a
-    // 0-100% axis, with the group mean and the all-model baseline marked. A
-    // single bar here is indistinguishable from the single-model conditions and
-    // hides exactly the disagreement these conditions exist to show.
+    // conditions that aggregate a whole group of models: the number shown is the
+    // group mean, with the per-model range and spread kept on hover.
     function renderPerformanceDistributionCell(stats, baselineLabel = "baseline", extraClass = "") {
       const values = (stats?.values || []).map(Number).filter(Number.isFinite);
       if (!values.length) return renderPerformanceComparisonCell(stats, baselineLabel, extraClass);
-      const toPct = (value) => Math.max(0, Math.min(100, Number(value) * 100));
-      const points = beeswarmOffsets(values.map((value) => ({ x: toPct(value), value })), { binWidth: 2.6, step: 4, cap: 8 });
       const meanValue = Number(stats?.value);
       const hasMean = Number.isFinite(meanValue);
       const overallValue = Number(stats?.overallValue);
       const hasOverall = Number.isFinite(overallValue);
-      const delta = Number(stats?.delta);
-      const isComparable = Number.isFinite(delta);
-      const absDelta = isComparable ? Math.abs(delta) : 0;
-      const direction = !isComparable || absDelta < 0.005 ? "same" : delta > 0 ? "better" : "worse";
-      const deltaSymbol = direction === "better" ? "&#9650;" : direction === "worse" ? "&#9660;" : "&#8776;";
-      const deltaText = isComparable ? `${Math.abs(delta * 100).toFixed(1).replace(/\.0$/, "")}%` : "-";
       const min = Math.min(...values);
       const max = Math.max(...values);
       const spread = Math.max(0, Number(stats?.spread) || 0);
       const label = stats?.item?.label || "Group";
+      const meanText = hasMean ? `${(Math.max(0, Math.min(1, meanValue)) * 100).toFixed(1)}%` : "-";
       const title = `${label} - ${stats?.item?.metricLabel || "metric"}: ${values.length} models`
         + `${hasMean ? ` | mean ${(meanValue * 100).toFixed(1)}%` : ""}`
         + ` | range ${(min * 100).toFixed(1)}% to ${(max * 100).toFixed(1)}%`
         + ` | SD +/- ${(spread * 100).toFixed(1)}pt`
         + `${hasOverall ? ` | ${baselineLabel} ${(overallValue * 100).toFixed(1)}%` : ""}`;
-      return `
-        <div class="exposure-performance-cell distribution class-${stats?.item?.classId} ${escapeHtml(extraClass)}" title="${escapeHtml(title)}">
-          <div class="exposure-performance-bar" aria-label="${escapeHtml(title)}">
-            <div class="exposure-performance-plot">
-              <div class="exposure-performance-swarm">
-                ${hasOverall ? `<span class="exposure-performance-baseline-tick" style="left:${toPct(overallValue).toFixed(1)}%"></span>` : ""}
-                ${points.map((point) => `<span class="exposure-performance-dot ${direction}" style="left:${point.x.toFixed(1)}%; margin-top:${point.offset.toFixed(0)}px"></span>`).join("")}
-                ${hasMean ? `<span class="exposure-performance-mean" style="left:${toPct(meanValue).toFixed(1)}%"></span>` : ""}
-              </div>
-            </div>
-            <div class="exposure-performance-compare">
-              <span class="exposure-performance-delta ${direction}"><span class="exposure-performance-arrow">${deltaSymbol}</span> ${escapeHtml(deltaText)}</span>
-            </div>
-          </div>
-        </div>
-      `;
+      return renderPerformanceValueCell(meanText, title, title, [
+        "distribution",
+        `class-${stats?.item?.classId}`,
+        extraClass,
+      ]);
     }
 
     function renderPerformanceComparisonCell(stats, baselineLabel = "baseline", extraClass = "") {
@@ -354,41 +351,23 @@
       const isComparable = Number.isFinite(delta);
       const absDelta = isComparable ? Math.abs(delta) : 0;
       const direction = !isComparable || absDelta < 0.005 ? "same" : delta > 0 ? "better" : "worse";
-      const deltaSymbol = direction === "better" ? "&#9650;" : direction === "worse" ? "&#9660;" : "&#8776;";
       const deltaMagnitude = isComparable ? Math.abs(delta * 100).toFixed(1).replace(/\.0$/, "") : "-";
-      const deltaText = isComparable ? `${deltaMagnitude}%` : "-";
       const hoverDirection = direction === "better" ? "better" : direction === "worse" ? "worse" : "similar";
       const comparisonLabel = stats?.comparisonLabel || baselineLabel || "avg";
       const hoverDeltaText = isComparable ? `${hoverDirection} than ${comparisonLabel} by ${deltaMagnitude}%` : `${comparisonLabel} comparison unavailable`;
-      const className = `class-${stats?.item?.classId}`;
       const overallValue = Number(stats?.overallValue);
       const hasOverall = Number.isFinite(overallValue);
       const overallPct = hasOverall ? Math.max(0, Math.min(100, overallValue * 100)) : null;
       const overallText = hasOverall ? `${overallPct.toFixed(1)}%` : "unavailable";
       const valueScope = stats?.valueScope || "current performance";
-      const segmentLeft = hasOverall ? Math.min(valuePct, overallPct) : 0;
-      const segmentWidth = hasOverall ? Math.abs(valuePct - overallPct) : valuePct;
-      const baselineWidth = hasOverall ? segmentLeft : valuePct;
-      const markerLeft = hasValue ? valuePct.toFixed(1) : "0.0";
       const title = hasValue
         ? `${stats?.item?.label || "Group"}: ${valueScope} ${pct}%; ${hoverDeltaText}; ${comparisonLabel} ${overallText}; SD +/- ${(spread * 100).toFixed(1)}pt`
         : `${stats?.item?.label || "Group"}: subgroup/local metric unavailable for this criterion; ${comparisonLabel} cannot be computed from available local fields`;
-      return `
-        <div class="exposure-performance-cell ${className} ${escapeHtml(extraClass)}" title="${escapeHtml(title)}">
-          <div class="exposure-performance-bar" aria-label="${escapeHtml(`${stats?.item?.label || "Group"} ${valueScope} ${pct}${hasValue ? "%" : ""}; ${hoverDeltaText}`)}">
-            <div class="exposure-performance-plot">
-              <div class="exposure-performance-track">
-                <span class="exposure-performance-baseline" style="width:${baselineWidth.toFixed(1)}%"></span>
-                <span class="exposure-performance-fill ${direction}" style="left:${segmentLeft.toFixed(1)}%; width:${segmentWidth.toFixed(1)}%"></span>
-                <span class="exposure-performance-value-marker" style="left:${markerLeft}%"></span>
-              </div>
-            </div>
-            <div class="exposure-performance-compare">
-              <span class="exposure-performance-delta ${direction}"><span class="exposure-performance-arrow">${deltaSymbol}</span> ${escapeHtml(deltaText)}</span>
-            </div>
-          </div>
-        </div>
-      `;
+      const ariaLabel = `${stats?.item?.label || "Group"} ${valueScope} ${pct}${hasValue ? "%" : ""}`;
+      return renderPerformanceValueCell(hasValue ? `${pct}%` : "-", title, ariaLabel, [
+        `class-${stats?.item?.classId}`,
+        extraClass,
+      ]);
     }
 
     function numericValues(values) {
@@ -457,7 +436,6 @@
       const evalMetricDefs = [
         { label: "Accuracy", localKeys: ["subgroup_accuracy", "local_accuracy"], modelKeys: ["subgroup_accuracy", "local_accuracy"], overallKeys: ["test_accuracy"], rankKey: "accuracy" },
         { label: "Individual Fairness.", localKeys: ["local_consistency"], modelKeys: ["local_consistency"], overallKeys: ["global_consistency", "test_consistency", "overall_consistency", "overall_local_consistency"], rankKey: "local_consistency" },
-        { label: "CF fairness", localKeys: ["counterfactual_fairness"], modelKeys: ["counterfactual_fairness"], overallKeys: ["global_counterfactual_fairness", "test_counterfactual_fairness", "overall_counterfactual_fairness"], rankKey: "counterfactual_fairness" },
         { label: "Catch Truly High-Risk", localKeys: ["subgroup_tpr", "local_tpr", "local_true_positive_rate", "local_recall", "local_sensitivity"], modelKeys: ["subgroup_tpr", "local_tpr", "local_true_positive_rate", "local_recall", "local_sensitivity"], overallKeys: ["tpr"], rankKey: "tpr" },
         { label: "Avoid False High-Risk", localKeys: ["subgroup_tnr", "local_tnr", "local_true_negative_rate", "local_specificity"], modelKeys: ["subgroup_tnr", "local_tnr", "local_true_negative_rate", "local_specificity"], overallKeys: ["tnr"], rankKey: "tnr" },
       ];
@@ -475,7 +453,7 @@
         .map((entry) => entry.def);
       const baselineModels = Array.isArray(options?.baselineModels) ? options.baselineModels : null;
       const baselineLabel = options?.baselineLabel || "this model global average over all test cases";
-      const helpText = options?.helpText || '<span class="better">Green</span> bars mean this model\'s race+sex subgroup performance is higher than the same model\'s global performance over all test cases; <span class="worse">red</span> bars mean it is lower. The number after each bar is subgroup score minus this model global score. Hover for exact subgroup and global values. Full bar = 100%.';
+      const helpText = options?.helpText || 'Each number is this model\'s score on that criterion for the race+sex subgroup, as a percentage (100% is perfect). Hover any number for the model\'s global score over all test cases and how far the subgroup score sits from it.';
       const useModelMetricFallback = Boolean(options?.useModelMetricFallback);
       const metricValueForModel = (model, metric, includeFallback = false) => {
         let value = firstFiniteMetricValue(model, includeFallback ? metric.modelKeys : metric.localKeys);
@@ -487,8 +465,15 @@
       };
       const singlePerformanceItem = {
         classId,
-        label: options?.modelLabel || "AI Model",
+        label: options?.modelLabel || "Score",
       };
+      // Single-optimal only: say out loud why this model rather than one of the
+      // others is on screen, since nothing else on the panel reveals that it was
+      // chosen against the participant's own ranking.
+      const rankedTopMetric = rank.length && evalMetrics[0]?.rankKey === rank[0] ? evalMetrics[0] : null;
+      const optimalNote = options?.mode === "singleOptimal"
+        ? `Picked for you: best matches your priorities${rankedTopMetric ? `, with higher <strong>${escapeHtml(rankedTopMetric.label)}</strong>` : ""}.`
+        : "";
       const singlePerformanceRows = evalMetrics.map((metric) => {
         const localValue = metricValueForModel(selectedModel, metric, useModelMetricFallback);
         const overallValue = baselineModels
@@ -516,63 +501,71 @@
           </div>
         `;
       }).join("");
+      // Three columns -- input case, prediction, performance -- laid out as one
+      // grid so the panel headings share a row, the Attribute/Value and
+      // Criteria/Score column heads share the next, and the body rows below them
+      // sit on the same 32px rhythm instead of drifting apart.
       return `
         <div class="single-explanation-diagram single-compact-diagram" aria-label="Single model performance explanation">
-          <div class="exposure-input-case-panel" aria-label="Input case attributes">
-            <div class="single-diagram-heading exposure-input-case-heading">Input Case</div>
-            <div class="single-feature-list exposure-input-case-list">
-              <div class="single-diagram-heading single-attr-heading">Attribute</div>
-              <div class="single-diagram-heading single-value-heading">Value</div>
-              ${visiblePairs.map((pair) => `
-                <div class="single-attr-cell" title="${escapeHtml(pair.row.label)}">${escapeHtml(pair.row.label)}</div>
-                <div class="single-value-cell" title="${escapeHtml(pair.row.hint || pair.row.value)}">${escapeHtml(pair.row.value)}</div>
-              `).join("")}
-            </div>
+          <div class="single-diagram-heading single-panel-heading">Input Case</div>
+          <div class="single-diagram-heading single-panel-heading">AI System Prediction</div>
+          <div class="single-diagram-heading single-panel-heading">
+            AI Performance on: <span class="exposure-performance-subgroup">${escapeHtml(subgroupDescription(dataset, rawFeatures))}</span>
+            <span class="exposure-performance-help" tabindex="0" aria-label="Performance score legend">?
+              <span class="exposure-performance-help-text">${helpText}</span>
+            </span>
           </div>
 
-          <div class="exposure-performance-panel single-performance-panel" aria-label="Single model prediction performance metrics">
-            <div class="single-model-prediction-line ${predictionClassName}"><span>Model #${escapeHtml(modelId)}: Prediction: ${escapeHtml(predictionLabel)}</span>
-              <span class="exposure-detail-wrap single-detail-wrap">
-                <button type="button" class="exposure-detail-button" aria-label="Show XAI explanation detail">?</button>
-                <div class="exposure-shap-popover single-shap-popover" role="tooltip" aria-label="XAI explanation detail">
-                  <div class="single-feature-list exposure-shap-feature-list">
-                    <div class="single-diagram-heading single-attr-heading">Attribute</div>
-                    <div class="single-diagram-heading single-value-heading">Value</div>
-                    ${visiblePairs.map((pair) => `
-                      <div class="single-attr-cell" title="${escapeHtml(pair.row.label)}">${escapeHtml(pair.row.label)}</div>
-                      <div class="single-value-cell" title="${escapeHtml(pair.row.hint || pair.row.value)}">${escapeHtml(pair.row.value)}</div>
-                    `).join("")}
+          <div class="single-column-heads single-input-heads">
+            <span class="single-diagram-heading single-attr-heading">Attribute</span>
+            <span class="single-diagram-heading single-value-heading">Value</span>
+          </div>
+          <div class="single-column-heads single-prediction-heads" aria-hidden="true"></div>
+          <div class="single-column-heads single-performance-heads">
+            <span class="single-diagram-heading single-criteria-heading">Criteria</span>
+            <span class="single-diagram-heading single-score-heading">Score</span>
+          </div>
+
+          <div class="single-column-body single-input-body" aria-label="Input case attributes">
+            ${visiblePairs.map((pair) => `
+              <div class="single-attr-cell" title="${escapeHtml(pair.row.label)}">${escapeHtml(pair.row.label)}</div>
+              <div class="single-value-cell" title="${escapeHtml(pair.row.hint || pair.row.value)}">${escapeHtml(pair.row.value)}</div>
+            `).join("")}
+          </div>
+
+          <div class="single-column-body single-prediction-body" aria-label="AI system prediction">
+            ${optimalNote ? `<p class="single-prediction-note">${optimalNote}</p>` : ""}
+            <div class="single-prediction-result ${predictionClassName}">${escapeHtml(predictionLabel)}</div>
+            <span class="exposure-detail-wrap single-explanation-wrap" tabindex="0" role="button" aria-label="Show XAI explanation detail">
+              <span class="single-explanation-link">AI Explanation</span>
+              <div class="exposure-shap-popover single-shap-popover" role="tooltip" aria-label="XAI explanation detail">
+                <div class="single-feature-list exposure-shap-feature-list">
+                  <div class="single-diagram-heading single-attr-heading">Attribute</div>
+                  <div class="single-diagram-heading single-value-heading">Value</div>
+                  ${visiblePairs.map((pair) => `
+                    <div class="single-attr-cell" title="${escapeHtml(pair.row.label)}">${escapeHtml(pair.row.label)}</div>
+                    <div class="single-value-cell" title="${escapeHtml(pair.row.hint || pair.row.value)}">${escapeHtml(pair.row.value)}</div>
+                  `).join("")}
+                </div>
+                <div class="single-influence-box exposure-influence-column">
+                  <div class="single-diagram-heading">Influence</div>
+                  <div class="single-framed-plot single-influence-plot exposure-influence-plot" style="grid-template-rows: repeat(${rows.length}, var(--single-row-height));">
+                    ${visiblePairs.map((pair, index) => renderSingleInfluenceBar(shapValues[index], maxAbs)).join("")}
                   </div>
-                  <div class="single-influence-box exposure-influence-column">
-                    <div class="single-diagram-heading">Influence</div>
-                    <div class="single-framed-plot single-influence-plot exposure-influence-plot" style="grid-template-rows: repeat(${rows.length}, var(--single-row-height));">
-                      ${visiblePairs.map((pair, index) => renderSingleInfluenceBar(shapValues[index], maxAbs)).join("")}
-                    </div>
-                    <div class="single-influence-labels"><span>${escapeHtml(lowLabel)}</span><span>${escapeHtml(highLabel)}</span></div>
-                  </div>
-                  <div class="single-ai-prediction single-popover-ai">
-                    <div class="single-ai-title">AI prediction</div>
-                    <div class="single-ai-box ${predictionClassName}">
-                      <span class="single-ai-label">${escapeHtml(predictionLabel)}</span>
-                    </div>
+                  <div class="single-influence-labels"><span>${escapeHtml(lowLabel)}</span><span>${escapeHtml(highLabel)}</span></div>
+                </div>
+                <div class="single-ai-prediction single-popover-ai">
+                  <div class="single-ai-title">AI prediction</div>
+                  <div class="single-ai-box ${predictionClassName}">
+                    <span class="single-ai-label">${escapeHtml(predictionLabel)}</span>
                   </div>
                 </div>
-              </span>
-            </div>
-            <div class="single-diagram-heading exposure-performance-heading">
-              Performance on Subgroup: <span class="exposure-performance-subgroup">${escapeHtml(subgroupDescription(dataset, rawFeatures))}</span>
-              <span class="exposure-performance-help" tabindex="0" aria-label="Performance bar legend">?
-                <span class="exposure-performance-help-text">${helpText}</span>
-              </span>
-            </div>
+              </div>
+            </span>
+          </div>
 
-            <div class="exposure-performance-table single-performance-table">
-              <div class="exposure-performance-label exposure-performance-criteria-heading">Criteria</div>
-              <div class="exposure-performance-group ${predictionClassName}">${escapeHtml(singlePerformanceItem.label)}</div>
-              <div class="exposure-performance-label exposure-performance-subheader-spacer"></div>
-              <div class="exposure-performance-subheader"><span>Score</span><span>vs. Avg.</span></div>
-              ${singlePerformanceRows}
-            </div>
+          <div class="single-column-body single-performance-body" aria-label="Single model performance metrics">
+            ${singlePerformanceRows}
           </div>
         </div>
             `;
@@ -590,6 +583,37 @@
       if (highlight.userKey && metric.rankKey === highlight.userKey) classes.push("metric-highlight-user");
       if (highlight.otherKey && metric.rankKey === highlight.otherKey) classes.push("metric-highlight-other");
       return classes.join(" ");
+    }
+
+    // Side-by-side conditions put the numbers there to be compared, so on each
+    // row the better score carries the weight and the others step back. Ranked
+    // on the value as displayed (one decimal) -- bolding one "100.0%" over an
+    // identical-looking "100.0%" would read as arbitrary -- and a tie leaves
+    // every score at its normal weight.
+    function scoreLeadClasses(values) {
+      const shown = values.map((value) => (Number.isFinite(Number(value)) ? Math.round(Number(value) * 1000) / 10 : null));
+      const present = shown.filter((value) => value !== null);
+      if (shown.length < 2 || !present.length) return shown.map(() => "");
+      const best = Math.max(...present);
+      if (present.filter((value) => value === best).length !== 1) return shown.map(() => "");
+      return shown.map((value) => (value === best ? "score-leader" : "score-trailing"));
+    }
+
+    // Marker put in front of a criterion label to say whose top priority it is.
+    // Colour-coded to the side it stands for: blue for the participant, orange
+    // for the other stakeholder, matching the colours those sides carry
+    // elsewhere in the table.
+    function criterionOwnerTag(kind) {
+      const text = kind === "user" ? "Self" : "Other";
+      const title = kind === "user" ? "Your top-priority criterion" : "The other stakeholder's top-priority criterion";
+      return `<span class="criteria-owner-tag ${kind}" title="${escapeHtml(title)}">${text}</span>`;
+    }
+
+    function criterionOwnerTags(metric, highlight = {}) {
+      const tags = [];
+      if (highlight.userKey && metric.rankKey === highlight.userKey) tags.push(criterionOwnerTag("user"));
+      if (highlight.otherKey && metric.rankKey === highlight.otherKey) tags.push(criterionOwnerTag("other"));
+      return tags.join("");
     }
 
     function performanceTableWeights(rawWeights) {
@@ -707,7 +731,6 @@
       const evalMetricDefs = [
         { label: "Accuracy", localKey: "subgroup_accuracy", overallKey: "test_accuracy", rankKey: "accuracy" },
         { label: "Individual Fairness", localKey: "local_consistency", overallKey: "local_consistency", rankKey: "local_consistency" },
-        { label: "CF fairness", localKey: "counterfactual_fairness", overallKey: "counterfactual_fairness", rankKey: "counterfactual_fairness" },
         { label: "Catch Truly High-Risk", localKey: "subgroup_tpr", overallKey: "tpr", rankKey: "tpr" },
         { label: "Avoid False High-Risk", localKey: "subgroup_tnr", overallKey: "tnr", rankKey: "tnr" },
       ];
@@ -768,6 +791,7 @@
         const highlightClass = exposureMetricHighlightClass(metric, highlight);
         const mutedClass = performanceRowIsSimilar(stats) ? "metric-muted" : "";
         const rowClass = [highlightClass, mutedClass].filter(Boolean).join(" ");
+        const leadClasses = scoreLeadClasses(stats.map((stat) => stat.value));
         // Rows are already sorted by the participant's own ranking; tag the two
         // ends so the ordering is legible rather than merely true.
         const rankTag = index === 0
@@ -775,20 +799,14 @@
           : index === evalMetrics.length - 1
             ? `<span class="criteria-rank-tag bottom"></span>`
             : "";
-        const otherTag = highlightClass.includes("metric-highlight-other")
-          ? `<span class="criteria-other-tag"></span>`
-          : "";
+        const ownerTags = criterionOwnerTags(metric, highlight);
         return `
           <div class="exposure-performance-row ${mutedClass}">
-            <div class="exposure-performance-label ${rowClass}">${escapeHtml(metric.label)}${rankTag}${otherTag}</div>
-            ${stats.map((stat) => renderPerformanceDistributionCell(stat, "all-model average", rowClass)).join("")}
+            <div class="exposure-performance-label ${rowClass}">${ownerTags}${escapeHtml(metric.label)}${rankTag}</div>
+            ${stats.map((stat, column) => renderPerformanceDistributionCell(stat, "all-model average", `${rowClass} ${leadClasses[column]}`)).join("")}
           </div>
         `;
       }).join("");
-      const performanceSubheaders = `
-        <div class="exposure-performance-label exposure-performance-subheader-spacer"></div>
-        ${ordered.map(() => `<div class="exposure-performance-subheader"><span>Spread across models</span><span>vs. Avg.</span></div>`).join("")}
-      `;
       const userReliabilityValues = ordered.map((item) => performanceTableReliability(item, negotiationUserWeights));
       const proxyReliabilityValues = ordered.map((item) => performanceTableReliability(item, negotiationProxyWeights));
       const userBestReliability = Math.max(...userReliabilityValues);
@@ -805,9 +823,8 @@
           </div>
         `
         : "";
-      // Wider than the single-model table: a swarm of ~80 dots needs room that
-      // an 82px bar track does not have.
-      const performanceGridColumns = `180px repeat(${ordered.length}, 210px)`;
+      // Only wide enough for the group header line now that the cells are numbers.
+      const performanceGridColumns = `180px repeat(${ordered.length}, 150px)`;
       return `
         <div class="single-explanation-diagram exposure-explanation-diagram" aria-label="Exposure condition prediction explanation">
           <div class="exposure-input-case-panel" aria-label="Input case attributes">
@@ -826,7 +843,7 @@
             <div class="single-diagram-heading exposure-performance-heading">
               Performance on Subgroup: <span class="exposure-performance-subgroup">${escapeHtml(subgroupDescription(dataset, rawFeatures))}</span>
               <span class="exposure-performance-help" tabindex="0" aria-label="Performance plot legend">?
-                <span class="exposure-performance-help-text">Each dot is one model in the group, placed by its score on that criterion (axis runs 0-100%). The <strong>solid black line</strong> is this group's mean; the <strong>grey dashed line</strong> is the average across all 100 candidate models. Dots are <span class="better">green</span> where the group mean beats that average and <span class="worse">red</span> where it falls below. The number on the right is the gap between the two lines. Hover any cell for the exact range and spread.</span>
+                <span class="exposure-performance-help-text">Each number is the mean score of the models in that group on that criterion, as a percentage (100% is perfect). Hover any number for how many models it averages, their range, their spread, and the average across all 100 candidate models.</span>
               </span>
             </div>
             
@@ -848,14 +865,8 @@
                     ${influenceColumns}
                   </div>
                 </span>` : ""}</div>`).join("")}
-              ${performanceSubheaders}
               ${performanceRows}
               ${reliabilityRows}
-            </div>
-            <div class="exposure-performance-key" aria-label="Performance plot key">
-              <span class="perf-key-item"><span class="perf-key-dot"></span>one model in the group</span>
-              <span class="perf-key-item"><span class="perf-key-mean"></span>solid = this group's mean</span>
-              <span class="perf-key-item"><span class="perf-key-baseline"></span>dashed = average of all 100 models</span>
             </div>
           </div>
         </div>
@@ -885,7 +896,6 @@
       const evalMetricDefs = [
         { label: "Accuracy", localKeys: ["subgroup_accuracy", "local_accuracy"], modelKeys: ["subgroup_accuracy", "local_accuracy"], rankKey: "accuracy" },
         { label: "Individual Fairness", localKeys: ["local_consistency"], modelKeys: ["local_consistency"], rankKey: "local_consistency" },
-        { label: "CF fairness", localKeys: ["counterfactual_fairness"], modelKeys: ["counterfactual_fairness"], rankKey: "counterfactual_fairness" },
         { label: "Catch Truly High-Risk", localKeys: ["subgroup_tpr", "local_tpr", "local_true_positive_rate", "local_recall", "local_sensitivity"], modelKeys: ["subgroup_tpr", "local_tpr", "local_true_positive_rate", "local_recall", "local_sensitivity"], rankKey: "tpr" },
         { label: "Avoid False High-Risk", localKeys: ["subgroup_tnr", "local_tnr", "local_true_negative_rate", "local_specificity"], modelKeys: ["subgroup_tnr", "local_tnr", "local_true_negative_rate", "local_specificity"], rankKey: "tnr" },
       ];
@@ -920,14 +930,15 @@
           };
         });
         const mutedClass = performanceRowIsSimilar(stats) ? "metric-muted" : "";
+        const leadClasses = scoreLeadClasses(stats.map((stat) => stat.value));
         return `
           <div class="exposure-performance-row ${mutedClass}">
-            <div class="exposure-performance-label ${mutedClass} ${highlightClass}">${escapeHtml(metric.label)}${highlightClass.includes("metric-highlight-other") ? `` : ""}</div>
-            ${stats.map((stat) => renderPerformanceComparisonCell(stat, baselineLabel, `${mutedClass} ${highlightClass}`)).join("")}
+            <div class="exposure-performance-label ${mutedClass} ${highlightClass}">${criterionOwnerTags(metric, options?.highlight || {})}${escapeHtml(metric.label)}</div>
+            ${stats.map((stat, column) => renderPerformanceComparisonCell(stat, baselineLabel, `${mutedClass} ${highlightClass} ${leadClasses[column]}`)).join("")}
           </div>
         `;
       }).join("");
-      const performanceGridColumns = `180px repeat(${activeItems.length}, 180px)`;
+      const performanceGridColumns = `180px repeat(${activeItems.length}, 150px)`;
       const roleTagLabel = { self: "self", other: "other" };
       const versionTagHtml = (item) => {
         if (!options.versionTag) return "";
@@ -941,18 +952,26 @@
         ).join("");
         return `<select class="negotiate-v2-model-version-select" data-role="${escapeHtml(item.role || "")}" title="This is the model ${escapeHtml(role)} stood behind at the selected round. Switch to review an earlier offer.">${optionsHtml}</select>`;
       };
-      const modelHeader = (item, index) => {
+      // The column head carries only whose model this is; what the model
+      // predicted moved to a row at the foot of the table, so the criteria rows
+      // read as one block between the two.
+      const roleHeader = (item) => `
+        <div class="exposure-performance-group multi-optimal-group">
+          <div class="multi-optimal-role"><span>${escapeHtml(item.roleLabel)}</span>${versionTagHtml(item)}</div>
+        </div>
+      `;
+      const predictionCell = (item, index) => {
         const model = item.model;
         const classId = Number(model.pred_class);
         const predictionLabel = labelNames?.[model.pred_class] || `Class ${model.pred_class}`;
+        const modelId = model.seed ?? model.id ?? "-";
         const pattern = patterns[index] || { features: {} };
         return `
-          <div class="exposure-performance-group multi-optimal-group class-${classId}">
-            <div class="multi-optimal-role"><span>${escapeHtml(item.roleLabel)}</span>${versionTagHtml(item)}</div>
-            <div class="multi-optimal-model-line">
-              <span class="exposure-detail-wrap multi-optimal-detail-wrap" tabindex="0" role="button" aria-label="Show SHAP explanation detail">
-                <span class="model-detail-link">Model #${escapeHtml(model.seed ?? model.id ?? "-")}: ${escapeHtml(predictionLabel)}</span>
-                <div class="exposure-shap-popover" role="tooltip" aria-label="SHAP explanation detail">
+          <div class="multi-optimal-prediction-cell">
+            <div class="multi-optimal-prediction-value class-${classId}" title="${escapeHtml(`${item.roleLabel}: model #${modelId}`)}">${escapeHtml(predictionLabel)}</div>
+            <span class="exposure-detail-wrap multi-optimal-detail-wrap" tabindex="0" role="button" aria-label="${escapeHtml(`Show the explanation behind the ${item.roleLabel} prediction`)}">
+              <span class="model-detail-link">AI Explanation</span>
+              <div class="exposure-shap-popover" role="tooltip" aria-label="SHAP explanation detail">
                 <div class="single-feature-list exposure-shap-feature-list">
                   <div class="single-diagram-heading single-attr-heading">Attribute</div>
                   <div class="single-diagram-heading single-value-heading">Value</div>
@@ -962,7 +981,7 @@
                   `).join("")}
                 </div>
                 <div class="single-influence-box exposure-influence-column">
-                  <div class="single-diagram-heading">Model #${escapeHtml(model.seed ?? model.id ?? "-")} SHAP</div>
+                  <div class="single-diagram-heading">Model #${escapeHtml(modelId)} SHAP</div>
                   <div class="single-framed-plot single-influence-plot exposure-influence-plot" style="grid-template-rows: repeat(${visiblePairs.length}, var(--single-row-height));">
                     ${visiblePairs.map((pair) => renderSingleInfluenceBar(shapValueFor(pattern.features, pair.row.keys), maxAbs)).join("")}
                   </div>
@@ -974,17 +993,24 @@
                     <span class="single-ai-label">${escapeHtml(predictionLabel)}</span>
                   </div>
                 </div>
-                </div>
-              </span>
-            </div>
+              </div>
+            </span>
           </div>
         `;
       };
+      // Read top to bottom: the one input case, a brace fanning it out to each
+      // side's model, the criteria scores, then what each model predicted. It is
+      // ONE grid -- caption column, criteria label column, then a column per
+      // model -- so the case box and brace stay centred over the model columns
+      // while the caption sits beside the table. Every child is placed
+      // explicitly: auto-placement would drop the caption into the empty space
+      // beside the case box.
+      const stackColumns = `10px ${performanceGridColumns}`;
+      const modelSpan = "grid-column: 3 / -1;";
       return `
-        <div class="single-explanation-diagram exposure-explanation-diagram multi-optimal-diagram" aria-label="Multi optimal model explanation">
-          <div class="exposure-input-case-panel" aria-label="Input case attributes">
-            <div class="single-diagram-heading exposure-input-case-heading">Input Case</div>
-            <div class="single-feature-list exposure-input-case-list">
+        <div class="single-explanation-diagram exposure-explanation-diagram multi-optimal-diagram" style="grid-template-columns: ${stackColumns};" aria-label="Multi optimal model explanation">
+          <div class="multi-optimal-case-box" style="${modelSpan} grid-row: 1;" aria-label="Input case attributes">
+            <div class="single-feature-list multi-optimal-case-list">
               <div class="single-diagram-heading single-attr-heading">Attribute</div>
               <div class="single-diagram-heading single-value-heading">Value</div>
               ${visiblePairs.map((pair) => `
@@ -993,20 +1019,26 @@
               `).join("")}
             </div>
           </div>
-          <div class="exposure-performance-panel" aria-label="Multi optimal model performance metrics">
-            <div class="single-diagram-heading exposure-performance-heading">
-              Performance on Subgroup: <span class="exposure-performance-subgroup">${escapeHtml(subgroupDescription(dataset, rawFeatures))}</span>
-              <span class="exposure-performance-help" tabindex="0" aria-label="Performance bar legend">?
-                <span class="exposure-performance-help-text"><span class="better">Green</span> bars mean the selected model's subgroup/local score is higher than the average subgroup/local score across all candidate models for this case; <span class="worse">red</span> bars mean it is lower. The number after each bar is selected subgroup/local score minus all-model subgroup/local average. Hover for exact values. Full bar = 100%.</span>
-              </span>
-            </div>
-            <div class="exposure-performance-table multi-optimal-table" style="grid-template-columns: ${performanceGridColumns};">
-              <div class="exposure-performance-label exposure-performance-criteria-heading">Criteria (Ordered)</div>
-              ${activeItems.map(modelHeader).join("")}
-              <div class="exposure-performance-label exposure-performance-subheader-spacer"></div>
-              ${activeItems.map(() => `<div class="exposure-performance-subheader"><span>Score</span><span>vs. Avg.</span></div>`).join("")}
-              ${performanceRows}
-            </div>
+          <div class="multi-optimal-brace" style="${modelSpan} grid-row: 2;" aria-hidden="true">
+            <svg viewBox="0 0 1000 60" preserveAspectRatio="none" focusable="false">
+              <path d="M4 58 Q4 30 44 30 L456 30 Q500 30 500 2 Q500 30 544 30 L956 30 Q996 30 996 58"
+                    fill="none" stroke="#111" stroke-width="2.5" stroke-linecap="round" vector-effect="non-scaling-stroke"></path>
+            </svg>
+          </div>
+          <div class="single-diagram-heading multi-optimal-subgroup-heading" style="grid-column: 1; grid-row: 3;">
+            
+            <span class="exposure-performance-help" tabindex="0" aria-label="Performance score legend">?
+            <span class="exposure-performance-help-text">
+            Performance on: <span class="exposure-performance-subgroup">${escapeHtml(subgroupDescription(dataset, rawFeatures))}</span> <br/>
+            Each number is the selected model's subgroup/local score on that criterion, as a percentage (100% is perfect). Hover any number for the average subgroup/local score across all candidate models and how far this model sits from it.</span>
+            </span>
+          </div>
+          <div class="exposure-performance-table multi-optimal-table" style="grid-column: 2 / -1; grid-row: 3; grid-template-columns: ${performanceGridColumns};" aria-label="Multi optimal model performance metrics">
+            <div class="exposure-performance-label exposure-performance-criteria-heading">Criteria</div>
+            ${activeItems.map(roleHeader).join("")}
+            ${performanceRows}
+            <div class="exposure-performance-label multi-optimal-corner"></div>
+            ${activeItems.map(predictionCell).join("")}
           </div>
         </div>
       `;

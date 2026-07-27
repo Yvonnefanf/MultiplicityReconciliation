@@ -20,7 +20,6 @@
         tpr: ["subgroup_tpr", "local_tpr", "local_true_positive_rate", "local_recall", "local_sensitivity"],
         tnr: ["subgroup_tnr", "local_tnr", "local_true_negative_rate", "local_specificity"],
         local_consistency: ["local_consistency"],
-        counterfactual_fairness: ["counterfactual_fairness"],
       };
       const keys = keyMap[key] || [key];
       for (const metricKey of keys) {
@@ -155,7 +154,6 @@
         <div class="single-model-card">
           <div class="single-model-metrics">
             ${singleMetric("Local consistency", model.local_consistency)}
-            ${singleMetric("CF fairness", model.counterfactual_fairness)}
             ${singleMetric("Local TPR", model.tpr)}
             ${singleMetric("Local TNR", model.tnr)}
             ${singleMetric("Test accuracy", model.test_accuracy)}
@@ -184,7 +182,6 @@
               ${singleMetric("Subgroup TPR", model.subgroup_tpr ?? model.local_tpr)}
               ${singleMetric("Subgroup TNR", model.subgroup_tnr ?? model.local_tnr)}
               ${singleMetric("Individual fairness", model.local_consistency)}
-              ${singleMetric("CF fairness", model.counterfactual_fairness)}
             </div>
           </div>
         `;
@@ -225,14 +222,12 @@
       const shortLabels = {
         tpr: "Local TPR",
         tnr: "Local TNR",
-        local_consistency: "Individual fairness",
-        counterfactual_fairness: "CF fairness"
+        local_consistency: "Individual fairness"
       };
       const fullLabels = {
         tpr: "Local True Positive Rate / Catch Truly High-Risk Cases in the 30-neighbor local region",
         tnr: "Local True Negative Rate / Avoid False High-Risk Labels in the 30-neighbor local region",
-        local_consistency: "Individual Fairness",
-        counterfactual_fairness: "CF Fairness"
+        local_consistency: "Individual Fairness"
       };
 
       const criterionHeaders = criteriaOrder.map((key) => {

@@ -90,7 +90,7 @@
               baselineModels: activeData.models || [],
               baselineLabel: "all models subgroup/local average",
               modelLabel: "Optimal Model",
-              helpText: '<span class="better">Green</span> bars mean the selected model\'s subgroup/local score is higher than the average subgroup/local score across all candidate models for this case; <span class="worse">red</span> bars mean it is lower. The number after each bar is selected subgroup/local score minus all-model subgroup/local average. Hover for exact values. Full bar = 100%.',
+              helpText: 'Each number is the selected model\'s subgroup/local score on that criterion, as a percentage (100% is perfect). Hover any number for the average subgroup/local score across all candidate models and how far this model sits from it.',
               useModelMetricFallback: false,
             }
           : {};
@@ -103,14 +103,20 @@
           : (() => {
               const otherWeights = proxyWeights || proxyPersona?.weights || proxyIdealWeights();
               return [
-                { role: "self", roleLabel: "Self optimal", model: selectedSingleOptimalModel(userWeights) },
-                { role: "other", roleLabel: "Other-party optimal", model: selectedSingleOptimalModel(otherWeights) },
+                { role: "self", roleLabel: "My model", model: selectedSingleOptimalModel(userWeights) },
+                { role: "other", roleLabel: "Other model", model: selectedSingleOptimalModel(otherWeights) },
               ];
             })();
         // multioptimal, aggregate and negotiatev2 all put a second stakeholder
         // on screen, so they get the same "what the other side cares about"
-        // highlight that informed has.
-        const multiHighlight = { highlight: { otherKey: otherStakeholderTopCriterion() } };
+        // highlight that informed has, plus the participant's own top criterion
+        // so both sides' markers are readable side by side.
+        const multiHighlight = {
+          highlight: {
+            userKey: rankedCriteria[0] || criteriaOrder[0],
+            otherKey: otherStakeholderTopCriterion(),
+          },
+        };
         const multiOptions = isNegotiateV2Condition()
           ? { ...multiHighlight, versionTag: true, versionsByRole: negotiateV2VersionsByRole(), versionIndexByRole: negotiateV2VersionIndexByRole() }
           : multiHighlight;
@@ -154,7 +160,6 @@
               <td><span class="badge class-${row.pred_class}">${label}</span></td>
               <td>${fmtProb(row.pred_prob)}</td>
               <td>${fmtPct(row.local_consistency)}</td>
-              <td>${fmtPct(row.counterfactual_fairness)}</td>
               <td>${fmtPct(row.race_counterfactual_fairness)}</td>
               <td>${fmtPct(row.gender_counterfactual_fairness)}</td>
               <td>${fmtPct(row.sensitive_counterfactual_fairness)}</td>

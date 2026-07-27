@@ -164,13 +164,19 @@
         scrollHistoryToBottom();
         return;
       }
-      negotiationHistory.innerHTML = negotiationEvents.map((event, index) => `
+      // Only the offers are numbered; system notes are asides, not turns.
+      let turn = 0;
+      negotiationHistory.innerHTML = negotiationEvents.map((event) => {
+        const isSystem = event.role === "system";
+        if (!isSystem) turn += 1;
+        return `
         <div class="history-item ${event.role}${event.actionable ? " actionable" : ""}">
-          <div class="history-title">${index + 1}. ${event.title}</div>
+          <div class="history-title">${isSystem ? "" : `${turn}. `}${event.title}</div>
           <div>${event.text}</div>
           ${event.weights ? `<div class="history-weights">${shortWeights(event.weights)}</div>` : ""}
         </div>
-      `).join("");
+      `;
+      }).join("");
       scrollHistoryToBottom();
     }
 
@@ -1200,19 +1206,15 @@
 
       const sameClass = selfBest && otherBest && Number(selfBest.pred_class) === Number(otherBest.pred_class);
       const otherRole = personaTitle(proxyPersona || { label: "Other-party" });
-      const otherTop = criteriaLabels[topMetricKeyForWeights(otherWeights)] || "their key criterion";
-      const selfTop = criteriaLabels[topMetricKeyForWeights(selfWeights)] || "your key criterion";
+      // Kept to a couple of lines: the composer's "..." popover carries the
+      // mechanics, and the table beside it already shows who is strong where.
       addHistory(
         "system",
         "Opening positions (v0)",
-        `${options.length} models are on the table and none of them beats another on every criterion — so which one is "right" is a matter of priorities, not accuracy.<br><br>`
-          + `Your best model is ${nv2ModelTag(selfBest)} (${escapeHtml(nv2PredictionLabel(selfBest))}), strongest on <strong>${escapeHtml(selfTop)}</strong>. `
-          + `The ${escapeHtml(otherRole)}'s best model is ${nv2ModelTag(otherBest)} (${escapeHtml(nv2PredictionLabel(otherBest))}), strongest on <strong>${escapeHtml(otherTop)}</strong>. `
-          + (sameClass
-            ? "They already point to the same decision, so you only need to agree on which model to stand behind."
-            : "They point to opposite decisions.")
-          + `<br><br>Say what the other model costs you, name a criterion you can afford to give ground on, and the system will find the model that pays them back the most for it. `
-          + `You do not have to move first: "Let them open" hands the first offer to the ${escapeHtml(otherRole)} and costs you nothing. You get up to ${NV2_MAX_VERSION} offers.`,
+        `${options.length} models fit this case and none of them wins on every criterion, so which one is "right" is a matter of priorities. `
+          + `Your best is ${nv2ModelTag(selfBest)} (${escapeHtml(nv2PredictionLabel(selfBest))}); the ${escapeHtml(otherRole)}'s is ${nv2ModelTag(otherBest)} (${escapeHtml(nv2PredictionLabel(otherBest))})`
+          + (sameClass ? ", and they point to the same decision." : ", and they point to opposite decisions.")
+          + ` You get up to ${NV2_MAX_VERSION} offers; "Let them open" costs you nothing.`,
         null
       );
     }
@@ -1226,8 +1228,8 @@
         ];
       }
       return [
-        { role: "self", roleLabel: "Self optimal", model: nv2ViewedPosition("self")?.model || null },
-        { role: "other", roleLabel: "Other-party optimal", model: nv2ViewedPosition("other")?.model || null },
+        { role: "self", roleLabel: "My model", model: nv2ViewedPosition("self")?.model || null },
+        { role: "other", roleLabel: "Other model", model: nv2ViewedPosition("other")?.model || null },
       ];
     }
 

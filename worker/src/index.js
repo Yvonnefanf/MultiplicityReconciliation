@@ -1,4 +1,4 @@
-const CRITERIA_ORDER = ["accuracy", "tpr", "tnr", "local_consistency", "counterfactual_fairness"];
+const CRITERIA_ORDER = ["accuracy", "tpr", "tnr", "local_consistency"];
 const DEFAULT_ALLOWED_ORIGINS = [
   "https://yvonnefanf.github.io",
   "http://127.0.0.1:8010",

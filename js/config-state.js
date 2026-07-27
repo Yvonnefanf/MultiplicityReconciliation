@@ -43,13 +43,12 @@
     const preferenceBackButton = document.getElementById("preferenceBackButton");
     const startReconciliationButton = document.getElementById("startReconciliationButton");
 
-    const criteriaOrder = ["accuracy", "tpr", "tnr", "local_consistency", "counterfactual_fairness"];
+    const criteriaOrder = ["accuracy", "tpr", "tnr", "local_consistency"];
     const criteriaLabels = {
       accuracy: "Accuracy",
       tpr: "Catch Truly High-Risk",
       tnr: "Avoid False High-Risk",
-      local_consistency: "Individual Fairness",
-      counterfactual_fairness: "CF Fairness"
+      local_consistency: "Individual Fairness"
     };
     // Single condition pins ONE fixed model per dataset (model 0; loan has no
     // seed 0 so it uses its first model, seed 1). Its real per-case SHAP is stored
@@ -142,20 +141,18 @@
       accuracy: "Accuracy",
       tpr: "Local TPR",
       tnr: "Local TNR",
-      local_consistency: "Individual fairness",
-      counterfactual_fairness: "CF fairness"
+      local_consistency: "Individual fairness"
     };
     const criteriaFullLabels = {
       accuracy: "Overall Accuracy / Correct Predictions Across All Test Cases",
       tpr: "Local True Positive Rate / Catch Truly High-Risk Cases in the 30-neighbor local region",
       tnr: "Local True Negative Rate / Avoid False High-Risk Labels in the 30-neighbor local region",
-      local_consistency: "Individual Fairness",
-      counterfactual_fairness: "CF Fairness"
+      local_consistency: "Individual Fairness"
     };
     let datasetMeta = [];
     let activeData = null;
     let modelGlobalMetrics = null;
-    let weights = { accuracy: 1/5, tpr: 1/5, tnr: 1/5, local_consistency: 1/5, counterfactual_fairness: 1/5 };
+    let weights = { accuracy: 1/4, tpr: 1/4, tnr: 1/4, local_consistency: 1/4 };
     let userWeights = { ...weights };
     let proxyWeights = { ...weights };
     let composerWeights = { ...weights };
@@ -246,7 +243,7 @@
         interests: [{ key: "accuracy", label: "Overall accuracy", rationale: "Judges need a decision process that is correct as often as possible across cases." }],
         preferenceKey: "local_error_balance",
         defaultSelections: { harm: "overall", fairness: "mixed", tradeoff: "performance_guardrail" },
-        weights: { accuracy: 36, tpr: 20, tnr: 20, local_consistency: 12, counterfactual_fairness: 12 }
+        weights: { accuracy: 36, tpr: 20, tnr: 20, local_consistency: 12 }
       },
       defendants: {
         key: "defendants",
@@ -261,7 +258,7 @@
         interests: [{ key: "tnr", label: "False-positive harm protection", rationale: "Defendants are harmed when a low-risk person is incorrectly labeled high risk." }],
         preferenceKey: "tnr_protection",
         defaultSelections: { harm: "false_positive", fairness: "local", tradeoff: "moderate" },
-        weights: { accuracy: 12, tpr: 10, tnr: 36, local_consistency: 18, counterfactual_fairness: 24 }
+        weights: { accuracy: 12, tpr: 10, tnr: 36, local_consistency: 18 }
       },
       community_members: {
         key: "community_members",
@@ -276,22 +273,22 @@
         interests: [{ key: "tpr", label: "False-negative harm protection", rationale: "Community members are harmed when a truly high-risk case is missed." }],
         preferenceKey: "sensitivity_protection",
         defaultSelections: { harm: "false_negative", fairness: "mixed", tradeoff: "moderate" },
-        weights: { accuracy: 12, tpr: 36, tnr: 12, local_consistency: 18, counterfactual_fairness: 22 }
+        weights: { accuracy: 12, tpr: 36, tnr: 12, local_consistency: 18 }
       },
       fairness_advocates: {
         key: "fairness_advocates",
         label: "Fairness Advocates",
         role: "Fairness Advocates",
-        priority: "increasing CF Fairness",
-        metricLabel: "CF Fairness",
-        context: "Fairness Advocates might want to prioritize CF fairness, meaning predictions should stay stable when race or gender information changes.",
-        concern: "They are most concerned about unequal treatment tied to protected attributes and inconsistent treatment of similar people.",
-        boundary: "CF fairness and individual fairness matter most for this role, while predictive performance and safety concerns should still be part of the negotiation.",
-        positionExample: "I want the decision to avoid relying on models whose predictions shift with protected attributes.",
-        interests: [{ key: "counterfactual_fairness", label: "Protected-attribute fairness", rationale: "Fairness advocates are concerned when race or gender changes would alter the prediction." }],
+        priority: "increasing Individual Fairness",
+        metricLabel: "Individual Fairness",
+        context: "Fairness Advocates might want to prioritize individual fairness, meaning people with similar backgrounds and circumstances should receive similar predictions.",
+        concern: "They are most concerned about inconsistent treatment of similar people.",
+        boundary: "Individual fairness matters most for this role, while predictive performance and safety concerns should still be part of the negotiation.",
+        positionExample: "I want the decision to avoid relying on models that treat similar people differently.",
+        interests: [{ key: "local_consistency", label: "Consistent treatment of similar people", rationale: "Fairness advocates are concerned when people with similar backgrounds receive different predictions." }],
         preferenceKey: "fairness_guardian",
         defaultSelections: { harm: "balanced_harm", fairness: "group", tradeoff: "fairness_priority" },
-        weights: { accuracy: 10, tpr: 12, tnr: 18, local_consistency: 28, counterfactual_fairness: 32 }
+        weights: { accuracy: 10, tpr: 12, tnr: 18, local_consistency: 40 }
       }
     };
     const personaKeys = Object.keys(personaTypes);
@@ -314,7 +311,7 @@
       },
       fairness_guardian: {
         label: "Fairness-oriented preference",
-        note: "This stakeholder gives more room to individual fairness and CF fairness.",
+        note: "This stakeholder gives more room to individual fairness.",
         weights: personaTypes.fairness_advocates.weights
       }
     };
@@ -324,15 +321,14 @@
       accuracy: "How often the AI makes the correct prediction across all cases.",
       tpr: "Correctly identify people who are likely to re-offend.",
       tnr: "Protect low-risk people from being wrongly labeled as high risk.",
-      local_consistency: "People with similar backgrounds and circumstances should receive similar predictions.",
-      counterfactual_fairness: "Predictions should be similar regardless of race."
+      local_consistency: "People with similar backgrounds and circumstances should receive similar predictions."
     };
 
     const personaRankDefaults = {
-      judges: ["accuracy", "tpr", "tnr", "local_consistency", "counterfactual_fairness"],
-      defendants: ["tnr", "counterfactual_fairness", "local_consistency", "accuracy", "tpr"],
-      community_members: ["tpr", "counterfactual_fairness", "local_consistency", "accuracy", "tnr"],
-      fairness_advocates: ["counterfactual_fairness", "local_consistency", "tnr", "accuracy", "tpr"]
+      judges: ["accuracy", "tpr", "tnr", "local_consistency"],
+      defendants: ["tnr", "local_consistency", "accuracy", "tpr"],
+      community_members: ["tpr", "local_consistency", "accuracy", "tnr"],
+      fairness_advocates: ["local_consistency", "tnr", "accuracy", "tpr"]
     };
 
     function primaryCriterionKeyForPersona(persona) {
