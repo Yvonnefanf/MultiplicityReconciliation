@@ -5,14 +5,20 @@
     async function loadDatasets() {
       datasetMeta = await fetchJson("/api/datasets");
       datasetSelect.innerHTML = datasetMeta.map((d) => `<option value="${d.key}">${d.label}</option>`).join("");
-      const requestedDataset = getUrlParams().get("dataset");
-      datasetSelect.value = datasetMeta.some((d) => d.key === requestedDataset) ? requestedDataset : "compas";
-      replaceUrlParams({ dataset: datasetSelect.value });
+      const requestedDataset = datasetFromUrl();
+      datasetSelect.value = datasetMeta.some((d) => d.key === requestedDataset) ? requestedDataset : defaultDataset();
+      // ?dataset= and ?stage= are the old spellings of this app's entry point;
+      // drop them so the URL a participant carries is the one the study platform
+      // hands out.
+      replaceUrlParams({ appId: appIdForDataset(datasetSelect.value), dataset: null, stage: null });
       await loadCases();
     }
 
     async function loadCases() {
       const dataset = datasetSelect.value;
+      // Criterion labels and persona copy are dataset-specific; swap them in
+      // before anything renders so no panel shows another dataset's wording.
+      applyDatasetCopy(dataset);
       setLoading("Loading cases...");
       const cases = await fetchJson(`/api/${dataset}/cases`);
       modelGlobalMetrics = await fetchJson(`/api/${dataset}/model-global-metrics`).catch(() => null);
@@ -25,7 +31,7 @@
       if (requestedCase && Array.from(caseSelect.options).some((option) => option.value === requestedCase)) {
         caseSelect.value = requestedCase;
       }
-      replaceUrlParams({ dataset, case: caseSelect.value });
+      replaceUrlParams({ appId: appIdForDataset(dataset), case: caseSelect.value });
       const meta = datasetMeta.find((d) => d.key === dataset);
       datasetHint.textContent = `${meta.label}: ${meta.case_count} test cases, ${meta.model_count} selected models`;
       await loadDistribution();
@@ -138,7 +144,7 @@
       return renderCaseFeaturePatterns(dataset, activeData.case.features, activeData.shap_patterns, activeData.label_names, activeData.summary);
     }
 
-    async function loadDistribution({ preservePreference = false, forceReconcile = false } = {}) {
+    async function loadDistribution() {
       const dataset = datasetSelect.value;
       const caseIndex = caseSelect.value;
       if (caseIndex === "") return;
@@ -147,11 +153,12 @@
       resetFinalDecision();
       currentPersona = null;
       proxyPersona = null;
+      releaseOtherPersonaPinOnScopeChange(`${dataset}:${caseIndex}`);
       personaInitialWeights = null;
       proxyWeights = normalizeWeights(activeData.reconciliation.proxy_weights);
-      initializePersonaPreference({ newPersona: true, announce: false, preserveElicitation: preservePreference });
+      initializePersonaPreference();
       offerSource = "Elicited initial offer";
-      replaceUrlParams({ dataset, case: caseIndex });
+      replaceUrlParams({ appId: appIdForDataset(dataset), case: caseIndex });
       const selectedModel = selectedDefaultModel();
       features.innerHTML = renderFeatureExplanation(dataset, selectedModel);
 
@@ -174,59 +181,9 @@
         }).join("");
       }
 
-      const requestedStage = forceReconcile ? "reconcile" : stageFromUrl();
-      if (requestedStage === "reconcile" && answeredPairCount() === pairwiseAnswers.length) {
-        startReconciliationFromElicitation();
-      } else if (requestedStage === "preference") {
-        showStage("preference");
-      } else {
-        showStage("persona");
-      }
+      startReconciliation();
     }
 
-    if (personaConsentCheckbox && personaNextButton) {
-      personaConsentCheckbox.addEventListener("change", () => {
-        personaNextButton.disabled = !personaConsentCheckbox.checked;
-        saveElicitationState();
-      });
-    }
-    if (personaNextButton) {
-      personaNextButton.addEventListener("click", () => showStage("preference"));
-    }
-    if (preferenceBackButton) {
-      preferenceBackButton.addEventListener("click", () => {
-        if (pairwiseIndex < 0) {
-          showStage("persona");
-        } else {
-          pairwiseIndex -= 1;
-          saveElicitationState();
-          renderPreferenceElicitation();
-        }
-      });
-    }
-    if (pairwiseNextButton) {
-      pairwiseNextButton.addEventListener("click", () => {
-        if (pairwiseIndex < 0) {
-          pairwiseIndex = 0;
-        } else if (pairwiseIndex >= pairwiseAnswers.length) {
-          pairwiseIndex = 0;
-        } else if (pairwiseAnswers[pairwiseIndex] !== null) {
-          pairwiseIndex += 1;
-        }
-        saveElicitationState();
-        renderPreferenceElicitation();
-      });
-    }
-    if (startReconciliationButton) {
-      startReconciliationButton.addEventListener("click", () => {
-        if (pairwiseIndex < 0) {
-          pairwiseIndex = 0;
-          renderPreferenceElicitation();
-        } else if (pairwiseIndex >= pairwiseAnswers.length) {
-          startReconciliationFromElicitation();
-        }
-      });
-    }
     function renderConditionSwitcher() {
       if (!conditionSelect) return;
       const optionHtml = (option) =>
@@ -245,9 +202,8 @@
         // The condition is read once at load: it sets a body class, the proxy
         // persona, the composer and the per-condition state. Re-rendering in
         // place would leave half of that stale, so switch by reloading.
-        // Keep stage, dataset, case and persona. The elicitation is stored in
-        // sessionStorage under a key that has no condition in it, so it
-        // survives the reload and stage 3 lands back on reconcile.
+        // Every other parameter is kept, so the reload lands on the same app,
+        // case, persona and incoming weights.
         const params = new URLSearchParams(window.location.search);
         params.set("condition", conditionSelect.value);
         window.location.search = params.toString();
@@ -257,15 +213,14 @@
 
     if (datasetSelect) {
       datasetSelect.addEventListener("change", () => {
-        replaceUrlParams({ dataset: datasetSelect.value, case: null, stage: "1" });
+        replaceUrlParams({ appId: appIdForDataset(datasetSelect.value), case: null });
         loadCases();
       });
     }
     if (caseSelect) {
       caseSelect.addEventListener("change", () => {
-        const preservePreference = hasCompleteElicitedPreference();
-        replaceUrlParams({ dataset: datasetSelect.value, case: caseSelect.value, stage: preservePreference ? "3" : "1" });
-        loadDistribution({ preservePreference, forceReconcile: preservePreference });
+        replaceUrlParams({ appId: appIdForDataset(datasetSelect.value), case: caseSelect.value });
+        loadDistribution();
       });
     }
     if (nextCaseButton) {

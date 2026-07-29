@@ -102,7 +102,6 @@
       calibrationFitted = source !== "default";
       applySalienceParamsToCurrentPersona();
       saveCalibrationProfile();
-      saveElicitationState();
     }
 
     function salienceParamSummary(params = currentSalienceParams()) {

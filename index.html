@@ -648,6 +648,9 @@
     /* Whose top priority this criterion is: a tag in the side's own colour --
        blue for the participant, orange for the other party. */
     .criteria-owner-tag { align-items: center; border-radius: 999px; color: #fff; display: inline-flex; flex: none; font-family: Arial, Helvetica, sans-serif; font-size: 10px; font-weight: 900; letter-spacing: .04em; line-height: 1; margin-right: 6px; padding: 3px 7px; text-transform: uppercase; }
+    /* The label itself stays right-aligned, so the last (or only) owner tag
+       takes the leftover space and parks the tag group on the far left. */
+    .exposure-performance-label > .criteria-owner-tag:not(:has(+ .criteria-owner-tag)) { margin-right: auto; }
     .criteria-owner-tag.user { background: #245fba; }
     .criteria-owner-tag.other { background: var(--proxy); color: #4a2f05; }
     .exposure-performance-label.metric-muted .criteria-owner-tag { opacity: .3; }
@@ -881,7 +884,7 @@
     .chat-window { align-items: stretch; background: rgba(255, 253, 249, .58); border: 1.5px solid var(--line); border-radius: 16px; display: flex; flex-direction: column; gap: 10px; height: 100%; max-height: calc(100vh - 260px); min-height: 620px; overflow: hidden; padding: 12px; }
     body.condition-negotiation .chat-window,
     body.condition-negotiatev2 .chat-window { background: #fff; border: 2px solid #000; border-radius: 0; max-height: calc(100vh - 170px); min-height: 620px; }
-    .negotiate-v2-composer .response-config { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+    .negotiate-v2-composer .response-config { grid-template-columns: repeat(2, minmax(0, 1fr)) 120px; }
     .negotiate-v2-composer .response-preview { background: #fff; border: 1.5px solid #d4e0ea; border-radius: 10px; color: #222; font-size: 12px; font-weight: 750; line-height: 1.35; margin-top: 7px; padding: 7px 9px; }
     .negotiate-v2-warning { background: #fff5e6; border: 1.5px solid #e6b35c; border-radius: 8px; color: #7a4a00; font-size: 12px; font-weight: 750; line-height: 1.35; margin-top: 7px; padding: 6px 9px; }
     .negotiate-v2-pending { background: #eef6ff; border: 1px solid #7fa8d0; border-radius: 999px; color: #1d3f63; font-size: 11px; font-weight: 750; padding: 1px 8px; white-space: nowrap; }
@@ -889,9 +892,8 @@
        here so the composer itself shows only the controls and the result. */
     .negotiate-v2-composer .composer-title { align-items: center; display: flex; gap: 6px; justify-content: space-between; }
     .composer-help.nv2-details { border-radius: 999px; flex: none; font-size: 13px; font-weight: 800; height: 18px; letter-spacing: 1px; line-height: 1; padding-bottom: 4px; width: 26px; }
-    .composer-help.nv2-details .composer-help-text { left: auto; right: 0; min-width: 300px; top: 24px; }
-    .nv2-details-title { color: var(--muted); font-size: 10px; font-weight: 800; letter-spacing: .05em; margin-bottom: 5px; text-transform: uppercase; }
-    .nv2-details-note { border-top: 1px solid #e3ebf2; color: var(--muted); font-size: 11px; font-weight: 600; line-height: 1.35; margin-top: 7px; padding-top: 6px; }
+    /* Popover geometry and inner styling live with the restyled composer at the
+       bottom of this sheet, so the two cannot drift apart again. */
     /* Provenance of the Other-party wording: language model vs scripted fallback. */
     .nv2-voice { border-radius: 999px; display: inline-block; font-size: 9.5px; font-weight: 800; letter-spacing: 0.04em; margin-left: 6px; padding: 1px 6px; text-transform: uppercase; vertical-align: 1px; cursor: help; }
     .nv2-voice.llm { background: #eaf3ea; border: 1px solid #b6d3b6; color: #3d6b42; }
@@ -1014,6 +1016,51 @@
     .composer-help.nv2-details { font-size: 14px; height: 30px; letter-spacing: 0; padding-bottom: 6px; width: 30px; }
     .composer-bubble .composer-help:hover { background: #faf9f7; border-color: #cfcbc2; color: #1c1b19; }
     .composer-bubble .composer-help-text { background: #fff; border: 1px solid #e4e2dd; border-radius: 14px; box-shadow: 0 14px 34px rgba(28, 27, 25, .12); color: #33312d; font-weight: 600; padding: 12px 14px; }
+    .composer-help-text { max-width: min(340px, calc(100vw - 48px)); }
+
+    /* --- negotiatev2 composer -------------------------------------------- *
+       Three rows and nothing else: status, the three selects, the toolbar.
+       What the draft resolves to goes in the toolbar's summary column, which
+       the layout already reserves, so it costs no height; the framing prose and
+       the per-criterion breakdown live in the "…" popover. */
+    .composer-bubble.negotiate-v2-composer { padding: 12px 16px 10px; }
+    .negotiate-v2-composer .composer-title { font-size: 13px; font-weight: 700; gap: 8px; margin-bottom: 8px; min-height: 26px; }
+    .composer-help.nv2-details { font-size: 13px; height: 26px; padding-bottom: 5px; width: 26px; }
+    .negotiate-v2-composer .nv2-status { align-items: center; color: #57544e; display: inline-flex; flex-wrap: wrap; gap: 7px; min-width: 0; }
+    .composer-bubble.negotiate-v2-composer .response-config { gap: 9px; margin-bottom: 0; }
+    .composer-bubble.negotiate-v2-composer .response-field label { font-size: 12px; }
+    .composer-bubble.negotiate-v2-composer .response-field select { min-height: 30px; }
+    .composer-bubble.negotiate-v2-composer .composer-send-row { margin-top: 10px; padding-top: 9px; }
+    .composer-bubble.negotiate-v2-composer .composer-actions button,
+    .composer-bubble.negotiate-v2-composer .composer-actions .primary-button { min-height: 32px; }
+    /* Two lines at most: the full sentence is on the element's title. */
+    .nv2-offer-summary { -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-clamp: 2; display: -webkit-box; overflow: hidden; }
+    .nv2-offer-summary strong { color: #1c1b19; font-weight: 750; }
+    /* Only the closed-state card uses this element here, and it carries the
+       result text; the v1 composers keep it hidden. */
+    .negotiate-v2-composer .response-preview { display: block; }
+
+    /* The popover opens upward, into the history area: the composer is pinned
+       to the bottom of a chat window with overflow:hidden, so a downward
+       popover was being clipped off. */
+    .composer-help.nv2-details .composer-help-text {
+      bottom: calc(100% + 9px); left: auto; right: -7px; top: auto;
+      max-height: 340px; max-width: min(360px, calc(100vw - 48px)); min-width: 300px;
+      overflow-y: auto; width: max-content;
+    }
+    .nv2-details .nv2-details-title { color: #86827a; font-size: 10px; font-weight: 800; letter-spacing: .06em; margin: 0 0 7px; text-transform: uppercase; }
+    /* One package line per row -- role on the left, what moves on the right --
+       instead of the three side-by-side columns the wide layout uses, which in
+       a popover left every value ellipsised down to nothing. */
+    .nv2-details .response-package { background: #faf9f7; border: 1px solid #eceae5; border-radius: 10px; display: block; margin-top: 0; padding: 0 11px; }
+    .nv2-details .response-package-row { border-top: 1px solid #eceae5; column-gap: 11px; display: grid; grid-template-columns: 88px minmax(0, 1fr); min-height: 0; padding: 8px 0; }
+    .nv2-details .response-package-row:first-child { border-top: 0; }
+    .nv2-details .response-package-role { align-self: center; color: #8b877f; font-size: 10px; font-weight: 700; grid-area: 1 / 1 / 3 / 2; letter-spacing: .01em; text-transform: none; }
+    .nv2-details .response-package-issue { color: #1c1b19; font-size: 12px; font-weight: 700; grid-area: 1 / 2 / 2 / 3; overflow: visible; white-space: normal; }
+    .nv2-details .response-package-value { color: #57544e; font-size: 11px; font-weight: 600; grid-area: 2 / 2 / 3 / 3; line-height: 1.4; text-align: left; white-space: normal; }
+    .nv2-details .nv2-details-note { border-top: 1px solid #eceae5; color: #86827a; font-size: 11px; font-weight: 600; line-height: 1.5; margin-top: 11px; padding-top: 9px; }
+    .nv2-details .nv2-details-note p { margin: 0; }
+    .nv2-details .nv2-details-note p + p { margin-top: 7px; }
     @media (max-width: 900px) { .response-act-grid, .opening-act-grid, .response-config, .response-package { grid-template-columns: 1fr; } .response-package-row { grid-template-columns: 64px minmax(0, 1fr); } .response-package-value { grid-column: 2; text-align: left; } }
     @media (max-width: 900px) { .foresight-card { grid-template-columns: 1fr; } .foresight-offer { text-align: left; } }
     .reliability-cell strong { color: var(--green); font-size: 18px; }
@@ -1168,75 +1215,6 @@
       <div class="hint" id="datasetHint">Loading datasets...</div>
     </section>
 
-    <section class="wizard-panel persona-mode" id="wizardPanel">
-      <div class="wizard-topline">
-        <div>
-          <div class="wizard-kicker" id="wizardKicker">Stage 1 of 3</div>
-          <div class="wizard-title" id="wizardTitle">Read the stakeholder persona</div>
-          <div class="wizard-subtitle" id="wizardSubtitle">Read the study scenario and step into the stakeholder persona. The next page will ask concrete preference questions before reconciliation begins.</div>
-        </div>
-        <div class="wizard-progress" id="wizardProgress">Persona</div>
-      </div>
-
-      <div class="wizard-page" id="personaStage">
-        <div class="persona-intro">
-          <div class="persona-hero">
-            <h1 class="persona-hero-title">Before we begin, <em> please read the following.</em></h1>
-            <p class="persona-hero-copy">Your persona defines how you will participate in this experiment. Read it carefully before proceeding.</p>
-          </div>
-
-          <div class="persona-reading-card" id="personaCard">
-            <div class="status">Generating random stakeholder persona...</div>
-          </div>
-
-          <!-- <div class="persona-meta-row" aria-label="Study information">
-            <span class="persona-meta-item">
-              <svg class="persona-meta-icon" viewBox="0 0 24 24" aria-hidden="true">
-                <circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" stroke-width="1.8"></circle>
-                <path d="M12 7v5l3 2" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8"></path>
-              </svg>
-              ~15 minutes
-            </span>
-            <span class="persona-meta-item">
-              <svg class="persona-meta-icon" viewBox="0 0 24 24" aria-hidden="true">
-                <path d="M12 3l7 3v5c0 4.6-2.8 8-7 10-4.2-2-7-5.4-7-10V6l7-3z" fill="none" stroke="currentColor" stroke-linejoin="round" stroke-width="1.8"></path>
-              </svg>
-              Anonymous &amp; confidential
-            </span>
-          </div> -->
-
-          <div class="persona-consent-card">
-            <label class="persona-consent-row" for="personaConsentCheckbox">
-              <input id="personaConsentCheckbox" type="checkbox">
-              <span>I have read and understood my persona. I agree to participate voluntarily and will express my role's values throughout the deliberation.</span>
-            </label>
-            <button id="personaNextButton" type="button" class="persona-begin-button" disabled>Begin Experiment <span class="chevron right" aria-hidden="true"></span></button>
-          </div>
-
-          <!-- <p class="persona-contact">If you have questions about this study, contact the research team at <a href="mailto:research@university.edu">research@university.edu</a></p> -->
-        </div>
-      </div>
-
-      <div class="wizard-page hidden" id="preferenceStage">
-        <div class="pairwise-page">
-          <div>
-            <h1 class="pairwise-title" id="pairwiseTitle">Rank the criteria</h1>
-            <p class="pairwise-subtitle" id="pairwiseSubtitle">Order the criteria from most to least important for your role.</p>
-          </div>
-
-          <div class="pairwise-card" id="pairwiseContent"></div>
-
-          <div class="pairwise-nav">
-            <button id="preferenceBackButton" type="button"><span class="chevron left" aria-hidden="true"></span> Back to persona</button>
-            <span class="pairwise-counter" id="pairwiseCounter">Ranking</span>
-            <button id="pairwiseNextButton" type="button">Start comparisons <span class="chevron right" aria-hidden="true"></span></button>
-          </div>
-
-          <button id="startReconciliationButton" type="button" class="pairwise-submit" disabled>0 / 5 answered <span class="chevron right" aria-hidden="true"></span></button>
-        </div>
-      </div>
-    </section>
-
     <section class="reconciliation-shell hidden" id="reconciliationGrid">
       <div class="reconcile-hero">
         <!-- <h1 class="reconcile-title">Negotiate a shared decision rule</h1> -->
@@ -1313,16 +1291,16 @@
     </section>
   </main>
 
-  <script src="js/config-state.js?v=20260726-nv2-plain-language"></script>
-  <script src="js/utils-salience.js?v=20260726-nv2-plain-language"></script>
-  <script src="js/case-features.js?v=20260726-nv2-plain-language"></script>
-  <script src="js/persona-persistence.js?v=20260726-nv2-plain-language"></script>
-  <script src="js/profiles-stakes.js?v=20260726-nv2-plain-language"></script>
-  <script src="js/elicitation.js?v=20260726-nv2-plain-language"></script>
-  <script src="js/negotiation-ui.js?v=20260726-nv2-plain-language"></script>
-  <script src="js/summary-guards.js?v=20260726-nv2-plain-language"></script>
-  <script src="js/negotiation-engine.js?v=20260726-nv2-plain-language"></script>
-  <script src="js/chat-decision.js?v=20260726-nv2-plain-language"></script>
-  <script src="js/main.js?v=20260726-nv2-plain-language"></script>
+  <script src="js/config-state.js?v=20260729-external-elicitation"></script>
+  <script src="js/utils-salience.js?v=20260729-external-elicitation"></script>
+  <script src="js/case-features.js?v=20260729-external-elicitation"></script>
+  <script src="js/persona-persistence.js?v=20260729-external-elicitation"></script>
+  <script src="js/profiles-stakes.js?v=20260729-external-elicitation"></script>
+  <script src="js/elicitation.js?v=20260729-external-elicitation"></script>
+  <script src="js/negotiation-ui.js?v=20260729-external-elicitation"></script>
+  <script src="js/summary-guards.js?v=20260729-external-elicitation"></script>
+  <script src="js/negotiation-engine.js?v=20260729-external-elicitation"></script>
+  <script src="js/chat-decision.js?v=20260729-external-elicitation"></script>
+  <script src="js/main.js?v=20260729-external-elicitation"></script>
 </body>
 </html>

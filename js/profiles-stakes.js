@@ -4,7 +4,9 @@
 
     function buildNegotiationProfile(persona, idealWeights = persona?.weights) {
       const ideal = normalizeWeights(idealWeights || {});
-      const rankOrder = personaRankDefaults[persona?.key] || criteriaOrder;
+      // The participant's own persona carries the ranking implied by the weights
+      // the study platform passed in; the proxy roles keep their fixed template.
+      const rankOrder = persona?.rankOrder || personaRankDefaults[persona?.key] || criteriaOrder;
       const salienceParams = normalizeSalienceParams(persona?.salienceParams || defaultSalienceParams());
       const issues = {};
       const performanceGuards = {};

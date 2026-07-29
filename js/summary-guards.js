@@ -219,16 +219,9 @@
       const lowGroup = groups[0];
       const highGroup = groups[1] || groups[0];
       const visibleGroups = [lowGroup, highGroup].filter(Boolean).slice(0, 2);
-      const shortLabels = {
-        tpr: "Local TPR",
-        tnr: "Local TNR",
-        local_consistency: "Individual fairness"
-      };
-      const fullLabels = {
-        tpr: "Local True Positive Rate / Catch Truly High-Risk Cases in the 30-neighbor local region",
-        tnr: "Local True Negative Rate / Avoid False High-Risk Labels in the 30-neighbor local region",
-        local_consistency: "Individual Fairness"
-      };
+      // Shared, dataset-aware copies; see applyDatasetCopy in config-state.js.
+      const shortLabels = criteriaShortLabels;
+      const fullLabels = criteriaFullLabels;
 
       const criterionHeaders = criteriaOrder.map((key) => {
         const inactive = isInactiveCriterion(key);

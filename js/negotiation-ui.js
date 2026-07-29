@@ -2,36 +2,17 @@
    Part of the Negotiated Rashomon Reconciliation app. Loaded as an ordered
    classic script; all top-level declarations share one global scope. */
 
-    function showStage(stage, { syncUrl = true } = {}) {
-      activeStage = stage;
-      if (syncUrl) replaceUrlParams({ stage: stageToUrlValue(stage) });
-      saveElicitationState();
-      wizardPanel.classList.toggle("hidden", stage === "reconcile");
-      wizardPanel.classList.toggle("persona-mode", stage === "persona");
-      wizardPanel.classList.toggle("elicitation-mode", stage === "preference");
-      reconciliationGrid.classList.toggle("hidden", stage !== "reconcile");
+    // Persona reading and preference elicitation happen on the external study
+    // platform, so this page has a single view and nothing to navigate between.
+    function enterReconcileView() {
+      reconciliationGrid.classList.remove("hidden");
       topToolbar.classList.add("hidden");
-      document.body.classList.toggle("reconcile-mode", stage === "reconcile");
-      personaStage.classList.toggle("hidden", stage !== "persona");
-      preferenceStage.classList.toggle("hidden", stage !== "preference");
-      if (stage === "persona") {
-        wizardKicker.textContent = "Stage 1 of 3";
-        wizardTitle.textContent = "Read the stakeholder persona";
-        wizardSubtitle.textContent = "Read the study scenario and step into the stakeholder persona. The next page will ask concrete preference questions before reconciliation begins.";
-        wizardProgress.textContent = "Persona";
-      } else if (stage === "preference") {
-        wizardKicker.textContent = "Stage 2 of 3";
-        wizardTitle.textContent = "Compare criteria importance";
-        wizardSubtitle.textContent = "Rank criteria, then compare adjacent pairs to set your priority baseline before reconciliation begins.";
-        wizardProgress.textContent = "Pairwise elicitation";
-        renderPreferenceElicitation();
-      }
+      document.body.classList.add("reconcile-mode");
     }
 
-    function startReconciliationFromElicitation() {
+    function startReconciliation() {
       if (!activeData) return;
-      updateElicitedWeights();
-      if (answeredPairCount() < pairwiseAnswers.length) return;
+      applyInitialPreference();
       stakeholderSalienceParams = defaultSalienceParams();
       calibrationFitted = false;
       elicitedFloor = null;
@@ -66,7 +47,7 @@
       if (features) {
         features.innerHTML = renderFeatureExplanation(activeData.dataset || datasetSelect.value, selectedDefaultModel());
       }
-      showStage("reconcile");
+      enterReconcileView();
       if (isNegotiateV2Condition()) {
         composerLocked = false;
         composerNote = "Say what the Other-party's model costs you and what you can give up; the system finds the model that repays them most for it.";
@@ -74,71 +55,27 @@
       } else {
         beginUserOpeningOffer(elicitedWeights, "Elicited preference baseline");
       }
-      renderPersonaCard();
-      /* addHistory(
-        "system",
-        "Persona read",
-        `${escapeHtml(personaTitle(currentPersona))} frames Self's decision concerns.`,
-        null
-      );
-      
-      addHistory(
-        "system",
-        "Preference elicited",
-        "The answers from Stage 2 are translated into Self's baseline criteria weights for reconciliation.",
-        elicitedWeights
-      );
-      addHistory(
-        "system",
-        "Other-party stakeholder assigned",
-        `The Other-party represents ${escapeHtml(personaTitle(proxyPersona))}, a different stakeholder position from Self.`,
-        proxyIdealWeights()
-      );*/
     }
 
-    function initializePersonaPreference({ newPersona = true, announce = false, preserveElicitation = false } = {}) {
+    function initializePersonaPreference() {
       if (!activeData) return;
-      const savedPreference = preserveElicitation && elicitedWeights ? {
-        rankedCriteria: [...rankedCriteria],
-        pairwiseAnswers: [...pairwiseAnswers],
-        pairwiseIndex,
-        elicitedWeights: { ...elicitedWeights },
-
-      } : null;
       currentPersona = makePersonaPreference();
       stakeholderSalienceParams = defaultSalienceParams();
       calibrationFitted = false;
       elicitedFloor = null;
       currentPersona.salienceParams = currentSalienceParams();
+      applyInitialPreference();
+      // The participant's weights come from outside, so the role they speak from
+      // carries those weights and their implied ranking rather than the role
+      // template: otherwise their negotiation floors and targets would guard a
+      // criterion the platform never said they cared about.
+      currentPersona.weights = { ...elicitedWeights };
+      currentPersona.rankOrder = [...rankedCriteria];
       applySalienceParamsToCurrentPersona();
       proxyPersona = makeProxyPersonaPreference(currentPersona.key);
       personaInitialWeights = normalizeWeights(currentPersona.weights);
-      resetPairwiseState();
-      resetNegotiationState("Complete ranking and adjacent comparisons to start reconciliation.");
-      resetPersonaConsent();
-      if (savedPreference) {
-        rankedCriteria = savedPreference.rankedCriteria;
-        pairwiseAnswers = savedPreference.pairwiseAnswers;
-        pairwiseIndex = savedPreference.pairwiseIndex;
-        elicitedWeights = savedPreference.elicitedWeights;
-        calibrationOrder = [];
-        calibrationAnswers = [];
-        calibrationIndex = 0;
-        stakeholderSalienceParams = defaultSalienceParams();
-        calibrationFitted = false;
-        elicitedFloor = null;
-        applySalienceParamsToCurrentPersona();
-        if (personaConsentCheckbox && personaNextButton) {
-          personaConsentCheckbox.checked = true;
-          personaNextButton.disabled = false;
-        }
-      } else {
-        restoreElicitationState();
-      }
+      resetNegotiationState("Start from your stated preference and send your first package offer.");
       setWeights(elicitedWeights, "Elicited initial offer");
-      renderPersonaCard();
-      if (activeStage === "preference") renderPreferenceElicitation();
-      if (announce) showStage("persona");
     }
 
     function addHistory(role, title, text, eventWeights = weights, extra = {}) {
@@ -191,7 +128,7 @@
     }
 
     function rerenderFeatureExplanationForCurrentWeights() {
-      if (!features || !activeData || activeStage !== "reconcile") return;
+      if (!features || !activeData) return;
       features.innerHTML = renderFeatureExplanation(activeData.dataset || datasetSelect.value, selectedDefaultModel());
     }
 
@@ -1905,36 +1842,46 @@
       ]);
 
       const canRequestOpening = nv2CanRequestOtherOpening();
+      // The result of the draft goes in the send row's summary column, which the
+      // toolbar already reserves and left empty — so the composer states what it
+      // is about to send without spending a row on it.
       const previewLine = !offerModel
-        ? "No model in the option set fits this package."
+        ? "No model fits this package."
         : preview.held
-          ? `No model improves on your current position under this package — sending it restates model ${nv2ModelTag(offerModel)} and spends a round.`
-          : `Offer: model ${nv2ModelTag(offerModel)}, predicting <strong>${escapeHtml(nv2PredictionLabel(offerModel))}</strong>.`
-            + (canRequestOpening ? ` You do not have to go first — you can let them open instead, which costs you none of your ${NV2_MAX_VERSION} offers.` : "");
+          ? `Nothing improves on your position — sending restates ${nv2ModelTag(offerModel)}.`
+          : `Offer ${nv2ModelTag(offerModel)} → <strong>${escapeHtml(nv2PredictionLabel(offerModel))}</strong>`;
+      const previewTitle = !offerModel
+        ? "No model in the option set satisfies this package. Ask for less, or give up more."
+        : preview.held
+          ? `No model improves on your current position under this package, so sending it restates model ${nv2ModelTag(offerModel)} and still spends one of your ${NV2_MAX_VERSION} offers.`
+          : `Sending puts model ${nv2ModelTag(offerModel)} on the table; it predicts ${nv2PredictionLabel(offerModel)}.`;
 
       const pendingHtml = nv2.pending
-        ? `<span class="negotiate-v2-pending">they hold ${nv2ModelTag(nv2.pending.model)} (${escapeHtml(nv2PredictionLabel(nv2.pending.model))})</span>`
+        ? ` <span class="negotiate-v2-pending">they hold ${nv2ModelTag(nv2.pending.model)} (${escapeHtml(nv2PredictionLabel(nv2.pending.model))})</span>`
         : "";
 
-      // Everything the participant does not need at a glance — the per-criterion
-      // breakdown of the package and the explanation of how a round works —
-      // lives behind one "..." affordance so the controls stay readable.
+      // Everything that does not change from round to round — what the
+      // negotiation is for, how a round works, and the per-criterion breakdown
+      // of the package — lives behind the one "…" affordance, so the composer
+      // itself stays at three rows: status, controls, toolbar.
       const detailsHtml = `
-        <span class="composer-help nv2-details" tabindex="0" aria-label="What this offer contains">…
+        <span class="composer-help nv2-details" tabindex="0" role="button" aria-label="What this offer contains">…
           <span class="composer-help-text">
             <div class="nv2-details-title">This offer</div>
             <div class="response-package">${packageRows}</div>
-            <div class="nv2-details-note">Name what their model costs you and what you can afford to lose; the system finds the model that repays them most for it. They will accept it or answer with their own.</div>
+            <div class="nv2-details-note">
+              <p>You and the Other-party are settling on one model you both stand behind. Name what their model costs you and what you can afford to lose; the system finds the model that repays them most for it, and they either accept it or answer with their own.</p>
+              ${canRequestOpening ? `<p>You do not have to go first — “Let them open” costs you none of your ${NV2_MAX_VERSION} offers.</p>` : ""}
+            </div>
           </span>
         </span>`;
 
       offerComposer.innerHTML = `
         <div class="composer-bubble negotiate-v2-composer">
           <div class="composer-title">
-            <span>Negotiate which model you both stand behind</span>
+            <span class="nv2-status">${escapeHtml(nv2StatusLine())}${pendingHtml}</span>
             ${detailsHtml}
           </div>
-          <div class="foresight-prompt">${escapeHtml(nv2StatusLine())}${nv2.pending ? " · " : ""}${pendingHtml}</div>
           <div class="response-config">
             <div class="response-field">
               <label for="nv2DemandSelect">Their model fails you on</label>
@@ -1949,9 +1896,8 @@
               <select id="nv2StepSelect" title="How far the criterion on the left may slip. It also sets the bar your offer has to clear for the Other-party: a bigger concession promises them a bigger gain. It does not affect what you are objecting to." ${busy ? "disabled" : ""}>${stepHtml}</select>
             </div>
           </div>
-          <div class="response-preview">${previewLine}</div>
           <div class="composer-send-row">
-            <div class="degree-summary"></div>
+            <div class="degree-summary nv2-offer-summary" title="${escapeHtml(previewTitle)}">${previewLine}</div>
             <div class="composer-actions">
               ${nv2.pending ? `<button type="button" id="nv2AcceptButton" ${busy ? "disabled" : ""}>Accept their model</button>` : ""}
               ${canRequestOpening ? `<button type="button" id="nv2OtherOpensButton" ${busy ? "disabled" : ""} title="Hand the first move to the Other-party. They put a model on the table and you answer it. This does not use up any of your own offers.">Let them open</button>` : ""}

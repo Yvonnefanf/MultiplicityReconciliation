@@ -14,6 +14,22 @@
       return new URLSearchParams(window.location.search);
     }
 
+    // Query keys arrive from an external study platform, so a parameter is read
+    // under any of its accepted spellings and case-insensitively rather than
+    // silently falling back to a default because of a capital letter.
+    function urlParam(...names) {
+      const params = getUrlParams();
+      for (const name of names) {
+        const value = params.get(name);
+        if (value != null && value !== "") return value;
+      }
+      const wanted = names.map((name) => name.toLowerCase());
+      for (const [key, value] of params.entries()) {
+        if (value !== "" && wanted.includes(key.toLowerCase())) return value;
+      }
+      return null;
+    }
+
     function replaceUrlParams(updates) {
       const url = new URL(window.location.href);
       Object.entries(updates).forEach(([key, value]) => {
@@ -26,90 +42,86 @@
       window.history.replaceState({}, "", url.toString());
     }
 
-    function stageFromUrl() {
-      const value = String(getUrlParams().get("stage") || "1").toLowerCase();
-      return { "1": "persona", "2": "preference", "3": "reconcile", persona: "persona", preference: "preference", reconcile: "reconcile" }[value] || "persona";
+    // ---- appId <-> dataset -------------------------------------------------
+    //
+    // The study platform addresses each app by the scenario it presents, so
+    // ?appId= is the public spelling. The dataset key stays the internal name
+    // every data path, copy table and saved record already uses.
+    const APP_ID_TO_DATASET = {
+      recidivism: "compas",
+      welfare_allocation: "acs_coverage",
+    };
+    const DATASET_TO_APP_ID = {
+      compas: "recidivism",
+      acs_coverage: "welfare_allocation",
+    };
+    // Spellings that have been handed out in links, mapped onto the canonical id.
+    const APP_ID_ALIASES = {
+      walfare_allocation: "welfare_allocation",
+      welfare: "welfare_allocation",
+      acs_coverage: "welfare_allocation",
+      compas: "recidivism",
+    };
+    const DEFAULT_APP_ID = "recidivism";
+
+    function normalizeAppId(value) {
+      const key = String(value || "").trim().toLowerCase().replace(/[-\s]/g, "_");
+      return APP_ID_ALIASES[key] || key;
     }
 
-    function stageToUrlValue(stage) {
-      return { persona: "1", preference: "2", reconcile: "3" }[stage] || "1";
+    // ?dataset= is the retired spelling. It is still read (its values are in
+    // APP_ID_ALIASES) so an old link opens the scenario it always opened, but the
+    // URL is rewritten to ?appId= and the old key dropped.
+    function appIdFromUrl() {
+      const appId = normalizeAppId(urlParam("appId", "app_id", "dataset"));
+      return APP_ID_TO_DATASET[appId] ? appId : null;
     }
 
-    function currentStorageKey() {
-      const dataset = datasetSelect?.value || "dataset";
-      const caseIndex = caseSelect?.value || "case";
-      const persona = currentPersona?.key || currentPersonaKeyFromUrl() || "persona";
-      return `case-distribution:${dataset}:${caseIndex}:${persona}`;
+    function datasetFromUrl() {
+      return APP_ID_TO_DATASET[appIdFromUrl()] || null;
     }
 
+    function appIdForDataset(dataset) {
+      return DATASET_TO_APP_ID[dataset] || DEFAULT_APP_ID;
+    }
 
-    function calibrationProfileStorageKey(personaKey = currentPersona?.key || currentPersonaKeyFromUrl() || "persona") {
-      const dataset = datasetSelect?.value || "dataset";
-      return `case-stakes-calibration:${dataset}:${personaKey}`;
+    function defaultDataset() {
+      return APP_ID_TO_DATASET[DEFAULT_APP_ID];
+    }
+
+    // ---- Incoming preference ----------------------------------------------
+    //
+    // Elicitation happens on the external platform, so the participant's
+    // criterion weights are handed over in the URL. Values may be shares or
+    // percentages; normalizeWeights() rescales either.
+    const WEIGHT_URL_ALIASES = {
+      accuracy: ["accuracy_weight", "accuracy"],
+      tpr: ["tpr_weight", "tpr"],
+      tnr: ["tnr_weight", "tnr"],
+      local_consistency: ["local_consistency_weight", "local_consistency", "fairness_weight", "fairness"],
+    };
+
+    function weightsFromUrl() {
+      const raw = {};
+      let provided = false;
+      criteriaOrder.forEach((key) => {
+        const names = WEIGHT_URL_ALIASES[key] || [`${key}_weight`, key];
+        const value = urlParam(...names);
+        if (value == null) return;
+        const numeric = Number(value);
+        if (!Number.isFinite(numeric) || numeric < 0) return;
+        raw[key] = numeric;
+        provided = true;
+      });
+      // A partial vector is honoured -- an omitted criterion counts as zero --
+      // but an all-zero or empty one is not a preference, it is the platform
+      // having passed nothing, which is what the persona default is for.
+      if (!provided || !criteriaOrder.some((key) => raw[key] > 0)) return null;
+      return normalizeWeights(raw);
     }
 
     function saveCalibrationProfile() {
       // Calibration is currently disabled; salience uses the default theory prior.
-    }
-
-    function restoreCalibrationProfile() {
-      stakeholderSalienceParams = defaultSalienceParams();
-      calibrationFitted = false;
-      elicitedFloor = null;
-      return false;
-    }
-
-    function saveElicitationState() {
-      try {
-        sessionStorage.setItem(currentStorageKey(), JSON.stringify({
-          consent: Boolean(personaConsentCheckbox?.checked),
-          rankedCriteria,
-          pairwiseAnswers,
-          pairwiseIndex,
-          elicitedWeights,
-          updatedAt: Date.now()
-        }));
-      } catch (error) {
-        console.warn("Could not save elicitation state", error);
-      }
-    }
-
-    function restoreElicitationState() {
-      try {
-        const raw = sessionStorage.getItem(currentStorageKey());
-        if (!raw) return false;
-        const saved = JSON.parse(raw);
-        if (Array.isArray(saved.rankedCriteria)) {
-          const validRank = saved.rankedCriteria.filter((key) => criteriaOrder.includes(key));
-          rankedCriteria = [...validRank, ...criteriaOrder.filter((key) => !validRank.includes(key))].slice(0, criteriaOrder.length);
-        }
-        if (Array.isArray(saved.pairwiseAnswers)) {
-          const allowed = new Set(intensityOptions.map((option) => option.key));
-          pairwiseAnswers = Array.from({ length: Math.max(0, rankedCriteria.length - 1) }, (_, index) => {
-            const answer = saved.pairwiseAnswers[index];
-            return allowed.has(answer) ? answer : null;
-          });
-        }
-        pairwiseIndex = Number.isInteger(saved.pairwiseIndex)
-          ? Math.max(-1, Math.min(saved.pairwiseIndex, pairwiseAnswers.length))
-          : pairwiseIndex;
-        if (personaConsentCheckbox && personaNextButton) {
-          personaConsentCheckbox.checked = Boolean(saved.consent);
-          personaNextButton.disabled = !personaConsentCheckbox.checked;
-        }
-        calibrationOrder = [];
-        calibrationAnswers = [];
-        calibrationIndex = 0;
-        stakeholderSalienceParams = defaultSalienceParams();
-        calibrationFitted = false;
-        elicitedFloor = null;
-        applySalienceParamsToCurrentPersona();
-        updateElicitedWeights();
-        return true;
-      } catch (error) {
-        console.warn("Could not restore elicitation state", error);
-        return false;
-      }
     }
 
     function currentPersonaKeyFromUrl() {
@@ -119,23 +131,66 @@
     }
 
     function setPersonaKeyInUrl(personaKey) {
-      replaceUrlParams({ persona: personaKey });
+      // A participant who switches into the persona the other party currently
+      // holds would leave both sides on the same key, so the stale pin is
+      // dropped and the next draw picks a fresh opponent.
+      const collides = otherPersonaKeyFromUrl() === normalizePersonaKey(personaKey);
+      replaceUrlParams(collides ? { persona: personaKey, other: null } : { persona: personaKey });
     }
 
+    // The other party is still drawn at random, but the draw is written back to
+    // ?other= so a session is reproducible from its URL alone: reloading,
+    // switching case or switching condition re-reads the pin instead of
+    // re-rolling, which is what made the same participant face a different
+    // opponent (and therefore a different "Other model") in every condition.
+    function otherPersonaKeyFromUrl() {
+      const value = normalizePersonaKey(getUrlParams().get("other"));
+      return personaTypes[value] ? value : null;
+    }
+
+    function setOtherPersonaKeyInUrl(personaKey) {
+      replaceUrlParams({ other: personaKey || null });
+      return personaKey;
+    }
+
+    // Returns the pinned opponent, or null when there is none or the pin has
+    // collided with the participant's own persona.
+    function pinnedOtherPersonaKey(excludeKey = currentPersona?.key) {
+      const key = otherPersonaKeyFromUrl();
+      return key && key !== excludeKey ? key : null;
+    }
+
+    // The draw is scoped to one dataset+case. Within that scope the pin holds,
+    // so a reload or a condition switch reproduces the same opponent; moving to
+    // another case drops the pin so the next draw is a fresh random one and
+    // rewrites ?other= with what it landed on. Starting at null means a page
+    // load always honours the URL it was given.
+    let otherPersonaPinScope = null;
+
+    function releaseOtherPersonaPinOnScopeChange(scopeKey) {
+      const changed = otherPersonaPinScope !== null && otherPersonaPinScope !== scopeKey;
+      otherPersonaPinScope = scopeKey;
+      if (changed) setOtherPersonaKeyInUrl(null);
+      return changed;
+    }
+
+    // The persona is assigned by the study platform. Without one the participant
+    // still needs a role to speak from, and community_members is the agreed
+    // default -- it is also the fallback source of weights when the platform
+    // passed no ?..._weight= at all.
     function ensurePersonaKey() {
-      const existing = currentPersonaKeyFromUrl();
-      if (existing) return existing;
-      const selected = randomItem(personaKeys);
-      setPersonaKeyInUrl(selected);
-      return selected;
+      const key = currentPersonaKeyFromUrl() || DEFAULT_PERSONA_KEY;
+      setPersonaKeyInUrl(key);
+      return key;
     }
 
-    function switchToNextRandomPersona() {
-      const current = currentPersonaKeyFromUrl();
-      const choices = personaKeys.filter((key) => key !== current);
-      const selected = randomItem(choices.length ? choices : personaKeys);
-      setPersonaKeyInUrl(selected);
-      return selected;
+    function initialUserWeights() {
+      return weightsFromUrl() || normalizeWeights(personaTypes[ensurePersonaKey()]?.weights || weights);
+    }
+
+    function rankOrderFromWeights(rawWeights) {
+      const normalized = normalizeWeights(rawWeights || {});
+      return [...criteriaOrder].sort((a, b) => (normalized[b] || 0) - (normalized[a] || 0));
     }
 
     function personaPreferenceFromKey(personaKey) {

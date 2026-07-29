@@ -14,7 +14,7 @@ python3 eval/plot_results.py --dataset compas   # same, restricted to one datase
 `--dataset` filters the pooled `runs.csv` rather than re-running: runs are
 independent per case, so it is identical to sweeping that dataset alone.
 
-Flags: `--datasets compas,loan` · `--limit N` (cases per dataset) ·
+Flags: `--datasets compas,acs_coverage` · `--limit N` (cases per dataset) ·
 `--epsilon 0.02` (multioptimal adoption tolerance) · `--opener self|other`
 (who opens the negotiation) · `--out DIR`.
 
@@ -127,6 +127,10 @@ predict different classes. This is where reconciliation is the thing under test:
 | Negotiate | 84.9% (0.753) | **83.0%** (0.750) | **84.0%** | **75.8%** |
 
 ### Why compas, and not compas + loan
+
+*(Historical: loan has since been dropped from the repo and replaced by
+`acs_coverage` (folktables ACSPublicCoverage), whose Rashomon set disagrees on
+70.5% of test cases. The finding below is what motivated the swap.)*
 
 loan is near-degenerate for this question: its models disagree on only **1.0%**
 of runs (22 cases), versus 30.5% for compas, and every condition lands within

@@ -21,40 +21,27 @@
     const chatWindow = document.querySelector(".chat-window");
     const toggleDetailsButton = document.getElementById("toggleDetailsButton");
     const modelDetailsWrap = document.getElementById("modelDetailsWrap");
-    const wizardPanel = document.getElementById("wizardPanel");
-    const wizardKicker = document.getElementById("wizardKicker");
-    const wizardTitle = document.getElementById("wizardTitle");
-    const wizardSubtitle = document.getElementById("wizardSubtitle");
-    const wizardProgress = document.getElementById("wizardProgress");
-    const personaStage = document.getElementById("personaStage");
-    const preferenceStage = document.getElementById("preferenceStage");
     const reconciliationGrid = document.getElementById("reconciliationGrid");
     const reconcileIdentityBanner = document.getElementById("reconcileIdentityBanner");
-    const personaCard = document.getElementById("personaCard");
-    const pairwiseTitle = document.getElementById("pairwiseTitle");
-    const pairwiseSubtitle = document.getElementById("pairwiseSubtitle");
-    const pairwiseProgress = document.getElementById("pairwiseProgress");
-    const pairwiseContent = document.getElementById("pairwiseContent");
-    const pairwiseNav = document.querySelector(".pairwise-nav");
-    const pairwiseCounter = document.getElementById("pairwiseCounter");
-    const pairwiseNextButton = document.getElementById("pairwiseNextButton");
-    const personaNextButton = document.getElementById("personaNextButton");
-    const personaConsentCheckbox = document.getElementById("personaConsentCheckbox");
-    const preferenceBackButton = document.getElementById("preferenceBackButton");
-    const startReconciliationButton = document.getElementById("startReconciliationButton");
 
     const criteriaOrder = ["accuracy", "tpr", "tnr", "local_consistency"];
+    // TPR/TNR mean different things to a participant depending on what the
+    // positive class is, so every criterion label, description and persona below
+    // is overwritten per dataset by applyDatasetCopy(). These literals are the
+    // COMPAS wording and the shape the overrides must match; they are mutated in
+    // place rather than replaced so the ~30 modules that close over them keep
+    // reading the live values.
     const criteriaLabels = {
       accuracy: "Accuracy",
       tpr: "Catch Truly High-Risk",
       tnr: "Avoid False High-Risk",
       local_consistency: "Individual Fairness"
     };
-    // Single condition pins ONE fixed model per dataset (model 0; loan has no
-    // seed 0 so it uses its first model, seed 1). Its real per-case SHAP is stored
-    // in the case JSON at shap_patterns.by_model[seed]. Re-run
-    // scratchpad/inject_single_shap.py if this seed changes.
-    const SINGLE_MODEL_SEED_BY_DATASET = { compas: 0, loan: 1 };
+    // Single condition pins ONE fixed model per dataset -- the lowest seed the
+    // Rashomon set produced for it (acs_coverage has no seed 0). Its real
+    // per-case SHAP is stored in the case JSON at shap_patterns.by_model[seed],
+    // written by scripts/add_model_shap.py.
+    const SINGLE_MODEL_SEED_BY_DATASET = { compas: 0, acs_coverage: 1 };
     function singleModelSeed() {
       const dataset = activeData?.dataset ?? datasetSelect?.value;
       return SINGLE_MODEL_SEED_BY_DATASET[dataset] ?? null;
@@ -175,9 +162,10 @@
     let currentPersona = null;
     let proxyPersona = null;
     let personaInitialWeights = null;
+    // Ordered highest-weight-first, derived from the incoming preference; the
+    // app reads rankedCriteria[0] wherever it marks "the criterion you care
+    // most about".
     let rankedCriteria = [];
-    let pairwiseAnswers = [];
-    let pairwiseIndex = -1;
     let elicitedWeights = null;
     let datasetCaseList = [];
     let calibrationCaseData = [];
@@ -188,7 +176,6 @@
     let calibrationFitted = false;
     let elicitedFloor = null;
     let floorLadder = null;
-    let activeStage = "persona";
     let finalDecision = null;
     let aggregateSelfShare = 0.5;
     // negotiatev2 model-space negotiation state; see negotiation-ui.js.
@@ -233,11 +220,28 @@
       { key: "strongly", label: "Strongly increase", shortLabel: "Strong", delta: 0.10, phrase: "strongly increases" }
     ];
 
+    // Persona weights follow one 65/20/10/5 template applied along each
+    // persona's ranking in personaRankDefaults, so every role is defined by a
+    // clear primary interest with one real secondary to trade against.
+    //
+    // These are the other party's weights, and the fallback for the
+    // participant's own side when the platform passed no weights in the URL.
+    //
+    // The earlier ~41/23/23/14 spread was too flat to separate the roles.
+    // Measured over every elicitation outcome the Saaty chain can produce
+    // (4 personas x 125 answer combinations x sampled cases), the share of
+    // openings where the two optimal models predict different classes was
+    // 34% on COMPAS and 16% on ACS; with this template and the model-level
+    // opponent choice in chooseConflictingProxyPersona it is 58% and 29%.
+    //
+    // Going further (75/15/6/4) buys ~1pp while pushing the third and fourth
+    // criteria under 6%, which leaves logrolling nothing to give away.
     const personaTypes = {
       judges: {
         key: "judges",
         label: "Judges",
         role: "Judges",
+        rolePhrase: "judge",
         priority: "increasing overall Accuracy",
         metricLabel: "Accuracy",
         context: "Judges might want to prioritize overall accuracy when considering the design of a recidivism prediction system.",
@@ -247,12 +251,13 @@
         interests: [{ key: "accuracy", label: "Overall accuracy", rationale: "Judges need a decision process that is correct as often as possible across cases." }],
         preferenceKey: "local_error_balance",
         defaultSelections: { harm: "overall", fairness: "mixed", tradeoff: "performance_guardrail" },
-        weights: { accuracy: 36, tpr: 20, tnr: 20, local_consistency: 12 }
+        weights: { accuracy: 65, tpr: 20, tnr: 10, local_consistency: 5 }
       },
       defendants: {
         key: "defendants",
         label: "Defendants",
         role: "Defendants",
+        rolePhrase: "defendant",
         priority: "decreasing False Positive Rate (Specificity)",
         metricLabel: "False Positive Rate (Specificity)",
         context: "Defendants might want to prioritize decreasing False Positive Rate (Specificity) because they are worried about being falsely predicted as will offend again.",
@@ -262,27 +267,29 @@
         interests: [{ key: "tnr", label: "False-positive harm protection", rationale: "Defendants are harmed when a low-risk person is incorrectly labeled high risk." }],
         preferenceKey: "tnr_protection",
         defaultSelections: { harm: "false_positive", fairness: "local", tradeoff: "moderate" },
-        weights: { accuracy: 12, tpr: 10, tnr: 36, local_consistency: 18 }
+        weights: { accuracy: 10, tpr: 5, tnr: 65, local_consistency: 20 }
       },
       community_members: {
         key: "community_members",
         label: "Community Members",
         role: "Community Members",
+        rolePhrase: "community member",
         priority: "decreasing False Negative Rate (Sensitivity)",
         metricLabel: "False Negative Rate (Sensitivity)",
-        context: "Community Members might want to prioritize decreasing False Negative Rate (Sensitivity) because they are mostly concerned about the safety of the community.",
+        context: "Community Members might prioritize correctly identifying people who are likely to reoffend because they are primarily concerned about community safety.",
         concern: "They are most concerned about missing people who may truly require intervention.",
         boundary: "Sensitivity and community safety matter most for this role, while false-positive harm and fairness should still be respected.",
         positionExample: "I want the decision process to avoid missing people who may require intervention.",
         interests: [{ key: "tpr", label: "False-negative harm protection", rationale: "Community members are harmed when a truly high-risk case is missed." }],
         preferenceKey: "sensitivity_protection",
         defaultSelections: { harm: "false_negative", fairness: "mixed", tradeoff: "moderate" },
-        weights: { accuracy: 12, tpr: 36, tnr: 12, local_consistency: 18 }
+        weights: { accuracy: 10, tpr: 65, tnr: 5, local_consistency: 20 }
       },
       fairness_advocates: {
         key: "fairness_advocates",
         label: "Fairness Advocates",
         role: "Fairness Advocates",
+        rolePhrase: "fairness advocate",
         priority: "increasing Individual Fairness",
         metricLabel: "Individual Fairness",
         context: "Fairness Advocates might want to prioritize individual fairness, meaning people with similar backgrounds and circumstances should receive similar predictions.",
@@ -292,10 +299,12 @@
         interests: [{ key: "local_consistency", label: "Consistent treatment of similar people", rationale: "Fairness advocates are concerned when people with similar backgrounds receive different predictions." }],
         preferenceKey: "fairness_guardian",
         defaultSelections: { harm: "balanced_harm", fairness: "group", tradeoff: "fairness_priority" },
-        weights: { accuracy: 10, tpr: 12, tnr: 18, local_consistency: 40 }
+        weights: { accuracy: 10, tpr: 5, tnr: 20, local_consistency: 65 }
       }
     };
     const personaKeys = Object.keys(personaTypes);
+    // The role a participant speaks from when the URL names no persona.
+    const DEFAULT_PERSONA_KEY = "community_members";
 
     const preferenceArchetypes = {
       local_error_balance: {
@@ -335,6 +344,196 @@
       fairness_advocates: ["local_consistency", "tnr", "accuracy", "tpr"]
     };
 
+    // ---- Per-dataset study copy -------------------------------------------
+    //
+    // Only wording changes between datasets. The four persona *keys* and their
+    // criterion weights stay fixed, so personaRankDefaults, preferenceArchetypes,
+    // saved participant records and the negotiation engine all keep working
+    // untouched; `judges` is the accuracy slot, `defendants` the TNR slot,
+    // `community_members` the TPR slot, `fairness_advocates` the consistency slot.
+    //
+    // For acs_coverage the positive class is "has public coverage", so in the
+    // allocation framing a positive prediction means "already covered, do not
+    // prioritise for assistance". That flips who each error rate protects:
+    //   TNR -- a truly uncovered person wrongly recorded as covered gets passed
+    //          over, so TNR is the applicant's protection (the defendants slot).
+    //   TPR -- correctly recognising people who already have coverage is what
+    //          stops outreach budget being spent twice (the community slot).
+    const DATASET_COPY = {
+      compas: {
+        criteriaLabels: {
+          accuracy: "Accuracy",
+          tpr: "Catch Truly High-Risk",
+          tnr: "Avoid False High-Risk",
+          local_consistency: "Individual Fairness"
+        },
+        criteriaShortLabels: {
+          accuracy: "Accuracy",
+          tpr: "Local TPR",
+          tnr: "Local TNR",
+          local_consistency: "Individual fairness"
+        },
+        criteriaFullLabels: {
+          accuracy: "Overall Accuracy / Correct Predictions Across All Test Cases",
+          tpr: "Local True Positive Rate / Catch Truly High-Risk Cases in the 30-neighbor local region",
+          tnr: "Local True Negative Rate / Avoid False High-Risk Labels in the 30-neighbor local region",
+          local_consistency: "Individual Fairness"
+        },
+        criteriaDescriptions: {
+          accuracy: "How often the AI makes the correct prediction across all cases.",
+          tpr: "Correctly identify people who are likely to re-offend.",
+          tnr: "Protect low-risk people from being wrongly labeled as high risk.",
+          local_consistency: "People with similar backgrounds and circumstances should receive similar predictions."
+        },
+        personas: {
+          judges: {
+            label: "Judges",
+            role: "Judges",
+            rolePhrase: "judge",
+            priority: "increasing overall Accuracy",
+            metricLabel: "Accuracy",
+            context: "Judges might want to prioritize overall accuracy when considering the design of a recidivism prediction system.",
+            concern: "They are responsible for weighing evidence and may prefer a decision rule that is correct as often as possible across cases.",
+            boundary: "Accuracy matters most for this role, while local error asymmetry and fairness should still be considered during deliberation.",
+            positionExample: "I want the decision to follow the most accurate model group.",
+            interests: [{ key: "accuracy", label: "Overall accuracy", rationale: "Judges need a decision process that is correct as often as possible across cases." }]
+          },
+          defendants: {
+            label: "Defendants",
+            role: "Defendants",
+            rolePhrase: "defendant",
+            priority: "decreasing False Positive Rate (Specificity)",
+            metricLabel: "False Positive Rate (Specificity)",
+            context: "Defendants might want to prioritize decreasing False Positive Rate (Specificity) because they are worried about being falsely predicted as will offend again.",
+            concern: "They are most concerned about being incorrectly assigned a high-risk label when they would not offend again.",
+            boundary: "Local specificity and false-positive protection matter most for this role, while local sensitivity and fairness should still be discussed.",
+            positionExample: "I do not want this person to be labeled high risk unless the evidence is reliable.",
+            interests: [{ key: "tnr", label: "False-positive harm protection", rationale: "Defendants are harmed when a low-risk person is incorrectly labeled high risk." }]
+          },
+          community_members: {
+            label: "Community Members",
+            role: "Community Members",
+            rolePhrase: "community member",
+            priority: "decreasing False Negative Rate (Sensitivity)",
+            metricLabel: "False Negative Rate (Sensitivity)",
+            context: "Community Members might prioritize correctly identifying people who are likely to reoffend because they are primarily concerned about community safety.",
+            concern: "They are most concerned about missing people who may truly require intervention.",
+            boundary: "Sensitivity and community safety matter most for this role, while false-positive harm and fairness should still be respected.",
+            positionExample: "I want the decision process to avoid missing people who may require intervention.",
+            interests: [{ key: "tpr", label: "False-negative harm protection", rationale: "Community members are harmed when a truly high-risk case is missed." }]
+          },
+          fairness_advocates: {
+            label: "Fairness Advocates",
+            role: "Fairness Advocates",
+            rolePhrase: "fairness advocate",
+            priority: "increasing Individual Fairness",
+            metricLabel: "Individual Fairness",
+            context: "Fairness Advocates might want to prioritize individual fairness, meaning people with similar backgrounds and circumstances should receive similar predictions.",
+            concern: "They are most concerned about inconsistent treatment of similar people.",
+            boundary: "Individual fairness matters most for this role, while predictive performance and safety concerns should still be part of the negotiation.",
+            positionExample: "I want the decision to avoid relying on models that treat similar people differently.",
+            interests: [{ key: "local_consistency", label: "Consistent treatment of similar people", rationale: "Fairness advocates are concerned when people with similar backgrounds receive different predictions." }]
+          }
+        }
+      },
+      acs_coverage: {
+        criteriaLabels: {
+          accuracy: "Accuracy",
+          tpr: "Identify Already-Covered",
+          tnr: "Don't Overlook Uncovered",
+          local_consistency: "Individual Fairness"
+        },
+        criteriaShortLabels: {
+          accuracy: "Accuracy",
+          tpr: "Local TPR",
+          tnr: "Local TNR",
+          local_consistency: "Individual fairness"
+        },
+        criteriaFullLabels: {
+          accuracy: "Overall Accuracy / Correct Predictions Across All Test Cases",
+          tpr: "Local True Positive Rate / Correctly Identify People Who Already Have Public Coverage, in the 30-neighbor local region",
+          tnr: "Local True Negative Rate / Avoid Recording an Uncovered Person as Already Covered, in the 30-neighbor local region",
+          local_consistency: "Individual Fairness"
+        },
+        criteriaDescriptions: {
+          accuracy: "How often the AI makes the correct prediction across all cases.",
+          tpr: "Correctly identify people who already have public health coverage.",
+          tnr: "Protect people without coverage from being wrongly recorded as already covered.",
+          local_consistency: "People with similar backgrounds and circumstances should receive similar predictions."
+        },
+        personas: {
+          judges: {
+            label: "Program Administrators",
+            role: "Program Administrators",
+            rolePhrase: "program administrator",
+            priority: "increasing overall Accuracy",
+            metricLabel: "Accuracy",
+            context: "Program Administrators might want to prioritize overall accuracy when considering the design of a public health coverage screening system.",
+            concern: "They are accountable for the program as a whole and may prefer a decision rule that is correct as often as possible across applicants.",
+            boundary: "Accuracy matters most for this role, while local error asymmetry and fairness should still be considered during deliberation.",
+            positionExample: "I want the decision to follow the most accurate model group.",
+            interests: [{ key: "accuracy", label: "Overall accuracy", rationale: "Administrators need a screening process that is correct as often as possible across applicants." }]
+          },
+          defendants: {
+            label: "Applicants",
+            role: "Applicants",
+            rolePhrase: "applicant",
+            priority: "decreasing False Positive Rate (Specificity)",
+            metricLabel: "False Positive Rate (Specificity)",
+            context: "Applicants might want to prioritize decreasing False Positive Rate (Specificity) because they are worried about being wrongly recorded as already covered and passed over for assistance.",
+            concern: "They are most concerned about being marked as already having public coverage when in fact they have none.",
+            boundary: "Local specificity and protection against being wrongly marked as covered matter most for this role, while correctly recognising existing coverage and fairness should still be discussed.",
+            positionExample: "I do not want this person recorded as already covered unless the evidence is reliable.",
+            interests: [{ key: "tnr", label: "Protection from being wrongly marked as covered", rationale: "Applicants are harmed when someone with no coverage is recorded as already covered and passed over." }]
+          },
+          community_members: {
+            label: "Public Budget Office",
+            role: "Public Budget Office",
+            rolePhrase: "budget officer",
+            priority: "decreasing False Negative Rate (Sensitivity)",
+            metricLabel: "False Negative Rate (Sensitivity)",
+            context: "The Public Budget Office might want to prioritize decreasing False Negative Rate (Sensitivity) because it is responsible for spending limited outreach funds where they are actually needed.",
+            concern: "They are most concerned about failing to recognise people who already hold public coverage, so effort is spent twice on the same person.",
+            boundary: "Sensitivity and responsible use of program funds matter most for this role, while the harm of overlooking uncovered people and fairness should still be respected.",
+            positionExample: "I want the decision process to correctly recognise people who already have coverage.",
+            interests: [{ key: "tpr", label: "Responsible use of program funds", rationale: "The budget office is harmed when someone who already holds coverage is not recognised as such." }]
+          },
+          fairness_advocates: {
+            label: "Fairness Advocates",
+            role: "Fairness Advocates",
+            rolePhrase: "fairness advocate",
+            priority: "increasing Individual Fairness",
+            metricLabel: "Individual Fairness",
+            context: "Fairness Advocates might want to prioritize individual fairness, meaning people with similar backgrounds and circumstances should receive similar predictions.",
+            concern: "They are most concerned about inconsistent treatment of similar applicants.",
+            boundary: "Individual fairness matters most for this role, while predictive performance and budget concerns should still be part of the negotiation.",
+            positionExample: "I want the decision to avoid relying on models that treat similar people differently.",
+            interests: [{ key: "local_consistency", label: "Consistent treatment of similar people", rationale: "Fairness advocates are concerned when people with similar backgrounds receive different predictions." }]
+          }
+        }
+      }
+    };
+
+    let activeDatasetCopyKey = null;
+
+    // Overwrite the shared copy objects in place. Called before any render once
+    // the dataset is known; falls back to the COMPAS wording for a dataset with
+    // no entry, so adding data for a new dataset never leaves the UI blank.
+    function applyDatasetCopy(dataset) {
+      const copy = DATASET_COPY[dataset] || DATASET_COPY.compas;
+      activeDatasetCopyKey = DATASET_COPY[dataset] ? dataset : "compas";
+      Object.assign(criteriaLabels, copy.criteriaLabels);
+      Object.assign(criteriaShortLabels, copy.criteriaShortLabels);
+      Object.assign(criteriaFullLabels, copy.criteriaFullLabels);
+      Object.assign(criteriaDescriptions, copy.criteriaDescriptions);
+      Object.entries(copy.personas).forEach(([key, persona]) => {
+        if (personaTypes[key]) Object.assign(personaTypes[key], persona);
+      });
+      // preferenceArchetypes hold live references to the persona weight objects,
+      // which the overrides never touch, so they need no refresh here.
+      return activeDatasetCopyKey;
+    }
+
     function primaryCriterionKeyForPersona(persona) {
       if (!persona) return null;
       const interestKey = persona.interests?.find((item) => criteriaOrder.includes(item?.key))?.key;
@@ -349,27 +548,4 @@
         .sort((a, b) => b.value - a.value)[0]?.key || criteriaOrder[0];
     }
     window.primaryCriterionKeyForPersona = primaryCriterionKeyForPersona;
-
-    // Verbal intensities and the ratios they stand for. Ratios are applied along
-    // the ranking chain (w_i = ratio * w_{i+1}), so four adjacent judgements
-    // compound across the whole scale.
-    //
-    // Saaty's 1-3-5-7-9, kept deliberately for the spread it produces: gentler
-    // SWARA-style steps (1-1.25-1.5-2-3) were measured and moved the opening
-    // disagreement rate by only ~1.6pp, which did not justify flattening the
-    // elicited weights. The labels below are Saaty's own verbal anchors so the
-    // wording matches the number it maps to -- calling 3x "a little more" would
-    // misdescribe what the participant is choosing.
-    //
-    // The cost is real and is handled at the display layer, not here: this scale
-    // drives the last criterion under 0.5% in 414 of 625 possible answer
-    // combinations, so formatPriorityWeight() renders those as "<1%" rather than
-    // "0%", which would claim the criterion has no influence at all.
-    const intensityOptions = [
-      { key: "same", label: "Equally important", ratio: 1 },
-      { key: "slightly", label: "Moderately more", ratio: 1.5 },
-      { key: "moderately", label: "Strongly more", ratio: 2.25 },
-      { key: "much", label: "Very strongly more", ratio: 3.375 },
-      { key: "critically", label: "Extremely more", ratio: 5 }
-    ];
 

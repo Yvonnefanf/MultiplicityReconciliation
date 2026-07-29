@@ -33,7 +33,7 @@
  *   negotiatev2   the simulated protocol's agreed model; on impasse Self deploys
  *                 its own final position (the app leaves the decision to Self)
  *
- * Usage: node eval/run_modeling_eval.mjs [--datasets compas,loan] [--limit N]
+ * Usage: node eval/run_modeling_eval.mjs [--datasets compas,acs_coverage] [--limit N]
  *        [--epsilon 0.02] [--opener self|other] [--out eval/results]
  */
 
@@ -48,7 +48,7 @@ const read = (rel) => fs.readFileSync(path.join(repo, rel), "utf8");
 const args = Object.fromEntries(
   process.argv.slice(2).map((a, i, all) => (a.startsWith("--") ? [a.slice(2), all[i + 1] ?? "true"] : null)).filter(Boolean)
 );
-const DATASETS = (args.datasets || "compas,loan").split(",").map((s) => s.trim()).filter(Boolean);
+const DATASETS = (args.datasets || "compas,acs_coverage").split(",").map((s) => s.trim()).filter(Boolean);
 const LIMIT = args.limit ? Number(args.limit) : Infinity;
 const EPSILON = args.epsilon ? Number(args.epsilon) : 0.02; // multioptimal cheap-adoption tolerance
 const OPENER = args.opener === "other" ? "other" : "self";

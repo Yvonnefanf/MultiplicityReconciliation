@@ -7,19 +7,25 @@
     // Ordering by |SHAP| made the rows reshuffle between cases, models and
     // conditions, so nothing could be compared across panels at a glance.
     // Labels not listed here (other datasets) keep the old |SHAP| ordering.
-    const FEATURE_DISPLAY_ORDER = ["Prior offenses", "Charge severity", "Risk score factor", "Age", "Race", "Sex"];
+    const FEATURE_DISPLAY_ORDER_BY_DATASET = {
+      compas: ["Prior offenses", "Charge severity", "Risk score factor", "Age", "Race", "Sex"],
+      // Eligibility-relevant attributes lead; demographics follow.
+      acs_coverage: ["Annual income", "Employment", "Disability", "Household", "Education", "Age", "Race", "Sex", "Citizenship"],
+    };
+    const FEATURE_DISPLAY_ORDER = FEATURE_DISPLAY_ORDER_BY_DATASET.compas;
 
-    function featureOrderIndex(label) {
-      const index = FEATURE_DISPLAY_ORDER.indexOf(String(label));
-      return index === -1 ? FEATURE_DISPLAY_ORDER.length : index;
+    function featureOrderIndex(dataset, label) {
+      const order = FEATURE_DISPLAY_ORDER_BY_DATASET[dataset] || FEATURE_DISPLAY_ORDER;
+      const index = order.indexOf(String(label));
+      return index === -1 ? order.length : index;
     }
 
     // Sort into the fixed order, falling back to magnitude for any attribute the
     // fixed list does not cover, then keep the leading rows.
-    function orderRowsForDisplay(pairs, magnitudeOf) {
+    function orderRowsForDisplay(pairs, magnitudeOf, dataset) {
       return pairs
         .slice()
-        .sort((a, b) => featureOrderIndex(a.row?.label) - featureOrderIndex(b.row?.label)
+        .sort((a, b) => featureOrderIndex(dataset, a.row?.label) - featureOrderIndex(dataset, b.row?.label)
           || (magnitudeOf(b) - magnitudeOf(a)))
         .slice(0, FEATURE_DISPLAY_LIMIT);
     }
@@ -67,8 +73,89 @@
       };
     }
 
+    // ACSPublicCoverage ships 19 raw ACS recodes. Participants should not have to
+    // read a 19-row table, and several columns only mean anything together (the
+    // three disability flags, the household flags), so they are folded into one
+    // readable row each. `keys` lists the raw columns a row stands for, so a
+    // row's SHAP contribution is the sum over the columns it covers.
+    const ACS_RACE_KEYS = ["Black", "Asian", "Other race"];
+    const ACS_DISABILITY_KEYS = ["Disability", "Hearing difficulty", "Vision difficulty", "Cognitive difficulty"];
+    const ACS_HOUSEHOLD_KEYS = ["Married", "Dependent child", "Gave birth last year"];
+    const ACS_CITIZENSHIP_KEYS = ["US citizen", "Foreign born", "Moved last year", "Military service"];
+
+    function acsEducationBand(level) {
+      const code = Number(level);
+      if (!Number.isFinite(code)) return "Unknown";
+      if (code <= 15) return "No high school diploma";
+      if (code <= 17) return "High school";
+      if (code <= 19) return "Some college";
+      if (code === 20) return "Associate degree";
+      if (code === 21) return "Bachelor's degree";
+      return "Graduate degree";
+    }
+
+    function acsDisabilitySummary(raw) {
+      const specifics = [
+        [raw["Hearing difficulty"], "hearing"],
+        [raw["Vision difficulty"], "vision"],
+        [raw["Cognitive difficulty"], "cognitive"],
+      ].filter(([flag]) => Number(flag) === 1).map(([, label]) => label);
+      const hasDisability = Number(raw.Disability) === 1 || specifics.length > 0;
+      if (!hasDisability) return { value: "None reported", hint: "No disability reported" };
+      return {
+        value: specifics.length ? `Yes (${specifics.join(", ")})` : "Yes",
+        hint: specifics.length
+          ? `Reported disability, including ${specifics.join(", ")} difficulty`
+          : "Reported disability",
+      };
+    }
+
+    function acsHouseholdSummary(raw) {
+      const parts = [];
+      parts.push(Number(raw.Married) === 1 ? "Married" : "Not married");
+      if (Number(raw["Dependent child"]) === 1) parts.push("dependent child");
+      if (Number(raw["Gave birth last year"]) === 1) parts.push("gave birth last year");
+      return parts.join(", ");
+    }
+
+    function acsCitizenshipSummary(raw) {
+      const parts = [Number(raw["US citizen"]) === 1 ? "US citizen" : "Not a US citizen"];
+      if (Number(raw["Foreign born"]) === 1) parts.push("foreign born");
+      if (Number(raw["Moved last year"]) === 1) parts.push("moved last year");
+      if (Number(raw["Military service"]) === 1) parts.push("military service");
+      return parts.join(", ");
+    }
+
+    function acsReadableRows(raw) {
+      const activeRace = ACS_RACE_KEYS.find((key) => Number(raw[key]) === 1);
+      const disability = acsDisabilitySummary(raw);
+      const income = Number(raw["Personal income"]);
+      return [
+        {
+          label: "Annual income",
+          value: Number.isFinite(income) ? `$${income.toLocaleString("en-US")}` : "Unknown",
+          keys: ["Personal income"],
+        },
+        {
+          label: "Employment",
+          value: Number(raw.Employed) === 1 ? "Employed" : "Not employed",
+          keys: ["Employed"],
+        },
+        { label: "Disability", value: disability.value, hint: disability.hint, keys: ACS_DISABILITY_KEYS },
+        { label: "Household", value: acsHouseholdSummary(raw), keys: ACS_HOUSEHOLD_KEYS },
+        { label: "Education", value: acsEducationBand(raw["Education level"]), keys: ["Education level"] },
+        { label: "Age", value: formatFeatureValue("Age", raw.Age), keys: ["Age"] },
+        { label: "Race", value: activeRace || "White", keys: activeRace ? [activeRace] : ACS_RACE_KEYS },
+        { label: "Sex", value: Number(raw.Female) === 1 ? "Female" : "Male", keys: ["Female"] },
+        { label: "Citizenship", value: acsCitizenshipSummary(raw), keys: ACS_CITIZENSHIP_KEYS },
+      ];
+    }
+
     function readableCaseFeatures(dataset, rawFeatures) {
       const raw = rawFeatures || {};
+      if (dataset === "acs_coverage") {
+        return acsReadableRows(raw).map(({ keys, ...row }) => row);
+      }
       if (dataset === "compas") {
         const raceKeys = ["African American", "Asian", "Hispanic", "Native American", "Other race"];
         const race = raceKeys.find((key) => Number(raw[key]) === 1) || "White";
@@ -105,6 +192,9 @@
 
     function readableShapRows(dataset, rawFeatures, shapPatterns) {
       const raw = rawFeatures || {};
+      if (dataset === "acs_coverage") {
+        return acsReadableRows(raw);
+      }
       if (dataset === "compas") {
         const raceKeys = ["African American", "Asian", "Hispanic", "Native American", "Other race"];
         const activeRace = raceKeys.find((key) => Number(raw[key]) === 1);
@@ -128,19 +218,21 @@
       }));
     }
 
+    // Must match the race+sex subgroup that scripts/add_subgroup_metrics.py
+    // computes the per-model subgroup accuracy / TPR / TNR on.
     function subgroupDescription(dataset, rawFeatures) {
       const raw = rawFeatures || {};
+      const sex = Number(raw.Female) === 1 ? "Female" : "Male";
       if (dataset === "compas") {
         const raceKeys = ["African American", "Asian", "Hispanic", "Native American", "Other race"];
         const race = raceKeys.find((key) => Number(raw[key]) === 1) || "White";
-        const sex = Number(raw.Female) === 1 ? "Female" : "Male";
         return `${race}, ${sex}`;
       }
-      const parts = [];
-      ["Education", "Self employed", "CIBIL score"].forEach((key) => {
-        if (raw[key] != null && raw[key] !== "") parts.push(`${humanizeFeatureName(key)}: ${formatFeatureValue(key, raw[key])}`);
-      });
-      return parts.length ? parts.join(", ") : "matching case subgroup";
+      if (dataset === "acs_coverage") {
+        const race = ACS_RACE_KEYS.find((key) => Number(raw[key]) === 1) || "White";
+        return `${race}, ${sex}`;
+      }
+      return "matching case subgroup";
     }
 
     function classIdByRiskLabel(labelNames, riskWord, fallback) {
@@ -420,7 +512,7 @@
       const allRows = hasExplanation ? readableShapRows(dataset, rawFeatures, shapPatterns) : fallbackRows;
       const allValues = allRows.map((row) => shapValueFor(influencePattern.features, row.keys));
       const rowPairs = allRows.map((row, index) => ({ row, value: allValues[index] }));
-      const topPairs = orderRowsForDisplay(rowPairs, (pair) => Math.abs(pair.value));
+      const topPairs = orderRowsForDisplay(rowPairs, (pair) => Math.abs(pair.value), dataset);
       const visiblePairs = topPairs.length ? topPairs : rowPairs.slice(0, FEATURE_DISPLAY_LIMIT);
       const rows = visiblePairs.map((pair) => pair.row);
       const shapValues = visiblePairs.map((pair) => pair.value);
@@ -436,8 +528,8 @@
       const evalMetricDefs = [
         { label: "Accuracy", localKeys: ["subgroup_accuracy", "local_accuracy"], modelKeys: ["subgroup_accuracy", "local_accuracy"], overallKeys: ["test_accuracy"], rankKey: "accuracy" },
         { label: "Individual Fairness.", localKeys: ["local_consistency"], modelKeys: ["local_consistency"], overallKeys: ["global_consistency", "test_consistency", "overall_consistency", "overall_local_consistency"], rankKey: "local_consistency" },
-        { label: "Catch Truly High-Risk", localKeys: ["subgroup_tpr", "local_tpr", "local_true_positive_rate", "local_recall", "local_sensitivity"], modelKeys: ["subgroup_tpr", "local_tpr", "local_true_positive_rate", "local_recall", "local_sensitivity"], overallKeys: ["tpr"], rankKey: "tpr" },
-        { label: "Avoid False High-Risk", localKeys: ["subgroup_tnr", "local_tnr", "local_true_negative_rate", "local_specificity"], modelKeys: ["subgroup_tnr", "local_tnr", "local_true_negative_rate", "local_specificity"], overallKeys: ["tnr"], rankKey: "tnr" },
+        { label: criteriaLabels.tpr, localKeys: ["subgroup_tpr", "local_tpr", "local_true_positive_rate", "local_recall", "local_sensitivity"], modelKeys: ["subgroup_tpr", "local_tpr", "local_true_positive_rate", "local_recall", "local_sensitivity"], overallKeys: ["tpr"], rankKey: "tpr" },
+        { label: criteriaLabels.tnr, localKeys: ["subgroup_tnr", "local_tnr", "local_true_negative_rate", "local_specificity"], modelKeys: ["subgroup_tnr", "local_tnr", "local_true_negative_rate", "local_specificity"], overallKeys: ["tnr"], rankKey: "tnr" },
       ];
       // Order by the user's elicited criterion ranking (most important first);
       // metrics outside the ranking (e.g. Test accuracy) keep their original
@@ -716,7 +808,7 @@
         const score = Math.max(...values.map((value) => Math.abs(value)), 0);
         return { row, values, score };
       });
-      const visiblePairs = orderRowsForDisplay(rowPairs, (pair) => pair.score);
+      const visiblePairs = orderRowsForDisplay(rowPairs, (pair) => pair.score, dataset);
       // Individual models reach further out than any group mean, so the axis has
       // to be sized on the per-model values too. Scaling on the means alone
       // clamped the tails onto the plot edge and piled them up there.
@@ -735,8 +827,8 @@
       const evalMetricDefs = [
         { label: "Accuracy", localKey: "subgroup_accuracy", overallKey: "test_accuracy", rankKey: "accuracy" },
         { label: "Individual Fairness", localKey: "local_consistency", overallKey: "local_consistency", rankKey: "local_consistency" },
-        { label: "Catch Truly High-Risk", localKey: "subgroup_tpr", overallKey: "tpr", rankKey: "tpr" },
-        { label: "Avoid False High-Risk", localKey: "subgroup_tnr", overallKey: "tnr", rankKey: "tnr" },
+        { label: criteriaLabels.tpr, localKey: "subgroup_tpr", overallKey: "tpr", rankKey: "tpr" },
+        { label: criteriaLabels.tnr, localKey: "subgroup_tnr", overallKey: "tnr", rankKey: "tnr" },
       ];
       const rank = Array.isArray(rankedCriteria) ? rankedCriteria : [];
       const evalRankIndex = (key) => {
@@ -889,7 +981,7 @@
         const values = patterns.map((pattern) => shapValueFor(pattern.features, row.keys));
         return { row, values, score: Math.max(...values.map((value) => Math.abs(value)), 0) };
       });
-      const visiblePairs = orderRowsForDisplay(rowPairs, (pair) => pair.score);
+      const visiblePairs = orderRowsForDisplay(rowPairs, (pair) => pair.score, dataset);
       const maxAbs = Math.max(
         Number(shapPatterns?.max_abs_value) || 0,
         ...visiblePairs.flatMap((pair) => pair.values.map((value) => Math.abs(value))),
@@ -900,8 +992,8 @@
       const evalMetricDefs = [
         { label: "Accuracy", localKeys: ["subgroup_accuracy", "local_accuracy"], modelKeys: ["subgroup_accuracy", "local_accuracy"], rankKey: "accuracy" },
         { label: "Individual Fairness", localKeys: ["local_consistency"], modelKeys: ["local_consistency"], rankKey: "local_consistency" },
-        { label: "Catch Truly High-Risk", localKeys: ["subgroup_tpr", "local_tpr", "local_true_positive_rate", "local_recall", "local_sensitivity"], modelKeys: ["subgroup_tpr", "local_tpr", "local_true_positive_rate", "local_recall", "local_sensitivity"], rankKey: "tpr" },
-        { label: "Avoid False High-Risk", localKeys: ["subgroup_tnr", "local_tnr", "local_true_negative_rate", "local_specificity"], modelKeys: ["subgroup_tnr", "local_tnr", "local_true_negative_rate", "local_specificity"], rankKey: "tnr" },
+        { label: criteriaLabels.tpr, localKeys: ["subgroup_tpr", "local_tpr", "local_true_positive_rate", "local_recall", "local_sensitivity"], modelKeys: ["subgroup_tpr", "local_tpr", "local_true_positive_rate", "local_recall", "local_sensitivity"], rankKey: "tpr" },
+        { label: criteriaLabels.tnr, localKeys: ["subgroup_tnr", "local_tnr", "local_true_negative_rate", "local_specificity"], modelKeys: ["subgroup_tnr", "local_tnr", "local_true_negative_rate", "local_specificity"], rankKey: "tnr" },
       ];
       const rank = Array.isArray(rankedCriteria) ? rankedCriteria : [];
       const evalRankIndex = (key) => {
