@@ -299,7 +299,7 @@
     .reconcile-subtitle { color: #796b58; font-size: clamp(15px, 1.5vw, 18px); font-weight: 650; line-height: 1.45; margin: 0; max-width: 860px; }
     .grid { align-items: stretch; display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 18px; margin-top: 4px; }
     body.condition-negotiation .grid { align-items: start; grid-template-columns: 780px minmax(360px, 640px); }
-    body.condition-negotiatev2 .grid { align-items: start; grid-template-columns: 620px minmax(360px, 820px); }
+    body.condition-negotiatev2 .grid { align-items: start; grid-template-columns: 520px minmax(360px, 820px); }
     body.condition-single .grid,
     body.condition-singleoptimal .grid,
     body.condition-multioptimal .grid,
@@ -1264,15 +1264,13 @@
 
             </section>
           </div>
-
-          <section class="panel final-decision-panel">
+          <div class="final-decision-status-banner hidden" id="finalDecisionStatusBanner"></div>
+          <!-- <section class="panel final-decision-panel">
             <div class="final-decision-status-banner hidden" id="finalDecisionStatusBanner"></div>
             <div class="final-decision-header">
-              <h2>Your final decision</h2>
-              <button id="nextCaseButton" type="button" class="final-decision-next" disabled>Next case</button>
             </div>
-            <div class="final-decision-options" id="finalDecisionOptions"></div>
-          </section>
+           
+          </section> -->
         </section>
 
         <section class="panel negotiation-panel">

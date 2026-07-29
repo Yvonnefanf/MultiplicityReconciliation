@@ -94,11 +94,14 @@
     // Elicitation happens on the external platform, so the participant's
     // criterion weights are handed over in the URL. Values may be shares or
     // percentages; normalizeWeights() rescales either.
+    // The first spelling of each criterion is the one the platform sends; the
+    // rest are accepted so a hand-written link still works. The internal key for
+    // individual fairness is local_consistency, but the URL spells it fairness.
     const WEIGHT_URL_ALIASES = {
       accuracy: ["accuracy_weight", "accuracy"],
       tpr: ["tpr_weight", "tpr"],
       tnr: ["tnr_weight", "tnr"],
-      local_consistency: ["local_consistency_weight", "local_consistency", "fairness_weight", "fairness"],
+      local_consistency: ["fairness_weight", "fairness", "local_consistency_weight", "local_consistency"],
     };
 
     function weightsFromUrl() {
