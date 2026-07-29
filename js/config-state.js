@@ -145,6 +145,15 @@
       tnr: "Local TNR",
       local_consistency: "Individual fairness"
     };
+    // Used where the criterion column has to stay narrow (the multi-model
+    // conditions sit beside the negotiation window). Always paired with the full
+    // label on hover, so nothing is only ever shown abbreviated.
+    const criteriaAbbrLabels = {
+      accuracy: "Accuracy",
+      tpr: "Catch HR",
+      tnr: "Protect Inn.",
+      local_consistency: "Fairness"
+    };
     const criteriaFullLabels = {
       accuracy: "Overall Accuracy / Correct Predictions Across All Test Cases",
       tpr: "Local True Positive Rate / Catch High-Risk Cases in the 30-neighbor local region",
@@ -338,6 +347,12 @@
           tnr: "Local TNR",
           local_consistency: "Individual fairness"
         },
+        criteriaAbbrLabels: {
+          accuracy: "Accuracy",
+          tpr: "Catch HR",
+          tnr: "Protect Inn.",
+          local_consistency: "Fairness"
+        },
         criteriaFullLabels: {
           accuracy: "Overall Accuracy / Correct Predictions Across All Test Cases",
           tpr: "Local True Positive Rate / Catch High-Risk Cases in the 30-neighbor local region",
@@ -414,6 +429,12 @@
           tnr: "Local TNR",
           local_consistency: "Individual fairness"
         },
+        criteriaAbbrLabels: {
+          accuracy: "Accuracy",
+          tpr: "ID Covered",
+          tnr: "Don't Overlook",
+          local_consistency: "Fairness"
+        },
         criteriaFullLabels: {
           accuracy: "Overall Accuracy / Correct Predictions Across All Test Cases",
           tpr: "Local True Positive Rate / Correctly Identify People Who Already Have Public Coverage, in the 30-neighbor local region",
@@ -489,6 +510,7 @@
       activeDatasetCopyKey = DATASET_COPY[dataset] ? dataset : "compas";
       Object.assign(criteriaLabels, copy.criteriaLabels);
       Object.assign(criteriaShortLabels, copy.criteriaShortLabels);
+      Object.assign(criteriaAbbrLabels, copy.criteriaAbbrLabels);
       Object.assign(criteriaFullLabels, copy.criteriaFullLabels);
       Object.assign(criteriaDescriptions, copy.criteriaDescriptions);
       Object.entries(copy.personas).forEach(([key, persona]) => {

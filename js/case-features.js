@@ -703,8 +703,11 @@
     // Colour-coded to the side it stands for: blue for the participant, orange
     // for the other stakeholder, matching the colours those sides carry
     // elsewhere in the table.
+    // One letter, because the tag sits inside a criterion column that has to stay
+    // narrow. What it stands for lives in the tooltip, and the colour (blue for
+    // the participant, orange for the other side) carries it everywhere else.
     function criterionOwnerTag(kind) {
-      const text = kind === "user" ? "Self" : "Other";
+      const text = kind === "user" ? "M" : "O";
       const title = kind === "user" ? "Your top-priority criterion" : "The other stakeholder's top-priority criterion";
       return `<span class="criteria-owner-tag ${kind}" title="${escapeHtml(title)}">${text}</span>`;
     }
@@ -1033,12 +1036,17 @@
         const leadClasses = scoreLeadClasses(stats.map((stat) => stat.value));
         return `
           <div class="exposure-performance-row ${mutedClass}">
-            <div class="exposure-performance-label ${mutedClass} ${highlightClass}">${criterionOwnerTags(metric, options?.highlight || {})}${escapeHtml(metric.label)}</div>
+            <div class="exposure-performance-label ${mutedClass} ${highlightClass}" title="${escapeHtml(metric.label)}">${criterionOwnerTags(metric, options?.highlight || {})}${escapeHtml(criteriaAbbrLabels[metric.rankKey] || metric.label)}</div>
             ${stats.map((stat, column) => renderPerformanceComparisonCell(stat, baselineLabel, `${mutedClass} ${highlightClass} ${leadClasses[column]}`)).join("")}
           </div>
         `;
       }).join("");
-      const performanceGridColumns = `220px repeat(${activeItems.length}, 150px)`;
+      // Kept narrow on purpose: this panel sits beside the negotiation window,
+      // so the whole diagram must stay close to the single conditions' width.
+      // That is also why the criteria column shows criteriaAbbrLabels with the
+      // full name on hover, and why the prediction row above -- which reuses
+      // this template -- is sized for wrapped labels rather than one-liners.
+      const performanceGridColumns = `60px repeat(${activeItems.length}, 110px)`;
       const roleTagLabel = { self: "self", other: "other" };
       const versionTagHtml = (item) => {
         if (!options.versionTag) return "";
@@ -1052,14 +1060,8 @@
         ).join("");
         return `<select class="negotiate-v2-model-version-select" data-role="${escapeHtml(item.role || "")}" title="This is the model ${escapeHtml(role)} stood behind at the selected round. Switch to review an earlier offer.">${optionsHtml}</select>`;
       };
-      // The column head carries only whose model this is; what the model
-      // predicted moved to a row at the foot of the table, so the criteria rows
-      // read as one block between the two.
-      const roleHeader = (item) => `
-        <div class="exposure-performance-group multi-optimal-group">
-          <div class="multi-optimal-role"><span>${escapeHtml(item.roleLabel)}</span>${versionTagHtml(item)}</div>
-        </div>
-      `;
+      // Each side's prediction cell sits directly above that side's score column
+      // and names the role, so the scores below need no header of their own.
       const predictionCell = (item, index) => {
         const model = item.model;
         const classId = Number(model.pred_class);
@@ -1067,7 +1069,8 @@
         const modelId = model.seed ?? model.id ?? "-";
         const pattern = patterns[index] || { features: {} };
         return `
-          <div class="multi-optimal-prediction-cell">
+          <div class="multi-optimal-prediction-cell" style="grid-row: 2; grid-column: ${index + 2};">
+            <div class="multi-optimal-role"><span>${escapeHtml(item.roleLabel)}</span>${versionTagHtml(item)}</div>
             <div class="multi-optimal-prediction-value class-${classId}" title="${escapeHtml(`${item.roleLabel}: model #${modelId}`)}">${escapeHtml(predictionLabel)}</div>
             <span class="exposure-detail-wrap multi-optimal-detail-wrap" tabindex="0" role="button" aria-label="${escapeHtml(`Show the explanation behind the ${item.roleLabel} prediction`)}">
               <span class="model-detail-link">AI Explanation</span>
@@ -1098,18 +1101,15 @@
           </div>
         `;
       };
-      // Read top to bottom: the one input case, a brace fanning it out to each
-      // side's model, the criteria scores, then what each model predicted. It is
-      // ONE grid -- caption column, criteria label column, then a column per
-      // model -- so the case box and brace stay centred over the model columns
-      // while the caption sits beside the table. Every child is placed
-      // explicitly: auto-placement would drop the caption into the empty space
-      // beside the case box.
-      const stackColumns = `10px ${performanceGridColumns}`;
-      const modelSpan = "grid-column: 3 / -1;";
+      // Same three stacked sections as the single conditions -- Input Case,
+      // Prediction, Performance -- with the two model columns splitting the
+      // bottom two. Both share one column template -- a narrow criterion-name
+      // column, then one column per model -- so each side's prediction sits
+      // exactly above its own scores.
       return `
-        <div class="single-explanation-diagram exposure-explanation-diagram multi-optimal-diagram" style="grid-template-columns: ${stackColumns};" aria-label="Multi optimal model explanation">
-          <div class="multi-optimal-case-box" style="${modelSpan} grid-row: 1;" aria-label="Input case attributes">
+        <div class="single-explanation-diagram single-stack-diagram multi-stack-diagram" aria-label="Multi optimal model explanation">
+          <div class="single-diagram-heading single-row-label">Input Case</div>
+          <div class="single-row-content multi-input-section" aria-label="Input case attributes">
             <div class="single-feature-list multi-optimal-case-list">
               <div class="single-diagram-heading single-attr-heading">Attribute</div>
               <div class="single-diagram-heading single-value-heading">Value</div>
@@ -1119,26 +1119,27 @@
               `).join("")}
             </div>
           </div>
-          <div class="multi-optimal-brace" style="${modelSpan} grid-row: 2;" aria-hidden="true">
-            <svg viewBox="0 0 1000 60" preserveAspectRatio="none" focusable="false">
-              <path d="M4 58 Q4 30 44 30 L456 30 Q500 30 500 2 Q500 30 544 30 L956 30 Q996 30 996 58"
-                    fill="none" stroke="#111" stroke-width="2.5" stroke-linecap="round" vector-effect="non-scaling-stroke"></path>
-            </svg>
+
+          <div class="single-diagram-heading single-row-label">Prediction</div>
+          <div class="single-row-content multi-prediction-section" style="grid-template-columns: ${performanceGridColumns};" aria-label="Model predictions">
+            ${activeItems.map(predictionCell).join("")}
           </div>
-          <div class="single-diagram-heading multi-optimal-subgroup-heading" style="grid-column: 1; grid-row: 3;">
-            
-            <span class="exposure-performance-help" tabindex="0" aria-label="Performance score legend">?
-            <span class="exposure-performance-help-text">
-            Performance on: <span class="exposure-performance-subgroup">${escapeHtml(subgroupDescription(dataset, rawFeatures))}</span> <br/>
-            Each number is the selected model's subgroup/local score on that criterion, as a percentage (100% is perfect). Hover any number for the average subgroup/local score across all candidate models and how far this model sits from it.</span>
+
+          <div class="single-diagram-heading single-row-label single-performance-label">
+            Performance
+            <span class="exposure-performance-help" tabindex="0" aria-label="What this performance is measured on">?
+              <span class="exposure-performance-help-text">
+                Measured on cases like this one: <span class="exposure-performance-subgroup">${escapeHtml(subgroupDescription(dataset, rawFeatures))}</span>.
+                Each number is the selected model's subgroup/local score on that criterion, as a percentage (100% is perfect). Hover any number for the average subgroup/local score across all candidate models and how far this model sits from it.
+              </span>
             </span>
           </div>
-          <div class="exposure-performance-table multi-optimal-table" style="grid-column: 2 / -1; grid-row: 3; grid-template-columns: ${performanceGridColumns};" aria-label="Multi optimal model performance metrics">
-            <div class="exposure-performance-label exposure-performance-criteria-heading">Criteria</div>
-            ${activeItems.map(roleHeader).join("")}
-            ${performanceRows}
-            <div class="exposure-performance-label multi-optimal-corner"></div>
-            ${activeItems.map(predictionCell).join("")}
+          <div class="single-row-content multi-performance-section">
+            <div class="exposure-performance-table multi-optimal-table" style="grid-template-columns: ${performanceGridColumns};" aria-label="Multi optimal model performance metrics">
+              <div class="exposure-performance-label exposure-performance-criteria-heading">Criteria</div>
+              ${activeItems.map(() => `<div class="exposure-performance-label multi-optimal-corner"></div>`).join("")}
+              ${performanceRows}
+            </div>
           </div>
         </div>
       `;

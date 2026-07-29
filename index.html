@@ -236,7 +236,7 @@
        column names the section (Input Case / Prediction / Performance), the
        right column carries it. Title and content share a grid row, so a section
        that grows taller cannot push its own title out of line. */
-    .single-stack-diagram { --single-grid-line: #d8d8d8; --single-row-height: 32px; align-items: start; column-gap: 0; grid-template-columns: max-content minmax(0, max-content); justify-content: center; min-width: 0; padding: 0; row-gap: 0; }
+    .single-stack-diagram { --single-grid-line: #d8d8d8; --single-row-height: 32px; align-items: start; column-gap: 0; grid-template-columns: 150px 320px; justify-content: center; min-width: 0; padding: 0; row-gap: 0; }
     /* Cell padding rather than grid gaps, so the light grey rules meet and the
        three sections read as one table. Every cell carries the line above it,
        and the last row closes the table with a line below it. */
@@ -258,7 +258,7 @@
     .single-stack-diagram .single-prediction-note { text-align: left; }
     /* The help marker sits inline after the section title here; the -90px nudge
        the three-column heading needed would lift it off the row. */
-    .single-stack-diagram .exposure-performance-help { top: 0; }
+    .single-stack-diagram .exposure-performance-help { top: 30%; position: absolute;}
     .single-stack-diagram .exposure-performance-help-text { transform: translateX(-16px); }
     .single-stack-diagram .single-shap-popover { grid-template-columns: 240px 160px 180px; left: calc(100% + 12px); top: 50%; transform: translateY(-50%); }
     .single-stack-diagram .single-popover-ai { align-self: center; margin-top: 0; width: 160px; }
@@ -283,7 +283,7 @@
     .single-explanation-link { color: var(--blue); cursor: pointer; font-family: Arial, Helvetica, sans-serif; font-size: 14px; font-weight: 800; text-decoration: underline; text-underline-offset: 3px; margin-left: 60px;;}
     .single-explanation-wrap:hover .single-explanation-link,
     .single-explanation-wrap:focus-within .single-explanation-link { color: #3d5573; }
-    .single-diagram-heading { color: #000; font-family: Arial, Helvetica, sans-serif; font-size: 16px; font-weight: 900; line-height: 1; }
+    .single-diagram-heading { color: #000; font-family: Arial, Helvetica, sans-serif; font-size: 16px; font-weight: 900; line-height: 1; position: relative;}
     .single-feature-list { align-items: center; display: grid; gap: 0 2px; grid-template-columns: 120px 150px; grid-template-rows: auto; }
     .single-feature-list .single-diagram-heading { margin-top:18px; margin-bottom: 12px;}
     .single-attr-heading { text-align: right; }
@@ -457,7 +457,7 @@
     .exposure-performance-label.metric-highlight-other { box-shadow: inset 3px 0 0 #e08a1e; }
     /* Whose top priority this criterion is: a tag in the side's own colour --
        blue for the participant, orange for the other party. */
-    .criteria-owner-tag { align-items: center; border-radius: 999px; color: #fff; display: inline-flex; flex: none; font-family: Arial, Helvetica, sans-serif; font-size: 10px; font-weight: 900; letter-spacing: .04em; line-height: 1; margin-right: 6px; padding: 3px 7px; text-transform: uppercase; }
+    .criteria-owner-tag { align-items: center; border-radius: 999px; color: #fff; display: inline-flex; flex: none; font-family: Arial, Helvetica, sans-serif; font-size: 10px; font-weight: 900; justify-content: center; letter-spacing: 0; line-height: 1; margin-right: 5px; min-width: 15px; padding: 3px 4px; text-transform: uppercase; }
     /* The label itself stays right-aligned, so the last (or only) owner tag
        takes the leftover space and parks the tag group on the far left. */
     .exposure-performance-label > .criteria-owner-tag:not(:has(+ .criteria-owner-tag)) { margin-right: auto; }
@@ -640,8 +640,51 @@
        grid whose columns are [caption][criteria labels][one per model], so the
        case box and brace stay centred over the model columns and the caption
        sits beside the table. Column widths come from the inline template. */
-    .multi-optimal-diagram { align-items: start; justify-content: center; min-width: 0; row-gap: 10px; }
-    .multi-optimal-case-box { border: 1px solid rgb(133, 133, 133); justify-self: center; width: max-content; }
+    /* Multi-optimal / aggregate / negotiation reuse the stacked single layout;
+       their Prediction and Performance rows split into one column per model.
+       Both inner grids carry the same template (criteria column + a column per
+       model), which is what keeps a prediction sitting over its own scores. */
+    .multi-stack-diagram .multi-input-section { justify-items: center; }
+    /* Narrower than the single conditions' 120/150: this panel shares the row
+       with the negotiation window, and the attribute values are short. */
+    .multi-stack-diagram .multi-optimal-case-list { grid-template-columns: 110px 120px; }
+    .multi-stack-diagram .single-attr-cell,
+    .multi-stack-diagram .single-value-cell { font-size: 13px; }
+    .multi-prediction-section { row-gap: 0; }
+    /* One model column is 70px wide, so everything in a prediction cell wraps
+       rather than running into the neighbouring model's column. */
+    .multi-prediction-section .multi-optimal-prediction-cell { gap: 4px; min-width: 0; padding: 0 4px; }
+    .multi-prediction-section .multi-optimal-role { flex-wrap: wrap; font-size: 13px; row-gap: 2px; text-align: center; }
+    .multi-prediction-section .multi-optimal-prediction-value { font-size: 14px; }
+    .multi-prediction-section .multi-optimal-detail-wrap { max-width: 100%; }
+    .multi-prediction-section .multi-optimal-detail-wrap .model-detail-link { font-size: 12px; text-align: center; white-space: normal; }
+    /* The two inner grids only line up if they run with the same gaps: the
+       performance table's own 8px/18px would push its columns off the prediction
+       row above and chop the divider into one segment per criteria row. */
+    .multi-stack-diagram .exposure-performance-table { gap: 0; }
+    /* A grid item sized to its content overflows a 70px track -- which is what
+       put "My model" across the divider. Stretch each item to the column and let
+       the role label and the explanation link wrap inside it. */
+    .multi-prediction-section .multi-optimal-prediction-cell { justify-items: stretch; text-align: center; }
+    .multi-prediction-section .multi-optimal-role { justify-content: center; }
+    /* One rule between the two model columns, drawn on every cell of the second
+       column so it follows the shared column template instead of a hard-coded
+       offset: prediction cell, head-row corner, and each score cell. */
+    .multi-prediction-section .multi-optimal-prediction-cell + .multi-optimal-prediction-cell,
+    .multi-optimal-table > .multi-optimal-corner + .multi-optimal-corner,
+    .multi-optimal-table .exposure-performance-cell + .exposure-performance-cell { border-left: 1px solid var(--single-grid-line); }
+    /* 50px of criterion column: small type, no side padding, and the abbreviation
+       wraps rather than pushing the score columns apart. The full name is on
+       hover, so a two-line "Protect / Inn." still reads. */
+    .multi-optimal-table .exposure-performance-label { font-size: 12px; padding: 0 4px 0 0; white-space: nowrap;}
+    .multi-optimal-table .exposure-performance-criteria-heading { font-size: 12px; }
+    /* The 50px column is for the criterion name alone, so the owner tag is lifted
+       out of the flow and hangs in the padding to the left of it. A criterion
+       that is both sides' top priority gets its second tag stepped further out
+       so the two do not sit on top of each other. */
+    .multi-optimal-table .exposure-performance-label { position: relative; }
+    .multi-optimal-table .criteria-owner-tag { margin: 0; position: absolute; right: 104%; top: 50%; transform: translateY(-50%); }
+    .multi-optimal-table .criteria-owner-tag + .criteria-owner-tag { right: calc(100% + 20px); }
     .multi-optimal-case-list { justify-self: center; }
     .multi-optimal-brace { height: 40px; line-height: 0; width: 100%; }
     .multi-optimal-brace svg { height: 100%; width: 100%; }
@@ -660,12 +703,12 @@
     .multi-optimal-prediction-value.class-1 { color: #ef2b2f; }
     .multi-optimal-detail-wrap { margin-left: 0; position: relative; }
     /* "AI Explanation" is itself the hover trigger for the SHAP popover. */
-    .multi-optimal-detail-wrap .model-detail-link { color: var(--blue); cursor: pointer; font-size: 13px; font-weight: 800; text-decoration: underline; text-underline-offset: 3px; white-space: nowrap; }
+    .multi-optimal-detail-wrap .model-detail-link { color: var(--blue); cursor: pointer; font-size: 10px; text-decoration: underline; text-underline-offset: 3px; white-space: nowrap; }
     .multi-optimal-detail-wrap:hover .model-detail-link,
     .multi-optimal-detail-wrap:focus-within .model-detail-link { color: #3d5573; }
     /* Opens upward from its link and centred on it: the trigger sits at the foot
        of the page, and the stacked layout is too narrow to open sideways. */
-    .multi-optimal-table .exposure-shap-popover { bottom: calc(100% + 10px); grid-template-columns: 320px 170px 180px; left: 50%; top: auto; transform: translateX(-50%); }
+    .multi-prediction-section .exposure-shap-popover { bottom: calc(100% + 10px); grid-template-columns: 320px 170px 180px; left: 50%; top: auto; transform: translateX(-50%); }
     .multi-optimal-popover-ai { align-content: start; align-self: start; gap: 0; margin-top: 0; width: 180px; }
     .multi-optimal-popover-ai .single-ai-title { align-items: center; display: flex; height: var(--popover-heading-height); justify-content: center; margin: 0; }
     .multi-optimal-popover-ai .single-ai-box { font-size: 15px; min-width: 130px; padding: 14px 16px; }
