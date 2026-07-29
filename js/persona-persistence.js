@@ -123,10 +123,6 @@
       return normalizeWeights(raw);
     }
 
-    function saveCalibrationProfile() {
-      // Calibration is currently disabled; salience uses the default theory prior.
-    }
-
     function currentPersonaKeyFromUrl() {
       const params = new URLSearchParams(window.location.search);
       const value = normalizePersonaKey(params.get("persona"));
@@ -197,18 +193,14 @@
     }
 
     function personaPreferenceFromKey(personaKey) {
-      const persona = personaTypes[personaKey] || personaTypes.community_members;
-      const archetype = preferenceArchetypes[persona.preferenceKey] || preferenceArchetypes.sensitivity_protection;
-      return enrichPersonaPreference(persona, archetype);
+      return enrichPersonaPreference(personaTypes[personaKey] || personaTypes[DEFAULT_PERSONA_KEY]);
     }
 
-    function enrichPersonaPreference(persona, archetype, idealOverride = null) {
-      const weights = normalizeWeights(idealOverride || persona.weights);
+    function enrichPersonaPreference(persona) {
+      const weights = normalizeWeights(persona.weights);
       const preference = {
         ...persona,
         name: persona.label,
-        preferenceLabel: archetype.label,
-        preferenceNote: archetype.note,
         weights,
       };
       return {

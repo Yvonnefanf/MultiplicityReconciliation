@@ -1,4 +1,4 @@
-/* negotiation-ui.js — stage flow, composer, opening/response acts, offer-control rendering
+/* negotiation-ui.js — reconcile view setup, composer, opening/response acts, offer-control rendering
    Part of the Negotiated Rashomon Reconciliation app. Loaded as an ordered
    classic script; all top-level declarations share one global scope. */
 
@@ -13,9 +13,6 @@
     function startReconciliation() {
       if (!activeData) return;
       applyInitialPreference();
-      stakeholderSalienceParams = defaultSalienceParams();
-      calibrationFitted = false;
-      elicitedFloor = null;
       applySalienceParamsToCurrentPersona();
       if (studyCondition() === "informed") {
         proxyPersona = makeProxyPersonaPreference(currentPersona?.key);
@@ -60,9 +57,6 @@
     function initializePersonaPreference() {
       if (!activeData) return;
       currentPersona = makePersonaPreference();
-      stakeholderSalienceParams = defaultSalienceParams();
-      calibrationFitted = false;
-      elicitedFloor = null;
       currentPersona.salienceParams = currentSalienceParams();
       applyInitialPreference();
       // The participant's weights come from outside, so the role they speak from

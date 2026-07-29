@@ -46,16 +46,13 @@
       };
     }
 
+    // Guards are derived from the criterion's rank in the persona's ordering.
+    // The user's own top-criterion floor used to be elicited by an in-app floor
+    // ladder; that stage is gone, so both sides now use the rank-derived floor.
     function performanceGuardForIssue(persona, key, rank) {
-      // The user's hard floor for their top criterion is *elicited* (floor ladder),
-      // not a rank-derived constant. It only applies to the current user persona.
-      const isUserTopFloor = Boolean(elicitedFloor)
-        && key === elicitedFloor.key
-        && persona?.key && currentPersona?.key
-        && persona.key === currentPersona.key;
-      const enabled = isUserTopFloor || rank <= 2;
-      const negotiability = isUserTopFloor ? "hard" : rank === 1 ? "hard" : rank === 2 ? "soft" : "flexible";
-      const vetoMin = isUserTopFloor ? clamp01Value(elicitedFloor.value) : rank === 1 ? 0.3 : 0;
+      const enabled = rank <= 2;
+      const negotiability = rank === 1 ? "hard" : rank === 2 ? "soft" : "flexible";
+      const vetoMin = rank === 1 ? 0.3 : 0;
       const targetMin = rank === 1 ? 0.55 : rank === 2 ? 0.45 : 0;
       return {
         enabled,

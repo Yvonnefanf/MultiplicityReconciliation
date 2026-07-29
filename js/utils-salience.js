@@ -61,21 +61,16 @@
       return Math.max(min, Math.min(max, numeric));
     }
 
-    function defaultSalienceParams() {
-      return paramsFromScalar(SALIENCE_SCALAR_DEFAULT, "default");
-    }
-
     // The salience model has one free parameter. alpha (leverage) and beta
-    // (target-gap) share the fitted sensitivity `s`; gamma (floor risk) is fixed
-    // at 1 because it is non-compensatory. Keeping the {alpha,beta,gamma} shape
-    // means every downstream reader and the worker payload stay unchanged.
-    function paramsFromScalar(scalar, source = "calibrated") {
-      const s = clampRange(scalar, SALIENCE_SCALAR_MIN, SALIENCE_SCALAR_MAX);
-      return { alpha: s, beta: s, gamma: 1, s, source };
-    }
-
-    function scalarFromParams(params) {
-      return clampRange(params?.s ?? params?.alpha ?? SALIENCE_SCALAR_DEFAULT, SALIENCE_SCALAR_MIN, SALIENCE_SCALAR_MAX);
+    // (target-gap) share the sensitivity `s`; gamma (floor risk) is fixed at 1
+    // because it is non-compensatory. Keeping the {alpha,beta,gamma} shape means
+    // every downstream reader and the worker payload stay unchanged.
+    //
+    // `s` is no longer fitted per participant -- the comparison questions that
+    // fitted it were part of the removed in-app elicitation -- so every persona
+    // now carries the theory prior.
+    function defaultSalienceParams() {
+      return normalizeSalienceParams();
     }
 
     function normalizeSalienceParams(raw = null, source = null) {
@@ -84,7 +79,7 @@
     }
 
     function currentSalienceParams() {
-      return normalizeSalienceParams(stakeholderSalienceParams || defaultSalienceParams());
+      return defaultSalienceParams();
     }
 
     function profileSalienceParams(profile) {
@@ -95,16 +90,5 @@
       if (!currentPersona) return;
       currentPersona.salienceParams = currentSalienceParams();
       currentPersona.negotiationProfile = buildNegotiationProfile(currentPersona, currentPersona.weights || elicitedWeights || weights);
-    }
-
-    function setStakeholderSalienceParams(nextParams, source = "calibrated") {
-      stakeholderSalienceParams = normalizeSalienceParams(nextParams, source);
-      calibrationFitted = source !== "default";
-      applySalienceParamsToCurrentPersona();
-      saveCalibrationProfile();
-    }
-
-    function salienceParamSummary(params = currentSalienceParams()) {
-      return `case-stakes sensitivity ${scalarFromParams(params).toFixed(2)}`;
     }
 

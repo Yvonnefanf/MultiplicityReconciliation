@@ -80,10 +80,17 @@
     // legacy condition, so aliasing it to negotiatev2 would silently hijack it.
     const STUDY_CONDITION_ALIASES = { ignore: "single", negotiate: "negotiatev2", nv2: "negotiatev2" };
     const DEFAULT_STUDY_CONDITION = "negotiatev2";
-    const configuredStudyCondition = String(new URLSearchParams(window.location.search).get("condition") || "").toLowerCase().replace(/[-_\s]/g, "");
+    const configuredCondition = String(new URLSearchParams(window.location.search).get("condition") || "").toLowerCase().replace(/[-_\s]/g, "");
+    // Any condition can be opened as a walkthrough by suffixing it with
+    // `_tutorial` (?condition=single_tutorial). The condition itself behaves
+    // exactly as it normally does; tutorial mode only draws numbered callout
+    // circles over it -- see js/tutorial.js.
+    const activeTutorialMode = /tutorial$/.test(configuredCondition);
+    const configuredStudyCondition = configuredCondition.replace(/tutorial$/, "");
     const requestedStudyCondition = STUDY_CONDITION_ALIASES[configuredStudyCondition] || configuredStudyCondition;
     const activeStudyCondition = STUDY_CONDITIONS.includes(requestedStudyCondition) ? requestedStudyCondition : DEFAULT_STUDY_CONDITION;
     document.body.classList.add(`condition-${activeStudyCondition}`);
+    if (activeTutorialMode) document.body.classList.add("tutorial-mode");
     // aggregate IS multioptimal plus an importance slider, so it carries the
     // multioptimal class too and inherits that condition's styling wholesale
     // rather than keeping a parallel copy that can drift.
@@ -91,6 +98,10 @@
 
     function studyCondition() {
       return activeStudyCondition;
+    }
+
+    function isTutorialMode() {
+      return activeTutorialMode;
     }
 
     function isSingleCondition() {
@@ -168,14 +179,6 @@
     let rankedCriteria = [];
     let elicitedWeights = null;
     let datasetCaseList = [];
-    let calibrationCaseData = [];
-    let calibrationOrder = [];
-    let calibrationAnswers = [];
-    let calibrationIndex = 0;
-    let stakeholderSalienceParams = null;
-    let calibrationFitted = false;
-    let elicitedFloor = null;
-    let floorLadder = null;
     let finalDecision = null;
     let aggregateSelfShare = 0.5;
     // negotiatev2 model-space negotiation state; see negotiation-ui.js.
@@ -189,21 +192,14 @@
     const OPENING_NEGOTIATION_STEP = 0.025;
     const MAX_COUNTER_MOVE = 0.06;
     const MIN_ROUNDS_BEFORE_RESULT_CONSENSUS = 2;
-    // Case-stakes salience is a *derived* quantity, so we only fit one identifiable
-    // sensitivity scalar `s` (alpha=beta=s). The floor-risk term is kept fixed
-    // (gamma=1) because a hard-floor violation is non-compensatory by definition.
+    // Case-stakes salience has one free sensitivity scalar `s` (alpha=beta=s);
+    // the floor-risk term is fixed at gamma=1 because a hard-floor violation is
+    // non-compensatory by definition. `s` used to be fitted from in-app
+    // comparison questions; with elicitation moved off this page it stays at the
+    // theory prior below.
     const SALIENCE_SCALAR_DEFAULT = 1.0;
     const SALIENCE_SCALAR_MIN = 0.2;
     const SALIENCE_SCALAR_MAX = 2.0;
-    const SALIENCE_SCALAR_GRID = [0.4, 0.7, 1.0, 1.3, 1.6];
-    // Adaptive example-comparison elicitation: fit `s` while predicting, and stop
-    // once the user's choices are predictable (or the cap is reached).
-    const CALIBRATION_POOL_SIZE = 10;
-    const CALIBRATION_MIN_QUESTIONS = 3;
-    const CALIBRATION_MAX_QUESTIONS = 8;
-    const CALIBRATION_STOP_STREAK = 3;
-    // Floor (reservation) elicitation for the user's top-priority criterion.
-    const FLOOR_LADDER_MAX_QUESTIONS = 4;
     const HIGH_LEVERAGE_THRESHOLD = 0.08;
     const LOW_LEVERAGE_THRESHOLD = 0.035;
     const HIGH_SALIENCE_THRESHOLD = 0.035;
@@ -249,8 +245,6 @@
         boundary: "Accuracy matters most for this role, while local error asymmetry and fairness should still be considered during deliberation.",
         positionExample: "I want the decision to follow the most accurate model group.",
         interests: [{ key: "accuracy", label: "Overall accuracy", rationale: "Judges need a decision process that is correct as often as possible across cases." }],
-        preferenceKey: "local_error_balance",
-        defaultSelections: { harm: "overall", fairness: "mixed", tradeoff: "performance_guardrail" },
         weights: { accuracy: 65, tpr: 20, tnr: 10, local_consistency: 5 }
       },
       defendants: {
@@ -265,8 +259,6 @@
         boundary: "Local specificity and false-positive protection matter most for this role, while local sensitivity and fairness should still be discussed.",
         positionExample: "I do not want this person to be labeled high risk unless the evidence is reliable.",
         interests: [{ key: "tnr", label: "False-positive harm protection", rationale: "Defendants are harmed when a low-risk person is incorrectly labeled high risk." }],
-        preferenceKey: "tnr_protection",
-        defaultSelections: { harm: "false_positive", fairness: "local", tradeoff: "moderate" },
         weights: { accuracy: 10, tpr: 5, tnr: 65, local_consistency: 20 }
       },
       community_members: {
@@ -281,8 +273,6 @@
         boundary: "Sensitivity and community safety matter most for this role, while false-positive harm and fairness should still be respected.",
         positionExample: "I want the decision process to avoid missing people who may require intervention.",
         interests: [{ key: "tpr", label: "False-negative harm protection", rationale: "Community members are harmed when a truly high-risk case is missed." }],
-        preferenceKey: "sensitivity_protection",
-        defaultSelections: { harm: "false_negative", fairness: "mixed", tradeoff: "moderate" },
         weights: { accuracy: 10, tpr: 65, tnr: 5, local_consistency: 20 }
       },
       fairness_advocates: {
@@ -297,37 +287,12 @@
         boundary: "Individual fairness matters most for this role, while predictive performance and safety concerns should still be part of the negotiation.",
         positionExample: "I want the decision to avoid relying on models that treat similar people differently.",
         interests: [{ key: "local_consistency", label: "Consistent treatment of similar people", rationale: "Fairness advocates are concerned when people with similar backgrounds receive different predictions." }],
-        preferenceKey: "fairness_guardian",
-        defaultSelections: { harm: "balanced_harm", fairness: "group", tradeoff: "fairness_priority" },
         weights: { accuracy: 10, tpr: 5, tnr: 20, local_consistency: 65 }
       }
     };
     const personaKeys = Object.keys(personaTypes);
     // The role a participant speaks from when the URL names no persona.
     const DEFAULT_PERSONA_KEY = "community_members";
-
-    const preferenceArchetypes = {
-      local_error_balance: {
-        label: "Accuracy-centered preference",
-        note: "This stakeholder starts by prioritizing overall accuracy while still considering local errors and fairness.",
-        weights: personaTypes.judges.weights
-      },
-      tnr_protection: {
-        label: "False-positive harm protection",
-        note: "This stakeholder is especially cautious about being falsely labeled high risk.",
-        weights: personaTypes.defendants.weights
-      },
-      sensitivity_protection: {
-        label: "False-negative harm protection",
-        note: "This stakeholder is especially concerned about missed high-risk cases.",
-        weights: personaTypes.community_members.weights
-      },
-      fairness_guardian: {
-        label: "Fairness-oriented preference",
-        note: "This stakeholder gives more room to individual fairness.",
-        weights: personaTypes.fairness_advocates.weights
-      }
-    };
 
     const LOCAL_SCOPE_SIZE = 30;
     const criteriaDescriptions = {
@@ -347,9 +312,9 @@
     // ---- Per-dataset study copy -------------------------------------------
     //
     // Only wording changes between datasets. The four persona *keys* and their
-    // criterion weights stay fixed, so personaRankDefaults, preferenceArchetypes,
-    // saved participant records and the negotiation engine all keep working
-    // untouched; `judges` is the accuracy slot, `defendants` the TNR slot,
+    // criterion weights stay fixed, so personaRankDefaults, saved participant
+    // records and the negotiation engine all keep working untouched;
+    // `judges` is the accuracy slot, `defendants` the TNR slot,
     // `community_members` the TPR slot, `fairness_advocates` the consistency slot.
     //
     // For acs_coverage the positive class is "has public coverage", so in the
@@ -529,8 +494,6 @@
       Object.entries(copy.personas).forEach(([key, persona]) => {
         if (personaTypes[key]) Object.assign(personaTypes[key], persona);
       });
-      // preferenceArchetypes hold live references to the persona weight objects,
-      // which the overrides never touch, so they need no refresh here.
       return activeDatasetCopyKey;
     }
 

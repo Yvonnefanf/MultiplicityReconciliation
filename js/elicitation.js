@@ -67,10 +67,7 @@
     }
 
     function makePersonaPreference() {
-      const personaKey = ensurePersonaKey();
-      const persona = personaTypes[personaKey] || personaTypes.defendants;
-      const archetype = preferenceArchetypes[persona.preferenceKey] || preferenceArchetypes.local_error_balance;
-      return enrichPersonaPreference(persona, archetype);
+      return personaPreferenceFromKey(ensurePersonaKey());
     }
 
     function personaTitle(persona) {
@@ -107,12 +104,6 @@
     function applyInitialPreference() {
       elicitedWeights = initialUserWeights();
       rankedCriteria = rankOrderFromWeights(elicitedWeights);
-      calibrationOrder = [];
-      calibrationAnswers = [];
-      calibrationIndex = 0;
-      calibrationFitted = false;
-      elicitedFloor = null;
-      floorLadder = null;
     }
 
     function personaRolePhrase(persona) {

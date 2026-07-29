@@ -37,10 +37,6 @@
       await loadDistribution();
     }
 
-    async function prepareCalibrationCaseData() {
-      calibrationCaseData = [];
-    }
-
     function exposureHighlightOptions() {
       const userKey = rankedCriteria[0] || criteriaOrder[0];
       return { highlight: { userKey } };
@@ -205,7 +201,7 @@
         // Every other parameter is kept, so the reload lands on the same app,
         // case, persona and incoming weights.
         const params = new URLSearchParams(window.location.search);
-        params.set("condition", conditionSelect.value);
+        params.set("condition", isTutorialMode() ? `${conditionSelect.value}_tutorial` : conditionSelect.value);
         window.location.search = params.toString();
       });
     }

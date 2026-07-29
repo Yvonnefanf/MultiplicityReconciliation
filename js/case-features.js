@@ -527,7 +527,7 @@
       const highLabel = labelNames?.[1] || "Type 2";
       const evalMetricDefs = [
         { label: "Accuracy", localKeys: ["subgroup_accuracy", "local_accuracy"], modelKeys: ["subgroup_accuracy", "local_accuracy"], overallKeys: ["test_accuracy"], rankKey: "accuracy" },
-        { label: "Individual Fairness.", localKeys: ["local_consistency"], modelKeys: ["local_consistency"], overallKeys: ["global_consistency", "test_consistency", "overall_consistency", "overall_local_consistency"], rankKey: "local_consistency" },
+        { label: "Fairness", localKeys: ["local_consistency"], modelKeys: ["local_consistency"], overallKeys: ["global_consistency", "test_consistency", "overall_consistency", "overall_local_consistency"], rankKey: "local_consistency" },
         { label: criteriaLabels.tpr, localKeys: ["subgroup_tpr", "local_tpr", "local_true_positive_rate", "local_recall", "local_sensitivity"], modelKeys: ["subgroup_tpr", "local_tpr", "local_true_positive_rate", "local_recall", "local_sensitivity"], overallKeys: ["tpr"], rankKey: "tpr" },
         { label: criteriaLabels.tnr, localKeys: ["subgroup_tnr", "local_tnr", "local_true_negative_rate", "local_specificity"], modelKeys: ["subgroup_tnr", "local_tnr", "local_true_negative_rate", "local_specificity"], overallKeys: ["tnr"], rankKey: "tnr" },
       ];
@@ -606,7 +606,7 @@
           <div class="single-diagram-heading single-panel-heading">Input Case</div>
           <div class="single-diagram-heading single-panel-heading">AI System Prediction</div>
           <div class="single-diagram-heading single-panel-heading">
-            AI Performance on: <span class="exposure-performance-subgroup">${escapeHtml(subgroupDescription(dataset, rawFeatures))}</span>
+            AI System Performance <br/> on: <span class="exposure-performance-subgroup">${escapeHtml(subgroupDescription(dataset, rawFeatures))}</span>
             <span class="exposure-performance-help" tabindex="0" aria-label="Performance score legend">?
               <span class="exposure-performance-help-text">${helpText}</span>
             </span>
