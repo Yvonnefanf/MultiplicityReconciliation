@@ -19,13 +19,13 @@
     // The single / single-optimal panel, read left to right: the case, what the
     // AI predicted for it, and how well that AI scores on the criteria.
     const TUTORIAL_SINGLE_BADGES = [
-      { n: 1, selector: ".single-panel-heading", index: 0, title: "The case being decided" },
+      { n: 1, selector: ".single-row-label", index: 0, place: "left", title: "The case being decided" },
       { n: 2, selector: ".single-input-heads .single-attr-heading", title: "Which attribute of the case" },
       { n: 3, selector: ".single-input-heads .single-value-heading", title: "This case's value for it" },
-      { n: 4, selector: ".single-panel-heading", index: 1, title: "What the AI system decided" },
-      { n: 5, selector: ".single-prediction-result", place: "left", title: "The predicted class" },
+      { n: 4, selector: ".single-row-label", index: 1, place: "left", title: "What the AI system decided" },
+      { n: 5, selector: ".single-prediction-result", place: "right", title: "The predicted class" },
       { n: 6, selector: ".single-explanation-link", place: "below", title: "Opens which attributes pushed the prediction" },
-      { n: 7, selector: ".single-panel-heading", index: 2, title: "How good that AI is, for people like this case" },
+      { n: 7, selector: ".single-row-label", index: 2, place: "left", title: "How good that AI is, for people like this case" },
       { n: 8, selector: ".single-performance-heads .single-criteria-heading", title: "Which quality criterion" },
       { n: 9, selector: ".single-performance-heads .single-score-heading", title: "Its score, 100% is perfect" },
     ];

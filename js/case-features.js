@@ -564,7 +564,7 @@
       // chosen against the participant's own ranking.
       const rankedTopMetric = rank.length && evalMetrics[0]?.rankKey === rank[0] ? evalMetrics[0] : null;
       const optimalNote = options?.mode === "singleOptimal"
-        ? `Picked for you: best matches your priorities${rankedTopMetric ? `, with higher <strong>${escapeHtml(rankedTopMetric.label)}</strong>` : ""}.`
+        ? `Picked for you: best matches your priorities.`
         : "";
       const singlePerformanceRows = evalMetrics.map((metric) => {
         const localValue = metricValueForModel(selectedModel, metric, useModelMetricFallback);
@@ -597,39 +597,28 @@
           </div>
         `;
       }).join("");
-      // Three columns -- input case, prediction, performance -- laid out as one
-      // grid so the panel headings share a row, the Attribute/Value and
-      // Criteria/Score column heads share the next, and the body rows below them
-      // sit on the same 32px rhythm instead of drifting apart.
+      // Three stacked sections -- input case, prediction, performance -- as one
+      // 3x2 grid: the left column names the section, the right column carries it.
+      // Section title and content share a grid row, so they stay aligned however
+      // tall the content grows.
       return `
-        <div class="single-explanation-diagram single-compact-diagram" aria-label="Single model performance explanation">
-          <div class="single-diagram-heading single-panel-heading">Input Case</div>
-          <div class="single-diagram-heading single-panel-heading">AI System Prediction</div>
-          <div class="single-diagram-heading single-panel-heading">
-            AI System Performance <br/> on: <span class="exposure-performance-subgroup">${escapeHtml(subgroupDescription(dataset, rawFeatures))}</span>
-            <span class="exposure-performance-help" tabindex="0" aria-label="Performance score legend">?
-              <span class="exposure-performance-help-text">${helpText}</span>
-            </span>
+        <div class="single-explanation-diagram single-stack-diagram" aria-label="Single model performance explanation">
+          <div class="single-diagram-heading single-row-label">Input Case</div>
+          <div class="single-row-content single-input-section">
+            <div class="single-column-heads single-input-heads">
+              <span class="single-diagram-heading single-attr-heading">Attribute</span>
+              <span class="single-diagram-heading single-value-heading">Value</span>
+            </div>
+            <div class="single-column-body single-input-body" aria-label="Input case attributes">
+              ${visiblePairs.map((pair) => `
+                <div class="single-attr-cell" title="${escapeHtml(pair.row.label)}">${escapeHtml(pair.row.label)}</div>
+                <div class="single-value-cell" title="${escapeHtml(pair.row.hint || pair.row.value)}">${escapeHtml(pair.row.value)}</div>
+              `).join("")}
+            </div>
           </div>
 
-          <div class="single-column-heads single-input-heads">
-            <span class="single-diagram-heading single-attr-heading">Attribute</span>
-            <span class="single-diagram-heading single-value-heading">Value</span>
-          </div>
-          <div class="single-column-heads single-prediction-heads" aria-hidden="true"></div>
-          <div class="single-column-heads single-performance-heads">
-            <span class="single-diagram-heading single-criteria-heading">Criteria</span>
-            <span class="single-diagram-heading single-score-heading">Score</span>
-          </div>
-
-          <div class="single-column-body single-input-body" aria-label="Input case attributes">
-            ${visiblePairs.map((pair) => `
-              <div class="single-attr-cell" title="${escapeHtml(pair.row.label)}">${escapeHtml(pair.row.label)}</div>
-              <div class="single-value-cell" title="${escapeHtml(pair.row.hint || pair.row.value)}">${escapeHtml(pair.row.value)}</div>
-            `).join("")}
-          </div>
-
-          <div class="single-column-body single-prediction-body" aria-label="AI system prediction">
+          <div class="single-diagram-heading single-row-label">Prediction</div>
+          <div class="single-row-content single-prediction-section" aria-label="AI system prediction">
             ${optimalNote ? `<p class="single-prediction-note">${optimalNote}</p>` : ""}
             <div class="single-prediction-result ${predictionClassName}">${escapeHtml(predictionLabel)}</div>
             <span class="exposure-detail-wrap single-explanation-wrap" tabindex="0" role="button" aria-label="Show XAI explanation detail">
@@ -660,8 +649,23 @@
             </span>
           </div>
 
-          <div class="single-column-body single-performance-body" aria-label="Single model performance metrics">
-            ${singlePerformanceRows}
+          <div class="single-diagram-heading single-row-label single-performance-label">
+            Performance
+            <span class="exposure-performance-help" tabindex="0" aria-label="What this performance is measured on">?
+              <span class="exposure-performance-help-text">
+                Measured on cases like this one: <span class="exposure-performance-subgroup">${escapeHtml(subgroupDescription(dataset, rawFeatures))}</span>.
+                ${helpText}
+              </span>
+            </span>
+          </div>
+          <div class="single-row-content single-performance-section">
+            <div class="single-column-heads single-performance-heads">
+              <span class="single-diagram-heading single-criteria-heading">Criteria</span>
+              <span class="single-diagram-heading single-score-heading">Score</span>
+            </div>
+            <div class="single-column-body single-performance-body" aria-label="Single model performance metrics">
+              ${singlePerformanceRows}
+            </div>
           </div>
         </div>
             `;

@@ -232,14 +232,33 @@
     body.condition-single .single-model-probability strong, body.condition-singleoptimal .single-model-probability strong { color: #1f559e; }
     body.condition-single .single-model-metric, body.condition-singleoptimal .single-model-metric { border-top: 2px solid #000; }
     .single-explanation-diagram { --single-row-height: 30px; --single-heading-gap: 24px; --single-plot-border: 4px; align-items: start; background: #fff; display: grid; grid-template-columns: 320px 180px 40px 200px 320px; min-width: 1560px; padding: 8px 0 18px; }
-    /* Single / single-optimal: input case, prediction and performance are three
-       columns of ONE grid, so the panel headings share a row, the
-       Attribute/Value and Criteria/Score heads share the next, and the body rows
-       below them run on the same 32px rhythm. */
-    .single-compact-diagram { --single-row-height: 32px; align-items: start; gap: 14px 34px; grid-template-columns: 270px 240px 280px; justify-content: center; min-width: 860px; padding: 8px 0 18px; }
-    /* Top-aligned so the three headings start on the same line even when one of
-       them wraps or carries the single-optimal note below it. */
-    .single-panel-heading { align-self: start; line-height: 1.15; min-height: 34px; text-align: center; }
+    /* Single / single-optimal: three stacked sections in a 3x2 grid -- the left
+       column names the section (Input Case / Prediction / Performance), the
+       right column carries it. Title and content share a grid row, so a section
+       that grows taller cannot push its own title out of line. */
+    .single-stack-diagram { --single-grid-line: #d8d8d8; --single-row-height: 32px; align-items: start; column-gap: 0; grid-template-columns: max-content minmax(0, max-content); justify-content: center; min-width: 0; padding: 0; row-gap: 0; }
+    /* Cell padding rather than grid gaps, so the light grey rules meet and the
+       three sections read as one table. Every cell carries the line above it,
+       and the last row closes the table with a line below it. */
+    .single-stack-diagram > * { border-top: 1px solid var(--single-grid-line); padding: 18px 22px; }
+    .single-stack-diagram > :nth-last-child(-n + 2) { border-bottom: 1px solid var(--single-grid-line); }
+    /* Stretched so its right-hand rule spans the whole row, with the title itself
+       centred inside that full-height cell. */
+    .single-row-label { border-left: 1px solid #ccc; align-items: center; align-self: stretch; background: #e8e8e8; display: flex; flex-wrap: wrap; line-height: 1.15; text-align: left; }
+    .single-row-content { display: grid; row-gap: 8px; border-right: 1px solid #ccc;}
+    /* Read as rows of a form here rather than as a column pointing at the values
+       next to it, so the attribute names start at the section's left edge. */
+    
+    .single-prediction-section { justify-items: start; row-gap: 12px; }
+    .single-stack-diagram .single-prediction-result { width: 240px; }
+    .single-stack-diagram .single-prediction-note { text-align: left; }
+    /* The help marker sits inline after the section title here; the -90px nudge
+       the three-column heading needed would lift it off the row. */
+    .single-stack-diagram .exposure-performance-help { top: 0; }
+    .single-stack-diagram .exposure-performance-help-text { transform: translateX(-16px); }
+    .single-stack-diagram .single-shap-popover { grid-template-columns: 240px 160px 180px; left: calc(100% + 12px); top: 50%; transform: translateY(-50%); }
+    .single-stack-diagram .single-popover-ai { align-self: center; margin-top: 0; width: 160px; }
+    .single-stack-diagram .single-popover-ai .single-ai-box { min-width: 130px; padding: 14px 16px; }
     /* Single-optimal's "why this model" line. It lives in the prediction column's
        body, not in the heading cell, so it cannot stretch the shared heading row
        and open a gap under the other two headings. */
@@ -253,17 +272,13 @@
     .single-criteria-heading { padding: 0 8px; text-align: right; }
     .single-score-heading { text-align: center; }
     .single-column-body { align-items: center; display: grid; }
-    .single-prediction-body { gap: 12px; justify-items: center; }
     .single-prediction-result { align-items: center; border: 3px solid #000; color: #1f559e; display: flex; font-family: Arial, Helvetica, sans-serif; font-size: 16px; font-weight: 800; justify-content: center; line-height: 1.15; min-height: var(--single-row-height); padding: 14px 16px; text-align: center; width: 100%; }
     .single-prediction-result.class-0 { color: #3f87df; }
     .single-prediction-result.class-1 { color: #ef2b2f; }
     .single-explanation-wrap { margin-left: 0; }
-    .single-explanation-link { color: var(--blue); cursor: pointer; font-family: Arial, Helvetica, sans-serif; font-size: 14px; font-weight: 800; text-decoration: underline; text-underline-offset: 3px; }
+    .single-explanation-link { color: var(--blue); cursor: pointer; font-family: Arial, Helvetica, sans-serif; font-size: 14px; font-weight: 800; text-decoration: underline; text-underline-offset: 3px; margin-left: 60px;;}
     .single-explanation-wrap:hover .single-explanation-link,
     .single-explanation-wrap:focus-within .single-explanation-link { color: #3d5573; }
-    .single-compact-diagram .single-shap-popover { grid-template-columns: 240px 160px 180px; left: calc(100% + 12px); top: 50%; transform: translateY(-50%); }
-    .single-compact-diagram .single-popover-ai { align-self: center; margin-top: 0; width: 160px; }
-    .single-compact-diagram .single-popover-ai .single-ai-box { min-width: 130px; padding: 14px 16px; }
     .single-diagram-heading { color: #000; font-family: Arial, Helvetica, sans-serif; font-size: 16px; font-weight: 900; line-height: 1; }
     .single-feature-list { align-items: center; display: grid; gap: 0 2px; grid-template-columns: 120px 150px; grid-template-rows: auto; }
     .single-feature-list .single-diagram-heading { margin-top:18px; margin-bottom: 12px;}
@@ -973,6 +988,8 @@
     body.tutorial-mode .features { overflow: visible; }
     body.tutorial-mode .single-explanation-diagram { padding-top: 34px; }
     body.tutorial-mode .single-column-heads { margin-top: 28px; }
+    /* Room on the left for the circles that number the three section titles. */
+    body.tutorial-mode .single-stack-diagram { padding-left: 42px; }
     .tutorial-anchor { position: relative; }
     .tutorial-badge { align-items: center; background: #1f6fd0; border-radius: 999px; box-shadow: 0 1px 3px rgba(0, 0, 0, .25); color: #fff; display: inline-flex; font-family: Arial, Helvetica, sans-serif; font-size: 13px; font-weight: 850; height: 24px; justify-content: center; line-height: 1; position: absolute; width: 24px; z-index: 40; }
     .tutorial-badge-above { left: 50%; top: -28px; transform: translateX(-50%); }
