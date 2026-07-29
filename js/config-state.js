@@ -33,8 +33,8 @@
     // reading the live values.
     const criteriaLabels = {
       accuracy: "Accuracy",
-      tpr: "Catch Truly High-Risk",
-      tnr: "Avoid False High-Risk",
+      tpr: "Catch High-Risk",
+      tnr: "Protect Innocents",
       local_consistency: "Individual Fairness"
     };
     // Single condition pins ONE fixed model per dataset -- the lowest seed the
@@ -147,8 +147,8 @@
     };
     const criteriaFullLabels = {
       accuracy: "Overall Accuracy / Correct Predictions Across All Test Cases",
-      tpr: "Local True Positive Rate / Catch Truly High-Risk Cases in the 30-neighbor local region",
-      tnr: "Local True Negative Rate / Avoid False High-Risk Labels in the 30-neighbor local region",
+      tpr: "Local True Positive Rate / Catch High-Risk Cases in the 30-neighbor local region",
+      tnr: "Local True Negative Rate / Protect Innocents from False High-Risk Labels in the 30-neighbor local region",
       local_consistency: "Individual Fairness"
     };
     let datasetMeta = [];
@@ -328,8 +328,8 @@
       compas: {
         criteriaLabels: {
           accuracy: "Accuracy",
-          tpr: "Catch Truly High-Risk",
-          tnr: "Avoid False High-Risk",
+          tpr: "Catch High-Risk",
+          tnr: "Protect Innocents",
           local_consistency: "Individual Fairness"
         },
         criteriaShortLabels: {
@@ -340,8 +340,8 @@
         },
         criteriaFullLabels: {
           accuracy: "Overall Accuracy / Correct Predictions Across All Test Cases",
-          tpr: "Local True Positive Rate / Catch Truly High-Risk Cases in the 30-neighbor local region",
-          tnr: "Local True Negative Rate / Avoid False High-Risk Labels in the 30-neighbor local region",
+          tpr: "Local True Positive Rate / Catch High-Risk Cases in the 30-neighbor local region",
+          tnr: "Local True Negative Rate / Protect Innocents from False High-Risk Labels in the 30-neighbor local region",
           local_consistency: "Individual Fairness"
         },
         criteriaDescriptions: {

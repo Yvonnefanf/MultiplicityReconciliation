@@ -246,9 +246,13 @@
        centred inside that full-height cell. */
     .single-row-label { border-left: 1px solid #ccc; align-items: center; align-self: stretch; background: #e8e8e8; display: flex; flex-wrap: wrap; line-height: 1.15; text-align: left; }
     .single-row-content { display: grid; row-gap: 8px; border-right: 1px solid #ccc;}
-    /* Read as rows of a form here rather than as a column pointing at the values
-       next to it, so the attribute names start at the section's left edge. */
-    
+    /* Column heads stretch across their whole track, so anything centred on the
+       head's box -- a tutorial badge, say -- lands beside the word rather than
+       over it. Shrink each head onto its own text and place the box where the
+       text already sat, which leaves the layout identical. */
+    .single-stack-diagram .single-column-heads > .single-diagram-heading { justify-self: center; }
+    .single-stack-diagram .single-column-heads > .single-attr-heading,
+    .single-stack-diagram .single-column-heads > .single-criteria-heading { justify-self: end; }
     .single-prediction-section { justify-items: start; row-gap: 12px; }
     .single-stack-diagram .single-prediction-result { width: 240px; }
     .single-stack-diagram .single-prediction-note { text-align: left; }
