@@ -109,18 +109,20 @@
           : (() => {
               const otherWeights = proxyWeights || proxyPersona?.weights || proxyIdealWeights();
               return [
-                { role: "self", roleLabel: "My model", model: selectedSingleOptimalModel(userWeights) },
-                { role: "other", roleLabel: "Other model", model: selectedSingleOptimalModel(otherWeights) },
+                { role: "self", roleLabel: modelRoleLabel("self", "My model"), model: selectedSingleOptimalModel(userWeights) },
+                { role: "other", roleLabel: modelRoleLabel("other", "Other model"), model: selectedSingleOptimalModel(otherWeights) },
               ];
             })();
         // multioptimal, aggregate and negotiatev2 all put a second stakeholder
         // on screen, so they get the same "what the other side cares about"
         // highlight that informed has, plus the participant's own top criterion
-        // so both sides' markers are readable side by side.
+        // so both sides' markers are readable side by side. The tutorial shows
+        // this screen before the other stakeholder exists, so it keeps only the
+        // participant's own marker -- see modelRoleLabel().
         const multiHighlight = {
           highlight: {
             userKey: rankedCriteria[0] || criteriaOrder[0],
-            otherKey: otherStakeholderTopCriterion(),
+            otherKey: isTutorialMode() ? null : otherStakeholderTopCriterion(),
           },
         };
         const multiOptions = isNegotiateV2Condition()

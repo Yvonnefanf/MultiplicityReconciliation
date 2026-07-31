@@ -1159,8 +1159,8 @@
         ];
       }
       return [
-        { role: "self", roleLabel: "My model", model: nv2ViewedPosition("self")?.model || null },
-        { role: "other", roleLabel: "Other model", model: nv2ViewedPosition("other")?.model || null },
+        { role: "self", roleLabel: modelRoleLabel("self", "My model"), model: nv2ViewedPosition("self")?.model || null },
+        { role: "other", roleLabel: modelRoleLabel("other", "Other model"), model: nv2ViewedPosition("other")?.model || null },
       ];
     }
 

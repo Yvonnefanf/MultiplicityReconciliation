@@ -124,6 +124,15 @@
       return studyCondition() === "singleoptimal";
     }
 
+    // "My model" / "Other model" only mean something once the walkthrough has
+    // introduced the second stakeholder. The tutorial reaches this screen before
+    // that, so it names the two columns neutrally and drops the other side's
+    // criterion highlight with them (see renderFeatureExplanation).
+    function modelRoleLabel(role, fallback) {
+      if (!isTutorialMode()) return fallback;
+      return role === "self" ? "Model 1" : "Model 2";
+    }
+
     function showsProxyWeights() {
       return studyCondition() === "informed" || studyCondition() === "negotiation" || isMultiOptimalCondition();
     }
