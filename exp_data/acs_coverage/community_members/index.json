@@ -1,0 +1,170 @@
+{
+ "dataset": "acs_coverage",
+ "user_role": "community_members",
+ "case_count": 18,
+ "agreement_count": 3,
+ "cases": [
+  {
+   "case_id": 0,
+   "test_case_index": 1020,
+   "other_role": "judges",
+   "agreement": false,
+   "user_pred_class": 1,
+   "other_pred_class": 0,
+   "multiplicity": 47
+  },
+  {
+   "case_id": 1,
+   "test_case_index": 401,
+   "other_role": "fairness_advocates",
+   "agreement": false,
+   "user_pred_class": 1,
+   "other_pred_class": 0,
+   "multiplicity": 49
+  },
+  {
+   "case_id": 2,
+   "test_case_index": 873,
+   "other_role": "defendants",
+   "agreement": false,
+   "user_pred_class": 1,
+   "other_pred_class": 0,
+   "multiplicity": 47
+  },
+  {
+   "case_id": 3,
+   "test_case_index": 564,
+   "other_role": "judges",
+   "agreement": false,
+   "user_pred_class": 1,
+   "other_pred_class": 0,
+   "multiplicity": 48
+  },
+  {
+   "case_id": 4,
+   "test_case_index": 588,
+   "other_role": "judges",
+   "agreement": true,
+   "user_pred_class": 1,
+   "other_pred_class": 1,
+   "multiplicity": 48
+  },
+  {
+   "case_id": 5,
+   "test_case_index": 423,
+   "other_role": "fairness_advocates",
+   "agreement": false,
+   "user_pred_class": 1,
+   "other_pred_class": 0,
+   "multiplicity": 49
+  },
+  {
+   "case_id": 6,
+   "test_case_index": 976,
+   "other_role": "defendants",
+   "agreement": false,
+   "user_pred_class": 1,
+   "other_pred_class": 0,
+   "multiplicity": 47
+  },
+  {
+   "case_id": 7,
+   "test_case_index": 1086,
+   "other_role": "judges",
+   "agreement": false,
+   "user_pred_class": 1,
+   "other_pred_class": 0,
+   "multiplicity": 48
+  },
+  {
+   "case_id": 8,
+   "test_case_index": 435,
+   "other_role": "fairness_advocates",
+   "agreement": false,
+   "user_pred_class": 1,
+   "other_pred_class": 0,
+   "multiplicity": 49
+  },
+  {
+   "case_id": 9,
+   "test_case_index": 63,
+   "other_role": "defendants",
+   "agreement": false,
+   "user_pred_class": 1,
+   "other_pred_class": 0,
+   "multiplicity": 48
+  },
+  {
+   "case_id": 10,
+   "test_case_index": 731,
+   "other_role": "defendants",
+   "agreement": true,
+   "user_pred_class": 1,
+   "other_pred_class": 1,
+   "multiplicity": 49
+  },
+  {
+   "case_id": 11,
+   "test_case_index": 985,
+   "other_role": "judges",
+   "agreement": false,
+   "user_pred_class": 1,
+   "other_pred_class": 0,
+   "multiplicity": 49
+  },
+  {
+   "case_id": 12,
+   "test_case_index": 641,
+   "other_role": "fairness_advocates",
+   "agreement": false,
+   "user_pred_class": 1,
+   "other_pred_class": 0,
+   "multiplicity": 49
+  },
+  {
+   "case_id": 13,
+   "test_case_index": 1226,
+   "other_role": "defendants",
+   "agreement": false,
+   "user_pred_class": 1,
+   "other_pred_class": 0,
+   "multiplicity": 48
+  },
+  {
+   "case_id": 14,
+   "test_case_index": 925,
+   "other_role": "judges",
+   "agreement": false,
+   "user_pred_class": 1,
+   "other_pred_class": 0,
+   "multiplicity": 50
+  },
+  {
+   "case_id": 15,
+   "test_case_index": 532,
+   "other_role": "fairness_advocates",
+   "agreement": false,
+   "user_pred_class": 1,
+   "other_pred_class": 0,
+   "multiplicity": 50
+  },
+  {
+   "case_id": 16,
+   "test_case_index": 1007,
+   "other_role": "fairness_advocates",
+   "agreement": true,
+   "user_pred_class": 0,
+   "other_pred_class": 0,
+   "multiplicity": 49
+  },
+  {
+   "case_id": 17,
+   "test_case_index": 958,
+   "other_role": "defendants",
+   "agreement": false,
+   "user_pred_class": 1,
+   "other_pred_class": 0,
+   "multiplicity": 49
+  }
+ ]
+}

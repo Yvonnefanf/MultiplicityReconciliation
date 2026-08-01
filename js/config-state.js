@@ -212,6 +212,11 @@
     };
     let datasetMeta = [];
     let activeData = null;
+    // The participant's fixed assignment for this dataset: which 18 cases they
+    // see, and who the other stakeholder is on each. Null when no assignment
+    // exists for their role, in which case the app browses the full case tree.
+    // Built by scripts/build_exp_data.py.
+    let experimentIndex = null;
     let modelGlobalMetrics = null;
     let weights = { accuracy: 1/4, tpr: 1/4, tnr: 1/4, local_consistency: 1/4 };
     let userWeights = { ...weights };

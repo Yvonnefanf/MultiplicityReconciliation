@@ -5,11 +5,25 @@
    Preference elicitation itself lives on the external study platform: this file
    only turns what the URL hands over into the state the negotiation reads. */
 
+    // Who the other stakeholder is comes from the case file, not from a draw and
+    // not from ?other=: exp_data pins one opponent per (role, case id), so the
+    // participant's role and the case id determine the whole screen. See
+    // scripts/build_exp_data.py.
+    function assignedOtherPersonaKey() {
+      const key = normalizePersonaKey(activeData?.assignment?.other_role);
+      return personaTypes[key] ? key : null;
+    }
+
     function makeProxyPersonaPreference(excludeKey = currentPersona?.key) {
+      const assigned = assignedOtherPersonaKey();
+      if (assigned) return personaPreferenceFromKey(assigned);
       const pinned = pinnedOtherPersonaKey(excludeKey);
       if (pinned) return personaPreferenceFromKey(pinned);
+      // No assignment (the walkthrough case, or a hand-built link): take the
+      // first role that is not the participant's rather than drawing one, so
+      // even the unassigned path reproduces itself on reload.
       const choices = personaKeys.filter((key) => key !== excludeKey);
-      return personaPreferenceFromKey(setOtherPersonaKeyInUrl(randomItem(choices.length ? choices : personaKeys)));
+      return personaPreferenceFromKey(setOtherPersonaKeyInUrl((choices.length ? choices : personaKeys)[0]));
     }
 
     function weightDistance(aWeights, bWeights) {
@@ -19,6 +33,10 @@
     }
 
     function chooseConflictingProxyPersona(userBaseline, excludeKey = currentPersona?.key) {
+      // An assigned opponent is not a candidate to be improved on: the case was
+      // picked for the verdict that pairing produces.
+      const assigned = assignedOtherPersonaKey();
+      if (assigned) return personaPreferenceFromKey(assigned);
       const pinned = pinnedOtherPersonaKey(excludeKey);
       if (pinned) return personaPreferenceFromKey(pinned);
       const user = normalizeWeights(userBaseline || userWeights || elicitedWeights || weights);
@@ -48,7 +66,11 @@
       proxyPersona = previousProxyPersona;
       const conflicting = candidates.filter((item) => item.conflicts);
       const ranked = candidates.sort((a, b) => b.distance - a.distance);
-      const chosen = conflicting.length ? randomItem(conflicting).persona : ranked[0]?.persona;
+      // Furthest-weights-first among the conflicting candidates rather than a
+      // draw, so this path is reproducible too.
+      const chosen = conflicting.length
+        ? ranked.find((item) => item.conflicts).persona
+        : ranked[0]?.persona;
       if (!chosen) return makeProxyPersonaPreference(excludeKey);
       setOtherPersonaKeyInUrl(chosen.key);
       return chosen;

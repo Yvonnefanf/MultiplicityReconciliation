@@ -14,19 +14,41 @@
       await loadCases();
     }
 
+    // The role folder is addressed by the participant's persona key, which the
+    // study platform hands over as ?persona=. A missing folder is not fatal --
+    // the app falls back to the full case tree -- but it does mean the session
+    // is no longer the fixed assignment, so it is worth being loud about.
+    async function loadExperimentIndex(dataset) {
+      if (isTutorialMode()) return null;
+      const role = ensurePersonaKey();
+      const index = await fetchJson(`/api/${dataset}/exp/${role}`).catch(() => null);
+      if (!index?.cases?.length) {
+        console.warn(`No assignment at exp_data/${dataset}/${role}/ -- falling back to the full case tree.`);
+        return null;
+      }
+      return index;
+    }
+
     async function loadCases() {
       const dataset = datasetSelect.value;
       // Criterion labels and persona copy are dataset-specific; swap them in
       // before anything renders so no panel shows another dataset's wording.
       applyDatasetCopy(dataset);
       setLoading("Loading cases...");
-      const cases = await fetchJson(`/api/${dataset}/cases`);
       modelGlobalMetrics = await fetchJson(`/api/${dataset}/model-global-metrics`).catch(() => null);
+      // The study runs off the fixed assignment: the participant's role picks
+      // the folder, ?case= is the 0..17 id within it, and the case list is that
+      // folder's index. Only a link with no usable role falls back to browsing
+      // the full case tree.
+      experimentIndex = await loadExperimentIndex(dataset);
+      const cases = experimentIndex ? experimentIndex.cases : await fetchJson(`/api/${dataset}/cases`);
       datasetCaseList = cases;
-      caseSelect.innerHTML = cases.map((c) => {
-        const flag = c.high_disagreement ? " • disagreement" : "";
-        return `<option value="${c.test_case_index}">Case ${c.test_case_index}${flag}</option>`;
-      }).join("");
+      caseSelect.innerHTML = experimentIndex
+        ? cases.map((c) => `<option value="${c.case_id}">Case ${c.case_id + 1} of ${cases.length}</option>`).join("")
+        : cases.map((c) => {
+            const flag = c.high_disagreement ? " • disagreement" : "";
+            return `<option value="${c.test_case_index}">Case ${c.test_case_index}${flag}</option>`;
+          }).join("");
       const requestedCase = isTutorialMode() ? String(tutorialCaseIndex(dataset) ?? "") : getUrlParams().get("case");
       if (requestedCase && Array.from(caseSelect.options).some((option) => option.value === requestedCase)) {
         caseSelect.value = requestedCase;
@@ -35,7 +57,9 @@
       caseSelect.disabled = isTutorialMode();
       replaceUrlParams({ appId: appIdForDataset(dataset), case: caseSelect.value });
       const meta = datasetMeta.find((d) => d.key === dataset);
-      datasetHint.textContent = `${meta.label}: ${meta.case_count} test cases, ${meta.model_count} selected models`;
+      datasetHint.textContent = experimentIndex
+        ? `${meta.label}: ${cases.length} assigned cases for ${personaTypes[experimentIndex.user_role]?.label || experimentIndex.user_role}, ${meta.model_count} selected models`
+        : `${meta.label}: ${meta.case_count} test cases, ${meta.model_count} selected models`;
       await loadDistribution();
     }
 
@@ -149,21 +173,33 @@
       const caseIndex = caseSelect.value;
       if (caseIndex === "") return;
       setLoading("Loading model predictions...");
-      // The walkthrough is pinned to its own case file, so it never follows the
-      // case dropdown or ?case=. Everything downstream reads activeData, which
-      // has the same shape either way.
+      // Three sources, same shape downstream: the walkthrough's pinned case, the
+      // study assignment addressed by (role, case id), or -- only when there is
+      // no assignment for this role -- the raw case tree.
       activeData = isTutorialMode()
         ? await fetchJson(`/api/${dataset}/tutorial-case`)
-        : await fetchJson(`/api/${dataset}/cases/${caseIndex}`);
+        : experimentIndex
+          ? await fetchJson(`/api/${dataset}/exp/${experimentIndex.user_role}/${caseIndex}`)
+          : await fetchJson(`/api/${dataset}/cases/${caseIndex}`);
       resetFinalDecision();
       currentPersona = null;
       proxyPersona = null;
       releaseOtherPersonaPinOnScopeChange(`${dataset}:${caseIndex}`);
       personaInitialWeights = null;
-      proxyWeights = normalizeWeights(activeData.reconciliation.proxy_weights);
+      // The other side's weights are their role's fixed profile, stored with the
+      // case. reconciliation.proxy_weights is per-case data and would otherwise
+      // hand the opponent a different preference on every case, which is exactly
+      // the variation the fixed assignment exists to remove.
+      proxyWeights = normalizeWeights(activeData.assignment?.other_weights || activeData.reconciliation.proxy_weights);
       initializePersonaPreference();
       offerSource = "Elicited initial offer";
-      replaceUrlParams({ appId: appIdForDataset(dataset), case: caseIndex });
+      // ?other= is dead once the case carries its own opponent; leaving it in the
+      // URL would suggest it still decides something.
+      replaceUrlParams({
+        appId: appIdForDataset(dataset),
+        case: caseIndex,
+        ...(activeData.assignment ? { other: null } : {}),
+      });
       const selectedModel = selectedDefaultModel();
       features.innerHTML = renderFeatureExplanation(dataset, selectedModel);
 

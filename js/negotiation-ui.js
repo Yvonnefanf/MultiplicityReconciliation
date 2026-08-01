@@ -24,7 +24,10 @@
         ensureConflictingProxyPersona(elicitedWeights);
       } else {
         proxyPersona = null;
-        proxyWeights = normalizeWeights(activeData.reconciliation.proxy_weights || weights);
+        // No second stakeholder is shown here, but the other side's weights still
+        // feed the group-reliability comparison, so they stay on the assignment's
+        // fixed profile rather than reverting to this case's proxy_weights.
+        proxyWeights = normalizeWeights(activeData.assignment?.other_weights || activeData.reconciliation.proxy_weights || weights);
       }
       if (showsNegotiationPanel()) {
         resetNegotiationState("Start from your elicited preference. Choose an opening negotiation move, then send your first package offer.");
