@@ -60,10 +60,19 @@
       }, 0);
     }
 
-    function selectedSingleOptimalModel(rowWeights = userWeights) {
+    // `excludeClass` narrows the search to models that predict something other
+    // than that class. Only the walkthrough uses it: the tutorial case is picked
+    // so both classes sit on the frontier, and this keeps the second column
+    // disagreeing with the first whatever weights the participant arrives with,
+    // while still being that side's best model among the ones that disagree.
+    function selectedSingleOptimalModel(rowWeights = userWeights, options = {}) {
       if (!activeData?.models?.length) return null;
       const frontier = paretoOptimalModels(activeData.models);
-      const candidates = frontier.length ? frontier : activeData.models;
+      const pool = frontier.length ? frontier : activeData.models;
+      const opposing = options.excludeClass == null
+        ? pool
+        : pool.filter((model) => String(model.pred_class) !== String(options.excludeClass));
+      const candidates = opposing.length ? opposing : pool;
       const priorityKey = rankedCriteria?.[0] || topMetricKeyForWeights?.(rowWeights || {}) || criteriaOrder[0];
       return candidates
         .slice()
@@ -74,6 +83,20 @@
           if (Math.abs(priorityDelta) > 0.000001) return priorityDelta;
           return Number(b.pred_prob || 0) - Number(a.pred_prob || 0);
         })[0] || activeData.models[0];
+    }
+
+    // The two models every multi-optimal surface compares -- the diagram, the
+    // summary cards and the status banner. One definition, because they sit on
+    // one screen and must name the same pair; deriving it three times is how the
+    // walkthrough's disagreement constraint would end up applied to only one.
+    function multiOptimalModelPair() {
+      const otherWeights = proxyWeights || proxyPersona?.weights || proxyIdealWeights();
+      const self = selectedSingleOptimalModel(userWeights);
+      const other = selectedSingleOptimalModel(
+        otherWeights,
+        isTutorialMode() ? { excludeClass: self?.pred_class } : {}
+      );
+      return { self, other };
     }
 
     function topContributor(group, rowWeights = userWeights) {
@@ -165,10 +188,11 @@
 
     function renderMultiOptimalSummary() {
       const negotiateItems = isNegotiateV2Condition() ? negotiateV2SelectedItems() : null;
-      const selfModel = negotiateItems?.[0]?.model || selectedSingleOptimalModel(userWeights);
-      const otherModel = negotiateItems?.[1]?.model || selectedSingleOptimalModel(proxyWeights || proxyIdealWeights());
-      const selfCardTitle = negotiateItems?.[0]?.roleLabel || "Self optimal";
-      const otherCardTitle = negotiateItems?.[1]?.roleLabel || "Other-party optimal";
+      const pair = negotiateItems ? null : multiOptimalModelPair();
+      const selfModel = negotiateItems?.[0]?.model || pair?.self;
+      const otherModel = negotiateItems?.[1]?.model || pair?.other;
+      const selfCardTitle = negotiateItems?.[0]?.roleLabel || modelRoleLabel("self", "Self optimal");
+      const otherCardTitle = negotiateItems?.[1]?.roleLabel || modelRoleLabel("other", "Other-party optimal");
       const versionLabel = isNegotiateV2Condition() ? negotiateV2CurrentVersion()?.label : null;
       const card = (title, model) => {
         if (!model) return `<div class="single-model-card"><div class="single-model-kicker">${escapeHtml(title)}</div><div class="status">No optimal model available.</div></div>`;

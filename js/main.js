@@ -27,10 +27,12 @@
         const flag = c.high_disagreement ? " • disagreement" : "";
         return `<option value="${c.test_case_index}">Case ${c.test_case_index}${flag}</option>`;
       }).join("");
-      const requestedCase = getUrlParams().get("case");
+      const requestedCase = isTutorialMode() ? String(tutorialCaseIndex(dataset) ?? "") : getUrlParams().get("case");
       if (requestedCase && Array.from(caseSelect.options).some((option) => option.value === requestedCase)) {
         caseSelect.value = requestedCase;
       }
+      // Nothing else should be able to move the walkthrough off its case.
+      caseSelect.disabled = isTutorialMode();
       replaceUrlParams({ appId: appIdForDataset(dataset), case: caseSelect.value });
       const meta = datasetMeta.find((d) => d.key === dataset);
       datasetHint.textContent = `${meta.label}: ${meta.case_count} test cases, ${meta.model_count} selected models`;
@@ -107,22 +109,22 @@
         const selectedItems = isNegotiateV2Condition()
           ? negotiateV2SelectedItems()
           : (() => {
-              const otherWeights = proxyWeights || proxyPersona?.weights || proxyIdealWeights();
+              const pair = multiOptimalModelPair();
               return [
-                { role: "self", roleLabel: modelRoleLabel("self", "My model"), model: selectedSingleOptimalModel(userWeights) },
-                { role: "other", roleLabel: modelRoleLabel("other", "Other model"), model: selectedSingleOptimalModel(otherWeights) },
+                { role: "self", roleLabel: modelRoleLabel("self", "My model"), model: pair.self },
+                { role: "other", roleLabel: modelRoleLabel("other", "Other model"), model: pair.other },
               ];
             })();
         // multioptimal, aggregate and negotiatev2 all put a second stakeholder
         // on screen, so they get the same "what the other side cares about"
         // highlight that informed has, plus the participant's own top criterion
-        // so both sides' markers are readable side by side. The tutorial shows
-        // this screen before the other stakeholder exists, so it keeps only the
-        // participant's own marker -- see modelRoleLabel().
+        // so both sides' markers are readable side by side. The multiplicity
+        // stage shows this screen before the other stakeholder exists, so it
+        // keeps only the participant's own marker -- see usesNeutralModelNames().
         const multiHighlight = {
           highlight: {
             userKey: rankedCriteria[0] || criteriaOrder[0],
-            otherKey: isTutorialMode() ? null : otherStakeholderTopCriterion(),
+            otherKey: usesNeutralModelNames() ? null : otherStakeholderTopCriterion(),
           },
         };
         const multiOptions = isNegotiateV2Condition()
@@ -147,7 +149,12 @@
       const caseIndex = caseSelect.value;
       if (caseIndex === "") return;
       setLoading("Loading model predictions...");
-      activeData = await fetchJson(`/api/${dataset}/cases/${caseIndex}`);
+      // The walkthrough is pinned to its own case file, so it never follows the
+      // case dropdown or ?case=. Everything downstream reads activeData, which
+      // has the same shape either way.
+      activeData = isTutorialMode()
+        ? await fetchJson(`/api/${dataset}/tutorial-case`)
+        : await fetchJson(`/api/${dataset}/cases/${caseIndex}`);
       resetFinalDecision();
       currentPersona = null;
       proxyPersona = null;

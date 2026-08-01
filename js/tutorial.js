@@ -6,63 +6,85 @@
    runs and draws numbered circles over the parts of the screen a walkthrough
    refers to. To number another condition, add its base key to TUTORIAL_BADGES.
 
+   The callouts are two tiers. A, B, C name the three stacked sections -- Input
+   Case, Prediction, Performance -- because those are what the screen is built
+   out of. The numbers then run 1..n straight through the parts inside them,
+   continuing across section boundaries rather than restarting, so a walkthrough
+   can say "A, then 1 and 2" and later "C, then 5 and 6" without any number
+   meaning two different things.
+
    Each entry pins one circle:
-     n        the number in the circle ("5a" and friends are fine)
+     n        what goes in the circle: "A" for a section, a number for a part
+              inside one, "3a"/"3b" when the multi-model screen has one per model
      selector CSS selector matched against the whole page
      index    which match to use when the selector hits several elements (0)
      place    where the circle sits: "above" (default), "left", "right",
               "below", "inside"
-     muted    grey rather than blue -- a part an earlier screen already covered,
-              kept numbered so the walkthrough's numbering stays continuous
-     title    optional hover text
+     muted    grey rather than blue -- a part an earlier stage already covered,
+              kept labelled so the lettering and numbering stay continuous
+     title    optional hover text; {self}/{other} become the stage's column names
 
    The badge is absolutely positioned inside the anchor, so it never becomes a
    grid or flex item of it and never moves the layout it annotates. */
 
-    // The single / single-optimal panel, read left to right: the case, what the
+    // The single / single-optimal panel, read top to bottom: the case, what the
     // AI predicted for it, and how well that AI scores on the criteria.
     const TUTORIAL_SINGLE_BADGES = [
-      { n: 1, selector: ".single-row-label", index: 0, place: "left", title: "The case being decided" },
-      { n: 2, selector: ".single-input-heads .single-attr-heading", title: "Which attribute of the case" },
-      { n: 3, selector: ".single-input-heads .single-value-heading", title: "This case's value for it" },
-      { n: 4, selector: ".single-row-label", index: 1, place: "left", title: "What the AI system decided" },
-      { n: 5, selector: ".single-prediction-result", place: "right", title: "The predicted class" },
-      { n: 6, selector: ".single-explanation-link", place: "right", title: "Opens which attributes pushed the prediction" },
-      { n: 7, selector: ".single-row-label", index: 2, place: "left", title: "How good that AI is, for people like this case" },
-      { n: 8, selector: ".single-performance-heads .single-criteria-heading", title: "Which quality criterion" },
-      { n: 9, selector: ".single-performance-heads .single-score-heading", title: "Its score, 100% is perfect" },
+      { n: "A", selector: ".single-row-label", index: 0, place: "left", title: "The case being decided" },
+      { n: 1, selector: ".single-input-heads .single-attr-heading", title: "Which attribute of the case" },
+      { n: 2, selector: ".single-input-heads .single-value-heading", title: "This case's value for it" },
+      { n: "B", selector: ".single-row-label", index: 1, place: "left", title: "What the AI system decided" },
+      { n: 3, selector: ".single-prediction-result", place: "right", title: "The predicted class" },
+      { n: 4, selector: ".single-explanation-link", place: "right", title: "Opens which attributes pushed the prediction" },
+      { n: "C", selector: ".single-row-label", index: 2, place: "left", title: "How good that AI is, for people like this case" },
+      { n: 5, selector: ".single-performance-heads .single-criteria-heading", title: "Which quality criterion" },
+      { n: 6, selector: ".single-performance-heads .single-score-heading", title: "Its score, 100% is perfect" },
     ];
 
     // The multi-optimal panel is the single panel with a second model column, so
-    // it reuses the same numbering: the parts that now exist once per model are
-    // lettered a (Model 1) and b (Model 2), and the parts the single walkthrough
-    // already explained -- the three section titles and the case attributes --
-    // stay numbered but go grey.
+    // it keeps the same lettering and numbering: the parts that now exist once
+    // per model split into a (first column) and b (second), and the parts the
+    // single stage already explained -- the three sections and the case
+    // attributes -- keep their labels but go grey.
     const TUTORIAL_MULTI_OPTIMAL_BADGES = [
-      { n: 1, selector: ".multi-stack-diagram .single-row-label", index: 0, place: "left", muted: true, title: "The case being decided" },
-      { n: 2, selector: ".multi-optimal-case-list .single-attr-heading", muted: true, title: "Which attribute of the case" },
-      { n: 3, selector: ".multi-optimal-case-list .single-value-heading", muted: true, title: "This case's value for it" },
-      { n: 4, selector: ".multi-stack-diagram .single-row-label", index: 1, place: "left", muted: true, title: "What the AI systems decided" },
+      { n: "A", selector: ".multi-stack-diagram .single-row-label", index: 0, place: "left", muted: true, title: "The case being decided" },
+      { n: 1, selector: ".multi-optimal-case-list .single-attr-heading", muted: true, title: "Which attribute of the case" },
+      { n: 2, selector: ".multi-optimal-case-list .single-value-heading", muted: true, title: "This case's value for it" },
+      { n: "B", selector: ".multi-stack-diagram .single-row-label", index: 1, place: "left", muted: true, title: "What the AI systems decided" },
       // a hangs off the left of the two columns, b off the right, so the circles
       // stay clear of the predictions without the columns widening to hold them.
-      { n: "5a", selector: ".multi-optimal-prediction-value", index: 0, place: "left", title: "The class Model 1 predicted" },
-      { n: "5b", selector: ".multi-optimal-prediction-value", index: 1, place: "right", title: "The class Model 2 predicted" },
-      { n: "6a", selector: ".multi-prediction-section .multi-optimal-detail-wrap", index: 0, place: "left", title: "Opens which attributes pushed Model 1's prediction" },
-      { n: "6b", selector: ".multi-prediction-section .multi-optimal-detail-wrap", index: 1, place: "right", title: "Opens which attributes pushed Model 2's prediction" },
-      { n: 7, selector: ".multi-stack-diagram .single-row-label", index: 2, place: "left", muted: true, title: "How good each AI is, for people like this case" },
-      { n: 8, selector: ".multi-optimal-table .exposure-performance-criteria-heading", title: "Which quality criterion" },
-      { n: "9a", selector: ".multi-optimal-table > .multi-optimal-corner", index: 0, place: "inside", title: "Model 1's scores, 100% is perfect" },
-      { n: "9b", selector: ".multi-optimal-table > .multi-optimal-corner", index: 1, place: "inside", title: "Model 2's scores, 100% is perfect" },
+      { n: "3a", selector: ".multi-optimal-prediction-value", index: 0, place: "left", title: "The class {self} predicted" },
+      { n: "3b", selector: ".multi-optimal-prediction-value", index: 1, place: "right", title: "The class {other} predicted" },
+      { n: "4a", selector: ".multi-prediction-section .multi-optimal-detail-wrap", index: 0, place: "left", title: "Opens which attributes pushed {self}'s prediction" },
+      { n: "4b", selector: ".multi-prediction-section .multi-optimal-detail-wrap", index: 1, place: "right", title: "Opens which attributes pushed {other}'s prediction" },
+      { n: "C", selector: ".multi-stack-diagram .single-row-label", index: 2, place: "left", muted: true, title: "How good each AI is, for people like this case" },
+      { n: 5, selector: ".multi-optimal-table .exposure-performance-criteria-heading", title: "Which quality criterion" },
+      { n: "6a", selector: ".multi-optimal-table > .multi-optimal-corner", index: 0, place: "inside", title: "{self}'s scores, 100% is perfect" },
+      { n: "6b", selector: ".multi-optimal-table > .multi-optimal-corner", index: 1, place: "inside", title: "{other}'s scores, 100% is perfect" },
     ];
 
+    // Keyed by walkthrough stage first, then by condition so that opening any
+    // condition with `_tutorial` still gets whatever that condition has. The
+    // multiplicity and multistakeholder stages annotate the same screen and so
+    // share one spec; {self}/{other} in a title pick up that stage's column
+    // names, Model 1 / Model 2 on one and My / Other model on the next.
     const TUTORIAL_BADGES = {
       single: TUTORIAL_SINGLE_BADGES,
       singleoptimal: TUTORIAL_SINGLE_BADGES,
+      multiplicity: TUTORIAL_MULTI_OPTIMAL_BADGES,
+      multistakeholder: TUTORIAL_MULTI_OPTIMAL_BADGES,
       multioptimal: TUTORIAL_MULTI_OPTIMAL_BADGES,
     };
 
     function tutorialBadgeSpec() {
-      return (isTutorialMode() && TUTORIAL_BADGES[studyCondition()]) || [];
+      if (!isTutorialMode()) return [];
+      return TUTORIAL_BADGES[tutorialStage()] || TUTORIAL_BADGES[studyCondition()] || [];
+    }
+
+    function tutorialBadgeTitle(title) {
+      return String(title || "")
+        .replaceAll("{self}", modelRoleLabel("self", "My model"))
+        .replaceAll("{other}", modelRoleLabel("other", "Other model"));
     }
 
     function clearTutorialBadges() {
@@ -76,15 +98,20 @@
         const anchor = document.querySelectorAll(item.selector)[item.index || 0];
         if (!anchor) return;
         const label = String(item.n);
+        // A/B/C are the section tier, so they are drawn as a square rather than
+        // a circle -- the two tiers have to be tellable apart at a glance, and
+        // the letter alone is easy to read as just another item in the sequence.
+        const isSection = /^[A-Z]$/.test(label);
         const badge = document.createElement("span");
         badge.className = [
           "tutorial-badge",
           `tutorial-badge-${item.place || "above"}`,
           item.muted ? "tutorial-badge-muted" : "",
+          isSection ? "tutorial-badge-section" : "",
           label.length > 1 ? "tutorial-badge-pair" : "",
         ].filter(Boolean).join(" ");
         badge.textContent = label;
-        if (item.title) badge.title = item.title;
+        if (item.title) badge.title = tutorialBadgeTitle(item.title);
         badge.setAttribute("aria-hidden", "true");
         anchor.classList.add("tutorial-anchor");
         anchor.appendChild(badge);

@@ -10,6 +10,8 @@
       if (match) return `data/${match[1]}/model_global_metrics.json`;
       match = url.match(/^\/api\/([^/]+)\/cases$/);
       if (match) return `data/${match[1]}/cases.json`;
+      match = url.match(/^\/api\/([^/]+)\/tutorial-case$/);
+      if (match) return `data/${match[1]}/tutorial_case.json`;
       match = url.match(/^\/api\/([^/]+)\/cases\/(\d+)$/);
       if (match) return `data/${match[1]}/cases/${match[2]}.json`;
       return url;

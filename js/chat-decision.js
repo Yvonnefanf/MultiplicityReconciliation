@@ -407,9 +407,12 @@
         renderNegotiateV2StatusBanner();
         return;
       }
-      const selfWinner = isMultiOptimalCondition() ? selectedSingleOptimalModel(userWeights) : winningGroup(userWeights);
-      const otherWeights = proxyWeights || proxyIdealWeights();
-      const otherWinner = isMultiOptimalCondition() ? selectedSingleOptimalModel(otherWeights) : winningGroup(proxyWeights);
+      // Same pair the diagram and the summary cards show; deriving it here again
+      // is how the walkthrough would end up announcing a different model than the
+      // one on screen above it.
+      const pair = isMultiOptimalCondition() ? multiOptimalModelPair() : null;
+      const selfWinner = pair ? pair.self : winningGroup(userWeights);
+      const otherWinner = pair ? pair.other : winningGroup(proxyWeights);
       const versionLabel = "";
       const selfClassId = Number(selfWinner?.class_id ?? selfWinner?.pred_class);
       const otherClassId = Number(otherWinner?.class_id ?? otherWinner?.pred_class);
@@ -418,14 +421,18 @@
       const versionPrefix = versionLabel ? `${escapeHtml(versionLabel)}: ` : "";
       finalDecisionStatusBanner.classList.remove("hidden", "conflict");
       const extraHtml = isAggregateCondition() ? aggregateRecommendationHtml() : "";
+      // Named the way the two columns above are named, so the multiplicity stage
+      // does not announce a stakeholder it has not introduced yet.
+      const selfName = escapeHtml(modelRoleLabel("self", "Self"));
+      const otherName = escapeHtml(modelRoleLabel("other", "Other-party"));
       if (selfWinner && otherWinner && selfClassId === otherClassId) {
-        finalDecisionStatusBanner.innerHTML = `Consensus reached: ${versionPrefix}both Self and Other-party identify <strong>${escapeHtml(selfLabel)}</strong> as the optimal prediction.${extraHtml}`;
+        finalDecisionStatusBanner.innerHTML = `Consensus reached: ${versionPrefix}both ${selfName} and ${otherName} identify <strong>${escapeHtml(selfLabel)}</strong> as the optimal prediction.${extraHtml}`;
         wireAggregateRecommendationSlider();
         return;
       }
       finalDecisionStatusBanner.classList.add("conflict");
       if (selfWinner && otherWinner) {
-        finalDecisionStatusBanner.innerHTML = `Warning: no consensus yet. ${versionPrefix}Self optimal prediction is <strong>${escapeHtml(selfLabel)}</strong>, while Other-party optimal prediction is <strong>${escapeHtml(otherLabel)}</strong>. Their optimal predictions still conflict, so continue negotiating criteria concessions.${extraHtml}`;
+        finalDecisionStatusBanner.innerHTML = `Warning: no consensus yet. ${versionPrefix}${selfName} optimal prediction is <strong>${escapeHtml(selfLabel)}</strong>, while ${otherName} optimal prediction is <strong>${escapeHtml(otherLabel)}</strong>. Their optimal predictions still conflict, so continue negotiating criteria concessions.${extraHtml}`;
       } else {
         finalDecisionStatusBanner.innerHTML = `Warning: no consensus yet. ${versionPrefix}the optimal prediction cannot be computed for both sides.${extraHtml}`;
       }
@@ -469,7 +476,10 @@
       const rolePhrase = personaRolePhrase(currentPersona);
       const criterionLabel = criteriaLabels[topKey] || topKey;
       let otherReminder = "";
-      if (studyCondition() === "informed" || studyCondition() === "negotiation" || isMultiOptimalCondition()) {
+      // Same reason as the status banner: on the multiplicity stage the other
+      // stakeholder does not exist yet, so nothing may name their role.
+      if (!usesNeutralModelNames()
+        && (studyCondition() === "informed" || studyCondition() === "negotiation" || isMultiOptimalCondition())) {
         const other = proxyPersona || ensureDifferentProxyPersona();
         const otherKey = window.primaryCriterionKeyForPersona?.(other) || topMetricKeyForWeights(other?.weights || proxyWeights || {});
         const otherRole = personaTitle(other || { label: "Other stakeholder" });

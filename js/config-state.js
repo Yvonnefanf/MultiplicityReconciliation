@@ -87,7 +87,28 @@
     // circles over it -- see js/tutorial.js.
     const activeTutorialMode = /tutorial$/.test(configuredCondition);
     const configuredStudyCondition = configuredCondition.replace(/tutorial$/, "");
-    const requestedStudyCondition = STUDY_CONDITION_ALIASES[configuredStudyCondition] || configuredStudyCondition;
+    // The walkthrough's stages are NOT the study's conditions and do not have to
+    // line up with them one-to-one: a stage names what a screen teaches, and two
+    // stages teach the same interface. multiplicity_tutorial introduces the two
+    // model columns as Model 1 / Model 2, with nothing on screen claiming a
+    // second stakeholder; multistakeholder_tutorial then re-runs that same
+    // multi-optimal screen with the stakeholder framing switched on. A stage
+    // resolves to the condition it runs on plus how that condition is framed.
+    const TUTORIAL_STAGES = {
+      single: { condition: "single" },
+      multiplicity: { condition: "multioptimal", neutralModelNames: true },
+      // What this session has been opening; same screen as multiplicity.
+      multioptimal: { condition: "multioptimal", neutralModelNames: true },
+      multistakeholder: { condition: "multioptimal" },
+    };
+    const activeTutorialStage = activeTutorialMode && TUTORIAL_STAGES[configuredStudyCondition]
+      ? configuredStudyCondition
+      : null;
+    // A stage picks the condition; anything else keeps working the way it did,
+    // so ?condition=<any condition>_tutorial still just annotates that condition.
+    const requestedStudyCondition = activeTutorialStage
+      ? TUTORIAL_STAGES[activeTutorialStage].condition
+      : (STUDY_CONDITION_ALIASES[configuredStudyCondition] || configuredStudyCondition);
     const activeStudyCondition = STUDY_CONDITIONS.includes(requestedStudyCondition) ? requestedStudyCondition : DEFAULT_STUDY_CONDITION;
     document.body.classList.add(`condition-${activeStudyCondition}`);
     if (activeTutorialMode) document.body.classList.add("tutorial-mode");
@@ -124,12 +145,32 @@
       return studyCondition() === "singleoptimal";
     }
 
+    // The walkthrough always runs on one hand-picked case per dataset, never on
+    // ?case=, so every numbered callout describes the same screen. The case is
+    // chosen for disagreement -- see scripts/export_tutorial_case.py -- and is
+    // served from its own file rather than cases/<i>.json so re-exporting the
+    // case tree cannot quietly move the tutorial onto a different case.
+    const TUTORIAL_CASE_INDEX_BY_DATASET = { compas: 1120, acs_coverage: 1226 };
+    function tutorialCaseIndex(dataset) {
+      return TUTORIAL_CASE_INDEX_BY_DATASET[dataset ?? (activeData?.dataset || datasetSelect?.value)] ?? null;
+    }
+
+    function tutorialStage() {
+      return activeTutorialStage;
+    }
+
     // "My model" / "Other model" only mean something once the walkthrough has
-    // introduced the second stakeholder. The tutorial reaches this screen before
-    // that, so it names the two columns neutrally and drops the other side's
-    // criterion highlight with them (see renderFeatureExplanation).
+    // introduced the second stakeholder, and the multiplicity stage runs before
+    // it does. There the columns are Model 1 / Model 2, the other side's
+    // criterion highlight is off (see renderFeatureExplanation) and no banner
+    // names their role -- everything on that screen is about the two models
+    // disagreeing, not about who stands behind them.
+    function usesNeutralModelNames() {
+      return Boolean(activeTutorialStage && TUTORIAL_STAGES[activeTutorialStage].neutralModelNames);
+    }
+
     function modelRoleLabel(role, fallback) {
-      if (!isTutorialMode()) return fallback;
+      if (!usesNeutralModelNames()) return fallback;
       return role === "self" ? "Model 1" : "Model 2";
     }
 
