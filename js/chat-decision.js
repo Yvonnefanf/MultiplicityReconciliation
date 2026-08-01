@@ -432,7 +432,7 @@
       }
       finalDecisionStatusBanner.classList.add("conflict");
       if (selfWinner && otherWinner) {
-        finalDecisionStatusBanner.innerHTML = `Warning: no consensus yet. ${versionPrefix}${selfName} optimal prediction is <strong>${escapeHtml(selfLabel)}</strong>, while ${otherName} optimal prediction is <strong>${escapeHtml(otherLabel)}</strong>. Their optimal predictions still conflict, so continue negotiating criteria concessions.${extraHtml}`;
+        finalDecisionStatusBanner.innerHTML = `Warning: no consensus yet. ${versionPrefix}${selfName} optimal prediction is <strong>${escapeHtml(selfLabel)}</strong>, while ${otherName} optimal prediction is <strong>${escapeHtml(otherLabel)}</strong>. Their optimal predictions still conflict.${extraHtml}`;
       } else {
         finalDecisionStatusBanner.innerHTML = `Warning: no consensus yet. ${versionPrefix}the optimal prediction cannot be computed for both sides.${extraHtml}`;
       }
