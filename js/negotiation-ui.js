@@ -729,11 +729,18 @@
     const NV2_MAX_VERSION = 3;
     // The three step values sit one per size band below, so the label the
     // participant picks is the same phrase their offer will be described with.
+    // `value` is in the same unit as every criterion on screen — a share of 0..1
+    // shown as a percentage — so a step of 0.02 is literally "this criterion may
+    // score up to 2 percentage points lower than my current model does". The
+    // dropdown spells that out against the live number rather than making the
+    // participant infer a scale from "a little".
     const NV2_GIVE_STEPS = [
       { key: "small", label: "A little", value: 0.02 },
       { key: "medium", label: "A fair amount", value: 0.05 },
       { key: "large", label: "A lot", value: 0.09 },
     ];
+    // "2 points" — the participant-facing unit for a give budget.
+    const nv2Points = (value) => `${Math.round(Number(value) * 100)} point${Math.round(Number(value) * 100) === 1 ? "" : "s"}`;
     // Share of the distance from "my own best model" to "their opening model"
     // that I am willing to give up by version t. Boulware-ish: hold early,
     // concede near the deadline, never concede the whole distance.
@@ -843,32 +850,92 @@
       return model ? `#${model.seed ?? model.id ?? "?"}` : "-";
     }
 
+    /* The one criterion a side is publicly identified with. Every part of the
+       app that names "what this role cares about most" has to agree — the
+       identity banner, the M/O markers on the criteria table, the give-ground
+       exclusions, the limit a side refuses to trade, and the criterion it
+       argues from. They all read it from the same weights, here, so a Judges
+       proxy can never be introduced as caring about Accuracy and then be heard
+       arguing about something else. */
+    function nv2HeadlineCriterion(side) {
+      return topMetricKeyForWeights(nv2.weights[side]);
+    }
+
+    /* Beat (2) of every turn. Only the headline criterion may be spoken as the
+       role's mandate — "what I have to answer for". When the other side's model
+       already satisfies that criterion, the grievance moves to a secondary one,
+       and saying "my role has to answer for X" there would introduce a
+       stakeholder the participant was never told about. Same fact, weaker
+       claim: it costs me, it is not what I am here for. */
+    function nv2ComplaintLine({ modelPhrase, label, shortfall, headline, headlineLabel = "", tail = "" }) {
+      if (headline) {
+        return `${modelPhrase} sits ${shortfall} what I have to answer for on <strong>${escapeHtml(label)}</strong>${tail}.`;
+      }
+      // Off the headline criterion the sentence has to work harder: it names the
+      // criterion this role IS known for and says the offer already covers it —
+      // which is both true (that is why the grievance moved) and the reason this
+      // side is still countering rather than accepting. Without it a Judges
+      // proxy can spend a whole turn talking only about Protect Innocents.
+      return headlineLabel
+        ? `${modelPhrase} gets <strong>${escapeHtml(headlineLabel)}</strong> where I need it, but it still costs me on ${escapeHtml(label)}, ${shortfall} where mine sits${tail}.`
+        : `${modelPhrase} also costs me on ${escapeHtml(label)}, ${shortfall} where mine sits${tail}.`;
+    }
+
     // How much criterion `key` costs `side` when it looks at `targetModel`
     // instead of its own current position: the complaint ranking.
     function nv2Complaints(side, targetModel) {
       const own = nv2Position(side)?.model;
       const rowWeights = nv2.weights[side];
-      return criteriaOrder
+      const headline = nv2HeadlineCriterion(side);
+      const ranked = criteriaOrder
         .map((key) => {
           const mine = nv2MetricValue(own, key);
           const theirs = nv2MetricValue(targetModel, key);
           const gap = mine != null && theirs != null ? mine - theirs : 0;
           const weight = rowWeights[key] || 0;
-          return { key, label: criteriaLabels[key] || key, mine, theirs, gap, weight, cost: weight * Math.max(0, gap) };
+          // `headline` travels with the complaint so every wording path knows
+          // whether this grievance may be spoken as the role's mandate or only
+          // as a secondary cost. See nv2ComplaintLine.
+          return { key, label: criteriaLabels[key] || key, mine, theirs, gap, weight, cost: weight * Math.max(0, gap), headline: key === headline };
         })
         .sort((a, b) => b.cost - a.cost || b.weight - a.weight);
+      // Ranking on weight x gap alone let a lightly-weighted criterion with a
+      // huge gap outrank the role's own priority: a Judges proxy introduced as
+      // caring about Accuracy would open by demanding Protect Innocents, which
+      // is a defensible utility move and an incoherent stakeholder. So the
+      // headline criterion leads whenever it is genuinely short-changed; the
+      // rest keep the cost order behind it. When it is already satisfied there
+      // is nothing to misrepresent, and the cost ranking stands as it was.
+      const lead = ranked.find((item) => item.key === headline);
+      if (!lead || lead.gap <= 0.005) return ranked;
+      return [lead, ...ranked.filter((item) => item.key !== headline)];
     }
 
-    // Logrolling heuristic: concede the criterion that is cheapest for me and
-    // dearest to them, i.e. the largest positive (their weight - my weight).
-    function nv2LogrollGiveKey(side, demandKey) {
-      const other = nv2OtherSide(side);
-      const mine = nv2.weights[side];
-      const theirs = nv2.weights[other];
-      return criteriaOrder
-        .filter((key) => key !== demandKey)
-        .map((key) => ({ key, edge: (theirs[key] || 0) - (mine[key] || 0), mineWeight: mine[key] || 0 }))
-        .sort((a, b) => b.edge - a.edge || a.mineWeight - b.mineWeight)[0]?.key || null;
+    /* ---- which criterion may be given ground on ---------------------------
+       "Giving ground" here means one specific thing: my NEXT model is allowed
+       to score lower on that criterion than my current one. Three criteria can
+       never carry that permission:
+
+         - the criterion I am demanding, because the same model cannot move up
+           and down on one axis in one move;
+         - MY top-priority criterion, because it is the thing I am negotiating
+           for — relaxing it concedes the case rather than trading in it;
+         - THEIR top-priority criterion, because a model that scores lower there
+           is worse for them. In outcome space a "concession" on the other
+           side's number-one is not a gift, it is the opposite of one, and an
+           offer built on it can never be the offer that repays them most.
+
+       The last rule inverts the classic logrolling heuristic ("concede what is
+       cheap for me and dear to them"), which only holds when the concession is
+       a transfer. Here it is a degradation, so what we want to relax is what is
+       cheap for BOTH of us — that is the slack the search spends on buying them
+       an improvement where it actually counts.
+       ---------------------------------------------------------------------- */
+    function nv2ProtectedGiveKeys(side) {
+      return new Set([
+        nv2HeadlineCriterion(side),
+        nv2HeadlineCriterion(nv2OtherSide(side)),
+      ]);
     }
 
     function nv2GiveOptions(side, demandKey) {
@@ -876,17 +943,29 @@
       const mine = nv2.weights[side];
       const theirs = nv2.weights[other];
       const own = nv2Position(side)?.model;
-      return criteriaOrder
-        .filter((key) => key !== demandKey)
+      const blocked = nv2ProtectedGiveKeys(side);
+      const eligible = criteriaOrder.filter((key) => key !== demandKey && !blocked.has(key));
+      // Four criteria and at most three exclusions, so this cannot empty; the
+      // fallback exists so a future criteria set cannot silently strand the UI.
+      const pool = eligible.length ? eligible : criteriaOrder.filter((key) => key !== demandKey);
+      return pool
         .map((key) => ({
           key,
           label: criteriaLabels[key] || key,
           mineWeight: mine[key] || 0,
           theirWeight: theirs[key] || 0,
-          edge: (theirs[key] || 0) - (mine[key] || 0),
+          // Joint cost of letting this slip: what it takes off my utility plus
+          // what it takes off theirs. Cheapest first.
+          jointCost: (mine[key] || 0) + (theirs[key] || 0),
           current: nv2MetricValue(own, key),
         }))
-        .sort((a, b) => b.edge - a.edge || a.mineWeight - b.mineWeight);
+        .sort((a, b) => a.jointCost - b.jointCost || a.mineWeight - b.mineWeight);
+    }
+
+    // Default pick for a side that is not choosing for itself (the automated
+    // Other-party) and the initial selection in the participant's draft.
+    function nv2DefaultGiveKey(side, demandKey) {
+      return nv2GiveOptions(side, demandKey)[0]?.key || null;
     }
 
     function nv2GiveStep(stepKey) {
@@ -1017,7 +1096,7 @@
     function nv2AutoMove(side, incomingModel, versionIndex, receivedGain = null) {
       const complaints = nv2Complaints(side, incomingModel);
       const demandKey = complaints[0]?.key || criteriaOrder[0];
-      const giveKey = nv2LogrollGiveKey(side, demandKey) || criteriaOrder.find((key) => key !== demandKey) || criteriaOrder[0];
+      const giveKey = nv2DefaultGiveKey(side, demandKey) || criteriaOrder.find((key) => key !== demandKey) || criteriaOrder[0];
       // Tit-for-tat: answer a concession with a concession, and a stonewall
       // with a stonewall. Without this the other side keeps sweetening against
       // a party that never moves, and impasse becomes unreachable.
@@ -1080,8 +1159,13 @@
       if (!criteriaOrder.includes(nv2.draft.demandKey) || !stillValid) {
         nv2.draft.demandKey = (real[0] || complaints[0])?.key || rankedCriteria?.[0] || criteriaOrder[0];
       }
-      if (!criteriaOrder.includes(nv2.draft.giveKey) || nv2.draft.giveKey === nv2.draft.demandKey) {
-        nv2.draft.giveKey = nv2LogrollGiveKey("self", nv2.draft.demandKey) || criteriaOrder.find((key) => key !== nv2.draft.demandKey) || criteriaOrder[0];
+      // The give list is derived (it drops the demanded criterion and both
+      // sides' top priorities), so validate the draft against the list itself
+      // rather than against criteriaOrder — otherwise changing the demand can
+      // leave a giveKey selected that the dropdown no longer offers.
+      const giveOptions = nv2GiveOptions("self", nv2.draft.demandKey);
+      if (!giveOptions.some((item) => item.key === nv2.draft.giveKey)) {
+        nv2.draft.giveKey = giveOptions[0]?.key || criteriaOrder.find((key) => key !== nv2.draft.demandKey) || criteriaOrder[0];
       }
       if (!NV2_GIVE_STEPS.some((item) => item.key === nv2.draft.giveStep)) nv2.draft.giveStep = "medium";
       return nv2.draft;
@@ -1262,7 +1346,7 @@
     // The limit I am holding and why. Stated as a role obligation rather than
     // a preference — an interest-based refusal, not stubbornness.
     function nv2ProtectedLimit(side, myModel, theirOfferModel) {
-      const key = topMetricKeyForWeights(nv2.weights[side]);
+      const key = nv2HeadlineCriterion(side);
       const keep = nv2MetricValue(myModel, key);
       const underTheirs = nv2MetricValue(theirOfferModel, key);
       const cost = keep != null && underTheirs != null ? keep - underTheirs : 0;
@@ -1272,6 +1356,25 @@
         cost,
         at_risk: cost > 0.001,
       };
+    }
+
+    // A side cannot say "this is the one thing I will not trade" about the very
+    // criterion its own offer just let slip. The give-ground rules make that
+    // rare — nobody may declare a concession on their own top priority — but the
+    // search can still land the real loss there, so the PRESERVE act stands down
+    // whenever it would contradict the concession being announced in the same
+    // breath. The concession is what actually happened; the limit is a claim.
+    function nv2LimitStandsWith(limit, concession, complaint = null) {
+      if (!limit) return limit;
+      if (concession && concession.drop > 0.001 && concession.key === limit.key) {
+        return { ...limit, at_risk: false };
+      }
+      // Now that a side argues from its headline criterion, the limit it will
+      // not trade is usually that same criterion — and "X still fails me, and X
+      // is the line I cannot go below" says one thing twice. The complaint
+      // already carries the mandate, so the clause stands down.
+      if (complaint && complaint.key === limit.key) return { ...limit, at_risk: false };
+      return limit;
     }
 
     // The differing priorities that make trading worthwhile at all. This is the
@@ -1298,7 +1401,7 @@
       const current = track[track.length - 1]?.model;
       if (!opening || !current) return null;
       const rounds = track.filter((entry) => ["counter", "offer", "open_offer"].includes(entry.act)).length;
-      const key = topMetricKeyForWeights(nv2.weights[side]);
+      const key = nv2HeadlineCriterion(side);
       const from = nv2MetricValue(opening, key);
       const to = nv2MetricValue(current, key);
       return { rounds_moved: rounds, criterion: criteriaLabels[key] || key, given_up: from != null && to != null ? from - to : 0 };
@@ -1324,7 +1427,7 @@
       const payback = decision.accept ? null : nv2PaybackFor("other", offered, previousModel);
       const complaint = decision.accept ? null : move.complaint;
       const theirMove = nv2TheirLastMove("other", theirPreviousModel, incomingModel);
-      const limit = nv2ProtectedLimit("other", offered, incomingModel);
+      const limit = nv2LimitStandsWith(nv2ProtectedLimit("other", offered, incomingModel), concession, complaint);
       const movement = nv2MovementSoFar("other");
       return {
         protocol: "model_negotiation",
@@ -1358,7 +1461,19 @@
         // way to keep them out of the reply.
         // Same reasoning as the limit: the top-ranked complaint is not always a
         // real one, and a band would turn "no gap" into "a little short of".
-        complaint: complaint && complaint.gap > 0.001 ? { criterion: complaint.label, how_far_off: nv2Shortfall(complaint.gap) } : null,
+        // is_my_top_priority decides whether this may be voiced as the role's
+        // mandate or only as a secondary cost — the participant was told what
+        // this role cares about, and the reply has to match that.
+        complaint: complaint && complaint.gap > 0.001
+          ? {
+              criterion: complaint.label,
+              how_far_off: nv2Shortfall(complaint.gap),
+              is_my_top_priority: complaint.key === nv2HeadlineCriterion("other"),
+              // Named so a secondary grievance can still be voiced on-role:
+              // "you have my main concern covered, but this one costs me".
+              my_top_priority: criteriaLabels[nv2HeadlineCriterion("other")] || "",
+            }
+          : null,
         concession: concession && concession.drop > 0.001 ? { criterion: concession.label, size: nv2Amount(concession.drop) } : null,
         payback: payback && payback.gain > 0.001 ? { criterion: payback.label, size: nv2Amount(payback.gain) } : null,
         // rhetorical ingredients
@@ -1431,61 +1546,93 @@
       `).join("");
     }
 
+    /* ---- the three-beat turn ----------------------------------------------
+       Every message in this protocol — the participant's, the Other-party's,
+       scripted or voiced — is at most three sentences in one fixed order:
+
+         (1) UNDERSTAND  — what the other side just gave up, and that it landed
+         (2) POSITION    — what my role answers for, and why their model misses it
+         (3) MOVE        — what I give in return, and the model that carries it
+
+       An earlier version ran six acts, and both sides produced paragraphs that
+       repeated the same trade argument every round; nobody reads that inside a
+       negotiation they are also being asked to think about. A beat with no fact
+       behind it is dropped rather than padded, so a turn can be two sentences,
+       never four.
+       ---------------------------------------------------------------------- */
     function nv2SelfOfferText({ offerModel, previousModel, targetModel, demandKey, giveKey }) {
       const demandLabel = criteriaLabels[demandKey] || demandKey;
       const theirDemandValue = nv2MetricValue(targetModel, demandKey);
       const myDemandValue = nv2MetricValue(previousModel, demandKey);
-      const newDemandValue = nv2MetricValue(offerModel, demandKey);
       const shortfall = myDemandValue != null && theirDemandValue != null ? myDemandValue - theirDemandValue : 0;
-      const lift = newDemandValue != null && theirDemandValue != null ? newDemandValue - theirDemandValue : 0;
       const concession = nv2ConcessionDetail("self", offerModel, previousModel, giveKey);
       const payback = nv2PaybackFor("self", offerModel, previousModel);
+      // Their movement, read off their own track rather than passed in: the
+      // acknowledgement is only honest if they actually moved last turn.
+      const otherTrack = nv2Track("other");
+      const theirMove = nv2TheirLastMove("self", otherTrack.length > 1 ? otherTrack[otherTrack.length - 2]?.model : null, targetModel);
       const parts = [];
-      parts.push(`Your model ${nv2ModelTag(targetModel)} leaves <strong>${escapeHtml(demandLabel)}</strong> ${nv2Shortfall(shortfall)} what my role has to answer for.`);
-      if (concession.drop > 0.001) {
-        parts.push(concession.key === demandKey
-          // Same criterion on both sides of the sentence: say plainly that this
-          // is convergence from opposite ends, or it reads as self-contradiction.
-          ? `I am not asking you to close that whole gap — I am coming down ${nv2Amount(concession.drop)} on it myself.`
-          : concession.asDeclared
-            ? `I can absorb ${escapeHtml(concession.label)} slipping ${nv2Amount(concession.drop)}.`
-            : `That costs me ${nv2Amount(concession.drop)} on ${escapeHtml(concession.label)}, and I can live with it.`);
-      } else {
-        parts.push(`This one costs me nothing on any criterion, so there is no reason for either of us to hold it up.`);
+
+      if (theirMove?.gaveUp) {
+        parts.push(`You came down ${nv2Amount(theirMove.gaveUp.drop)} on ${escapeHtml(theirMove.gaveUp.label)}, and I can see what that cost you.`);
       }
-      parts.push(lift > 0.001
-        ? `So I put model ${nv2ModelTag(offerModel)} on the table: it puts ${escapeHtml(demandLabel)} ${nv2Amount(lift)} ahead of where yours sits, predicting ${escapeHtml(nv2PredictionLabel(offerModel))}.`
-        : `So I put model ${nv2ModelTag(offerModel)} on the table, predicting ${escapeHtml(nv2PredictionLabel(offerModel))}.`);
-      if (payback && payback.gain > 0.001) {
-        parts.push(`It should also work better for you: ${escapeHtml(payback.label)} goes up ${nv2Amount(payback.gain)}.`);
+
+      // The search can land on the model the other side is already holding. That
+      // is a real outcome — their position turned out to be the best one left
+      // under this package — but complaining about a model and then offering it
+      // back reads as nonsense. Say what it actually is: meeting them.
+      if (offerModel && targetModel && String(offerModel.seed ?? offerModel.id) === String(targetModel.seed ?? targetModel.id)) {
+        parts.push(concession.drop > 0.001
+          ? `I can meet you on your own model ${nv2ModelTag(targetModel)} — that costs me ${nv2Amount(concession.drop)} on ${escapeHtml(concession.label)}, and I would rather close there than keep trading.`
+          : `I can meet you on your own model ${nv2ModelTag(targetModel)}, and I would rather close there than keep trading.`);
+        return parts.join(" ");
+      }
+
+      parts.push(nv2ComplaintLine({
+        modelPhrase: `Your model ${nv2ModelTag(targetModel)}`,
+        label: demandLabel,
+        shortfall: nv2Shortfall(shortfall),
+        headline: demandKey === nv2HeadlineCriterion("self"),
+        headlineLabel: criteriaLabels[nv2HeadlineCriterion("self")] || "",
+      }));
+
+      const carries = `model ${nv2ModelTag(offerModel)} (${escapeHtml(nv2PredictionLabel(offerModel))})`;
+      const forYou = payback && payback.gain > 0.001 ? `, which puts ${escapeHtml(payback.label)} up ${nv2Amount(payback.gain)} for you` : "";
+      if (concession.drop > 0.001 && concession.key === demandKey) {
+        // Same criterion on both sides of the move: say plainly that this is
+        // convergence from opposite ends, or it reads as self-contradiction.
+        parts.push(`I am not asking you to close that whole gap — I come down ${nv2Amount(concession.drop)} on it myself and put ${carries} on the table${forYou}.`);
+      } else if (concession.drop > 0.001) {
+        parts.push(`So I can let ${escapeHtml(concession.label)} slip ${nv2Amount(concession.drop)}: ${carries}${forYou}.`);
+      } else {
+        parts.push(`So I put ${carries} on the table, which costs me nothing${forYou}.`);
       }
       return parts.join(" ");
     }
 
-    // Follows the same act sequence the LLM is asked for — acknowledge,
-    // reciprocate, preserve, justify the trade, gain-frame — so a participant
-    // who happens to hit the offline path gets the same argument, only stiffer.
+    // The same three beats the LLM is asked for — understand, position, move —
+    // so a participant who happens to hit the offline path gets a turn of the
+    // same shape and length, only stiffer.
     function nv2OtherFallbackText(decision, move, incomingModel, previousModel, versionIndex, theirPreviousModel = null) {
       const theirMove = nv2TheirLastMove("other", theirPreviousModel, incomingModel);
       const acknowledge = theirMove?.gaveUp
-        ? `I can see what that cost you — you let ${escapeHtml(theirMove.gaveUp.label)} slip ${nv2Amount(theirMove.gaveUp.drop)} to get here.`
+        ? `You let ${escapeHtml(theirMove.gaveUp.label)} slip ${nv2Amount(theirMove.gaveUp.drop)} to get here, and I can see what that cost you.`
         : null;
+      const lastRound = versionIndex >= NV2_MAX_VERSION;
 
       if (decision.accept) {
         const parts = [];
         if (acknowledge) parts.push(acknowledge);
-        if (theirMove?.gainedMe) {
-          parts.push(`That is what I needed: ${escapeHtml(theirMove.gainedMe.label)} comes up ${nv2Amount(theirMove.gainedMe.gain)}, far enough that I can defend it to the people I answer to.`);
-        }
+        parts.push(theirMove?.gainedMe
+          ? `${escapeHtml(theirMove.gainedMe.label)} comes up ${nv2Amount(theirMove.gainedMe.gain)}, far enough that I can defend it to the people I answer to.`
+          : `This clears the bar I set for my role.`);
         parts.push(decision.reason === "deadline"
-          ? `We are out of rounds, and this clears the bar I set for myself, so I would rather close here than have us both walk away with nothing.`
-          : `Pushing for more would not get my side enough to be worth another round of your time.`);
-        parts.push(`So I accept model ${nv2ModelTag(incomingModel)}.`);
+          ? `We are out of rounds, so I accept model ${nv2ModelTag(incomingModel)} rather than have us both walk away with nothing.`
+          : `Another round would not get my side enough to be worth your time, so I accept model ${nv2ModelTag(incomingModel)}.`);
         return parts.join(" ");
       }
 
       const complaint = move.complaint && move.complaint.gap > 0.001 ? move.complaint : null;
-      const limit = nv2ProtectedLimit("other", move.model, incomingModel);
       const movement = nv2MovementSoFar("other");
 
       if (move.stonewalled) {
@@ -1493,36 +1640,41 @@
         parts.push(movement && movement.given_up > 0.001
           ? `I have already come down ${nv2Amount(movement.given_up)} on ${escapeHtml(movement.criterion)} across this negotiation, and this round you did not move at all.`
           : `You did not move this round, so I am not going to either.`);
-        if (complaint) parts.push(`${escapeHtml(complaint.label)} is still ${nv2Shortfall(complaint.gap)} where I need it — that is the part I answer for, and nothing about it has changed.`);
-        parts.push(`I am staying with model ${nv2ModelTag(move.model)}.`);
-        parts.push(versionIndex >= NV2_MAX_VERSION
-          ? `That leaves us without an agreement, which I do not think serves either of us.`
-          : `Put something new on the table and I will look at it.`);
+        if (complaint) parts.push(`${escapeHtml(complaint.label)} is still ${nv2Shortfall(complaint.gap)} what I answer for, and nothing about that has changed.`);
+        parts.push(lastRound
+          ? `I am staying with model ${nv2ModelTag(move.model)}, which leaves us without an agreement.`
+          : `I am staying with model ${nv2ModelTag(move.model)} — put something new on the table and I will look at it.`);
         return parts.join(" ");
       }
 
       const concession = nv2ConcessionDetail("other", move.model, previousModel, move.giveKey);
+      // Same guard the payload applies, so the scripted wording cannot claim a
+      // limit on the criterion it just conceded either.
+      const limit = nv2LimitStandsWith(nv2ProtectedLimit("other", move.model, incomingModel), concession, complaint);
       const payback = nv2PaybackFor("other", move.model, previousModel);
-      const contrast = nv2PriorityContrast("other");
       const parts = [];
       if (acknowledge) parts.push(acknowledge);
+      // Beat 2 carries the position: where their model fails me, and — as a
+      // clause, never its own sentence — the line I cannot go below.
+      const holds = limit.at_risk ? `, and ${escapeHtml(limit.label)} is the line I cannot go below` : "";
       if (complaint) {
-        parts.push(`Where it still fails me is ${escapeHtml(complaint.label)}: it sits ${nv2Shortfall(complaint.gap)} what I can answer for.`);
+        parts.push(nv2ComplaintLine({
+          modelPhrase: "Your model",
+          label: complaint.label,
+          shortfall: nv2Shortfall(complaint.gap),
+          headline: complaint.key === nv2HeadlineCriterion("other"),
+          headlineLabel: criteriaLabels[nv2HeadlineCriterion("other")] || "",
+          tail: holds,
+        }));
+      } else if (limit.at_risk) {
+        parts.push(`${escapeHtml(limit.label)} is the line I cannot go below, and your model would cost me ${nv2Amount(limit.cost)} there.`);
       }
-      if (concession.drop > 0.001) {
-        parts.push(`So I will meet you: I am letting ${escapeHtml(concession.label)} slip ${nv2Amount(concession.drop)}, and that is real ground for my role, not a token.`);
-      }
-      if (limit.at_risk) {
-        parts.push(`What I cannot move is ${escapeHtml(limit.label)} — your model would cost me ${nv2Amount(limit.cost)} there, and below where I hold it I am signing off on something I cannot defend.`);
-      }
-      if (contrast) {
-        parts.push(`This is worth doing precisely because we rank things differently: you weigh ${escapeHtml(contrast.they_value_more)} above ${escapeHtml(contrast.i_value_more)} and I weigh it the other way, so trading beats splitting the difference for both of us.`);
-      }
-      parts.push(`My counter is model ${nv2ModelTag(move.model)}, predicting ${escapeHtml(nv2PredictionLabel(move.model))}.`);
-      if (payback && payback.gain > 0.001) {
-        parts.push(`For you that is ${escapeHtml(payback.label)} up ${nv2Amount(payback.gain)}.`);
-      }
-      if (versionIndex >= NV2_MAX_VERSION) parts.push(`This is my last round, so it is this or no agreement.`);
+      const carries = `model ${nv2ModelTag(move.model)} (${escapeHtml(nv2PredictionLabel(move.model))})`;
+      const forYou = payback && payback.gain > 0.001 ? `, which puts ${escapeHtml(payback.label)} up ${nv2Amount(payback.gain)} for you` : "";
+      const closer = lastRound ? ` This is my last round, so it is this or no agreement.` : "";
+      parts.push(concession.drop > 0.001
+        ? `So I will let ${escapeHtml(concession.label)} slip ${nv2Amount(concession.drop)} — real ground for my role — and counter with ${carries}${forYou}.${closer}`
+        : `So I counter with ${carries}${forYou}.${closer}`);
       return parts.join(" ");
     }
 
@@ -1533,19 +1685,19 @@
     function nv2OtherOpeningText(move, previousModel) {
       const complaint = move.complaint && move.complaint.gap > 0.001 ? move.complaint : null;
       const payback = nv2PaybackFor("other", move.model, previousModel);
-      const contrast = nv2PriorityContrast("other");
       const parts = [];
-      parts.push(`Let me put the first model on the table so you can see where my side stands.`);
+      // Beat 1 has nothing to understand yet, so it goes to the one thing an
+      // opening can say in its place: I am going first.
+      parts.push(`Let me go first so you can see where my side stands.`);
       if (complaint) {
-        parts.push(`What I have to answer for in this case is ${escapeHtml(complaint.label)}, and the model you would pick on your own leaves it ${nv2Shortfall(complaint.gap)} what I can sign off on.`);
+        parts.push(complaint.key === nv2HeadlineCriterion("other")
+          ? `What I have to answer for here is ${escapeHtml(complaint.label)}, and the model you would pick on your own leaves it ${nv2Shortfall(complaint.gap)} what I can sign off on.`
+          : `The model you would pick on your own costs me on ${escapeHtml(complaint.label)}, ${nv2Shortfall(complaint.gap)} where mine sits.`);
       }
-      parts.push(`So I am opening with model ${nv2ModelTag(move.model)}, predicting ${escapeHtml(nv2PredictionLabel(move.model))}.`);
-      if (payback && payback.gain > 0.001) {
-        parts.push(`I have not gone straight to my own best case either — against that, this one already gives you ${escapeHtml(payback.label)} up ${nv2Amount(payback.gain)}.`);
-      }
-      parts.push(contrast
-        ? `We rank these differently — you weigh ${escapeHtml(contrast.they_value_more)} above ${escapeHtml(contrast.i_value_more)} and I weigh it the other way — so tell me what this costs you and where you can give ground, and there should be a trade in it for both of us.`
-        : `Tell me what this costs you and where you can give ground, and I will see what I can move.`);
+      const opensWith = `model ${nv2ModelTag(move.model)} (${escapeHtml(nv2PredictionLabel(move.model))})`;
+      parts.push(payback && payback.gain > 0.001
+        ? `So I open with ${opensWith}, already ${escapeHtml(payback.label)} up ${nv2Amount(payback.gain)} on my own best case — tell me what it costs you and where you can give ground.`
+        : `So I open with ${opensWith} — tell me what it costs you and where you can give ground.`);
       return parts.join(" ");
     }
 
@@ -1704,7 +1856,8 @@
         "user",
         hold ? `Self holds · v${versionIndex}` : `Self offer · v${versionIndex}`,
         hold
-          ? `I am staying with model ${nv2ModelTag(offerModel)}. Model ${nv2ModelTag(targetModel)} still leaves ${escapeHtml(criteriaLabels[draft.demandKey] || draft.demandKey)} ${nv2Shortfall(nv2MetricValue(previousModel, draft.demandKey) - nv2MetricValue(targetModel, draft.demandKey))} what I can sign off on. If you can close that gap, I will look again.`
+          // A hold is two beats, not three: there is no move to announce.
+          ? `Model ${nv2ModelTag(targetModel)} still leaves ${escapeHtml(criteriaLabels[draft.demandKey] || draft.demandKey)} ${nv2Shortfall(nv2MetricValue(previousModel, draft.demandKey) - nv2MetricValue(targetModel, draft.demandKey))} what I can sign off on. I am staying with model ${nv2ModelTag(offerModel)} — close that gap and I will look again.`
           : nv2SelfOfferText({ offerModel, previousModel, targetModel, demandKey: draft.demandKey, giveKey: draft.giveKey }),
         null
       );
@@ -1808,33 +1961,57 @@
       const realComplaints = complaints.filter((item) => item.gap > 0.005);
       const demandOptions = realComplaints.length ? realComplaints : complaints;
       const demandHtml = demandOptions.map((item) => {
-        const detail = item.theirs != null ? ` — theirs ${Math.round(item.theirs * 100)}%, yours ${Math.round((item.mine ?? 0) * 100)}%` : "";
+        // State the ask as a gap they have to close, in the direction the
+        // request runs: from where their model sits up to where mine does.
+        const detail = item.theirs != null
+          ? ` — they are at ${Math.round(item.theirs * 100)}%, you are at ${Math.round((item.mine ?? 0) * 100)}%`
+          : "";
         return `<option value="${item.key}" ${draft.demandKey === item.key ? "selected" : ""}>${escapeHtml(item.label + detail)}</option>`;
       }).join("");
       const giveHtml = giveOptions.map((item) => {
-        const tag = item.edge > 0.02 ? " — cheap for you, valuable to them" : item.mineWeight > 0.25 ? " — you rated this highly" : "";
-        return `<option value="${item.key}" ${draft.giveKey === item.key ? "selected" : ""}>${escapeHtml(item.label + tag)}</option>`;
+        const at = item.current != null ? ` — you are at ${Math.round(item.current * 100)}%` : "";
+        return `<option value="${item.key}" ${draft.giveKey === item.key ? "selected" : ""}>${escapeHtml(item.label + at)}</option>`;
       }).join("");
-      const stepHtml = NV2_GIVE_STEPS.map((item) =>
-        `<option value="${item.key}" ${draft.giveStep === item.key ? "selected" : ""}>${escapeHtml(item.label)}</option>`
-      ).join("");
+      // The step is meaningless as a bare adjective ("a lot" of what?). Price it
+      // against the number the participant is looking at: the criterion they
+      // just chose to relax, its current value, and the floor this budget puts
+      // under it. The adjective stays in front because it is also the word the
+      // dialogue will use for the move.
+      const giveCurrent = nv2MetricValue(previousModel, draft.giveKey);
+      const stepHtml = NV2_GIVE_STEPS.map((item) => {
+        const floor = giveCurrent == null ? null : Math.max(0, giveCurrent - item.value);
+        const detail = floor == null
+          ? `at most ${nv2Points(item.value)} lower`
+          : `at most ${nv2Points(item.value)} lower — down to ${fmtPct(floor)}`;
+        return `<option value="${item.key}" ${draft.giveStep === item.key ? "selected" : ""}>${escapeHtml(`${item.label}: ${detail}`)}</option>`;
+      }).join("");
+      const giveLabel = criteriaLabels[draft.giveKey] || draft.giveKey;
+      const giveHint = giveCurrent == null
+        ? `Your next model may score lower on ${escapeHtml(giveLabel)} by the amount you allow. Nothing else may slip more than half that far.`
+        : `Your next model may score up to ${nv2Points(nv2GiveStep(draft.giveStep).value)} lower on <strong>${escapeHtml(giveLabel)}</strong> than your current ${fmtPct(giveCurrent)}. Nothing else may slip more than half that far.`;
 
+      const giveBudget = nv2GiveStep(draft.giveStep).value;
       const packageRows = nv2PackageRowsHtml([
         // When the concession lands on the criterion being demanded, the two
         // rows describe one movement from opposite ends and both end on the
         // same number. Collapse them into a single converging row.
         concession && concession.drop > 0.001 && concession.key === draft.demandKey
           ? {
-              role: "You object to",
+              role: "You ask them to improve",
               issue: concession.label,
               value: `their ${fmtPct(nv2MetricValue(targetModel, draft.demandKey))} → ${fmtPct(nv2MetricValue(offerModel, draft.demandKey))}, you come down from ${fmtPct(concession.before)}`,
             }
-          : { role: "You object to", issue: criteriaLabels[draft.demandKey] || draft.demandKey, value: `their ${fmtPct(nv2MetricValue(targetModel, draft.demandKey))} → ${fmtPct(nv2MetricValue(offerModel, draft.demandKey))}` },
+          : { role: "You ask them to improve", issue: criteriaLabels[draft.demandKey] || draft.demandKey, value: `their ${fmtPct(nv2MetricValue(targetModel, draft.demandKey))} → ${fmtPct(nv2MetricValue(offerModel, draft.demandKey))}` },
+        // Budget and spend, side by side: what the participant authorised, and
+        // what the chosen model actually cost them. They are rarely the same —
+        // the search spends the least it can — and hiding that gap is what made
+        // the step control feel arbitrary.
+        { role: "You allow", issue: giveLabel, value: `up to ${nv2Points(giveBudget)} lower${giveCurrent == null ? "" : ` (${fmtPct(giveCurrent)} → ${fmtPct(Math.max(0, giveCurrent - giveBudget))})`}` },
         concession && concession.drop > 0.001 && concession.key !== draft.demandKey
-          ? { role: "You give up", issue: concession.label, value: `${fmtPct(concession.before)} → ${fmtPct(concession.after)}` }
+          ? { role: "It actually costs", issue: concession.label, value: `${fmtPct(concession.before)} → ${fmtPct(concession.after)}` }
           : concession && concession.drop > 0.001
             ? null
-            : { role: "You give up", issue: "nothing measurable", value: "free improvement" },
+            : { role: "It actually costs", issue: "nothing measurable", value: "free improvement" },
         payback && payback.gain > 0.001 ? { role: "They gain", issue: payback.label, value: `${fmtPct(payback.before)} → ${fmtPct(payback.after)}` } : null,
       ]);
 
@@ -1867,7 +2044,8 @@
             <div class="nv2-details-title">This offer</div>
             <div class="response-package">${packageRows}</div>
             <div class="nv2-details-note">
-              <p>You and the Other-party are settling on one model you both stand behind. Name what their model costs you and what you can afford to lose; the system finds the model that repays them most for it, and they either accept it or answer with their own.</p>
+              <p>You and the Other-party are settling on one model you both stand behind. Two separate things go into a round: what you <strong>ask of them</strong> — the criterion their next model has to do better on — and what you <strong>give in return</strong> — the criterion your own next model is allowed to do worse on, and by how many percentage points. The system then finds the model that repays them most inside that budget, and they either accept it or answer with their own.</p>
+              <p>Your top priority and theirs never appear in the give-ground list: your own is what you are negotiating for, and a model that scores lower on theirs is worse for them, so it could never buy their agreement.</p>
               ${canRequestOpening ? `<p>You do not have to go first — “Let them open” costs you none of your ${NV2_MAX_VERSION} offers.</p>` : ""}
             </div>
           </span>
@@ -1879,18 +2057,29 @@
             <span class="nv2-status">${escapeHtml(nv2StatusLine())}${pendingHtml}</span>
             ${detailsHtml}
           </div>
-          <div class="response-config">
-            <div class="response-field">
-              <label for="nv2DemandSelect">Their model fails you on</label>
-              <select id="nv2DemandSelect" ${busy ? "disabled" : ""}>${demandHtml}</select>
+          <div class="nv2-move">
+            <div class="nv2-move-block">
+            
+              <div class="response-config nv2-ask-grid">
+                <div class="response-field">
+                  <label for="nv2DemandSelect">Their model fails you on</label>
+                  <select id="nv2DemandSelect" title="The criterion you want the Other-party's next model to do better on. Your offer will only be sent as a model that beats theirs on this one." ${busy ? "disabled" : ""}>${demandHtml}</select>
+                </div>
+              </div>
             </div>
-            <div class="response-field">
-              <label for="nv2GiveSelect">You can give ground on</label>
-              <select id="nv2GiveSelect" title="The criterion you are willing to let slip in order to move the Other-party. Everything you did not name here is protected far more tightly." ${busy ? "disabled" : ""}>${giveHtml}</select>
-            </div>
-            <div class="response-field">
-              <label for="nv2StepSelect">…by how much</label>
-              <select id="nv2StepSelect" title="How far the criterion on the left may slip. It also sets the bar your offer has to clear for the Other-party: a bigger concession promises them a bigger gain. It does not affect what you are objecting to." ${busy ? "disabled" : ""}>${stepHtml}</select>
+            <div class="nv2-move-block nv2-move-give">
+          
+              <div class="response-config nv2-give-grid">
+                <div class="response-field">
+                  <label for="nv2GiveSelect">You can give ground on</label>
+                  <select id="nv2GiveSelect" title="The criterion your OWN next model is allowed to do worse on, in exchange for gains elsewhere. Your top priority and theirs are never listed here, and neither is the criterion you are asking them to improve." ${busy ? "disabled" : ""}>${giveHtml}</select>
+                </div>
+                <div class="response-field">
+                  <label for="nv2StepSelect">…and it may drop by</label>
+                  <select id="nv2StepSelect" title="How many percentage points that criterion may lose against your current model. It is a budget, not a promise: the search takes the smallest drop that still moves the Other-party. A bigger budget also raises the bar your offer must clear for them." ${busy ? "disabled" : ""}>${stepHtml}</select>
+                </div>
+              </div>
+              <div class="nv2-give-hint">${giveHint}</div>
             </div>
           </div>
           <div class="composer-send-row">

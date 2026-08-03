@@ -481,7 +481,18 @@
       if (!usesNeutralModelNames()
         && (studyCondition() === "informed" || studyCondition() === "negotiation" || isMultiOptimalCondition())) {
         const other = proxyPersona || ensureDifferentProxyPersona();
-        const otherKey = window.primaryCriterionKeyForPersona?.(other) || topMetricKeyForWeights(other?.weights || proxyWeights || {});
+        // Name the criterion the other side's LIVE weights top out on, not the
+        // one its persona template declares an interest in. The two agree for
+        // every persona shipped today, but only the weights drive the
+        // negotiation — the models it opens with, the limit it protects, the
+        // criterion it argues from — so if they ever diverge the banner has to
+        // follow the weights or it introduces a stakeholder that does not show
+        // up. The declared interest stays as the fallback for a persona that
+        // carries no weights at all.
+        const otherRunning = [proxyWeights, other?.weights].find((row) => row && criteriaOrder.some((key) => Number(row[key]) > 0));
+        const otherKey = otherRunning
+          ? topMetricKeyForWeights(otherRunning)
+          : window.primaryCriterionKeyForPersona?.(other) || criteriaOrder[0];
         const otherRole = personaTitle(other || { label: "Other stakeholder" });
         const otherMetric = criteriaLabels[otherKey] || otherKey;
         otherReminder = `<span class="informed-reminder-other">Other stakeholder (${escapeHtml(otherRole)}) thinks ${escapeHtml(otherMetric)} is important.</span>`;

@@ -33,7 +33,7 @@
       color: var(--ink);
       font-family: var(--font-ui);
     }
-    main { width: min(1500px, calc(100vw - 96px)); margin: 30px auto 44px; }
+    main { width: min(1500px, calc(100vw - 96px)); margin: 0px auto 44px; }
     h1 { margin: 0 0 18px; font-size: 26px; font-weight: 780; }
     .toolbar {
       display: grid;
@@ -90,7 +90,7 @@
     .reconcile-subtitle { color: #796b58; font-size: clamp(15px, 1.5vw, 18px); font-weight: 650; line-height: 1.45; margin: 0; max-width: 860px; }
     .grid { align-items: stretch; display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 18px; margin-top: 4px; }
     body.condition-negotiation .grid { align-items: start; grid-template-columns: 780px minmax(360px, 640px); }
-    body.condition-negotiatev2 .grid { align-items: start; grid-template-columns: 520px minmax(360px, 820px); }
+    body.condition-negotiatev2 .grid { align-items: start; grid-template-columns: 520px minmax(360px, 1220px); }
     body.condition-single .grid,
     body.condition-singleoptimal .grid,
     body.condition-multioptimal .grid,
@@ -730,7 +730,33 @@
        just above the composer instead of leaving a band between the two. */
     .chat-window { align-items: stretch; background: rgba(255, 253, 249, .58); border: 1.5px solid var(--line); border-radius: 16px; display: flex; flex-direction: column; gap: 10px; height: 100%; max-height: calc(100vh - 260px); min-height: 620px; overflow: hidden; padding: 12px; }
     body.condition-negotiation .chat-window,
-    body.condition-negotiatev2 .chat-window { background: #fff; border: 2px solid #000; border-radius: 0; max-height: calc(100vh - 170px); min-height: 620px; }
+    body.condition-negotiatev2 .chat-window { background: #fff; border: 2px solid #000; border-radius: 0; }
+    /* The negotiation column is the participant's whole workspace, so it takes
+       the viewport rather than a fixed 620px box. Sized instead of merely
+       capped: a max-height let the window stop at its content and leave a dead
+       band under the composer whenever the case panel beside it ran longer.
+       42px is everything that is not the column itself — main's 30px top margin,
+       the grid's 4px, and 8px of breathing room at the foot — and main's bottom
+       margin is trimmed to match so the page does not scroll by that much.
+       Sticky keeps the column whole when the left side is the taller of the two;
+       drop that pair of lines and the height still holds. */
+    body.condition-negotiation main,
+    body.condition-negotiatev2 main { margin-bottom: 8px; }
+    body.condition-negotiation .negotiation-panel,
+    body.condition-negotiatev2 .negotiation-panel {
+      height: calc(100vh - 20px);
+      position: sticky;
+      /* 34px is where the column already sits at scroll 0 (main's 30px plus the
+         grid's 4px), so it pins without shifting. */
+      top: 10px;
+      /* The panel's three-row template is for the conditions that show a
+         heading and a note; here both are display:none, so the chat would land
+         in the first auto row and the 1fr row below it would collect the
+         leftover height as blank space. One row, and the window fills it. */
+      grid-template-rows: minmax(0, 1fr);
+    }
+    body.condition-negotiation .chat-window,
+    body.condition-negotiatev2 .chat-window { height: 100%; max-height: none; min-height: 0; }
     .negotiate-v2-composer .response-config { grid-template-columns: repeat(2, minmax(0, 1fr)) 120px; }
     .negotiate-v2-composer .response-preview { background: #fff; border: 1.5px solid #d4e0ea; border-radius: 10px; color: #222; font-size: 12px; font-weight: 750; line-height: 1.35; margin-top: 7px; padding: 7px 9px; }
     .negotiate-v2-warning { background: #fff5e6; border: 1.5px solid #e6b35c; border-radius: 8px; color: #7a4a00; font-size: 12px; font-weight: 750; line-height: 1.35; margin-top: 7px; padding: 6px 9px; }
@@ -753,7 +779,7 @@
        circle so the row scans as a toolbar under the text. */
     .composer { background: transparent; border: 0; display: grid; flex: 0 0 auto; justify-items: stretch; margin-top: auto; padding: 0; }
     .composer.locked { background: transparent; }
-    .composer-bubble { background: #fff; border: 1px solid #e4e2dd; border-radius: 18px; box-shadow: none; max-width: 100%; padding: 16px 18px 12px; position: relative; width: 100%; }
+    .composer-bubble { background: #f1f1f1; border: 1px solid #e4e2dd; border-radius: 18px; box-shadow: none; max-width: 100%; padding: 16px 18px 12px; position: relative; width: 100%; }
     .composer.locked .composer-bubble { background: #faf9f7; border-color: #e8e6e1; }
     .composer-title { align-items: center; color: #1c1b19; display: flex; font-size: 15px; font-weight: 650; gap: 8px; justify-content: space-between; letter-spacing: 0; line-height: 1.45; margin-bottom: 8px; text-transform: none; }
     .composer-speaker { align-items: center; display: inline-flex; gap: 7px; }
@@ -875,6 +901,24 @@
     .composer-help.nv2-details { font-size: 13px; height: 26px; padding-bottom: 5px; width: 26px; }
     .negotiate-v2-composer .nv2-status { align-items: center; color: #57544e; display: inline-flex; flex-wrap: wrap; gap: 7px; min-width: 0; }
     .composer-bubble.negotiate-v2-composer .response-config { gap: 9px; margin-bottom: 0; }
+    /* The round is two different acts — what you ask of them, what you give in
+       return — and running all three selects along one strip made them read as
+       one setting with three knobs. Split into two captioned blocks with a rule
+       between, so the ask stands alone and the give-ground pair is visibly the
+       price attached to it. */
+    .nv2-move { display: grid; gap: 11px; }
+    .nv2-move-block { display: grid; gap: 6px; }
+    .nv2-move-give { border-top: 1px solid #e8e6e1; padding-top: 11px; }
+    .nv2-move-caption { color: #86827a; font-size: 10px; font-weight: 800; letter-spacing: .06em; text-transform: uppercase; }
+    .composer-bubble.negotiate-v2-composer .nv2-ask-grid { grid-template-columns: minmax(0, 1fr); }
+    .composer-bubble.negotiate-v2-composer .nv2-give-grid { grid-template-columns: minmax(0, 1fr) minmax(0, 1.15fr); }
+    /* Says in words what the two give-ground selects mean together, so the
+       budget is never left to be inferred from an adjective. */
+    .nv2-give-hint { color: #7a766e; font-size: 11px; font-weight: 600; line-height: 1.4; }
+    .nv2-give-hint strong { color: #33312d; font-weight: 750; }
+    @media (max-width: 900px) {
+      .composer-bubble.negotiate-v2-composer .nv2-give-grid { grid-template-columns: minmax(0, 1fr); }
+    }
     .composer-bubble.negotiate-v2-composer .response-field label { font-size: 12px; }
     .composer-bubble.negotiate-v2-composer .response-field select { min-height: 30px; }
     .composer-bubble.negotiate-v2-composer .composer-send-row { margin-top: 10px; padding-top: 9px; }
@@ -1012,6 +1056,11 @@
       body.reconcile-mode main { width: min(1200px, calc(100vw - 56px)); }
       .toolbar, .grid, .trace-grid, .summary-cards, .group-cards { grid-template-columns: 1fr; }
       body.condition-negotiation .grid, body.condition-negotiatev2 .grid { grid-template-columns: 1fr; }
+      /* Stacked, the negotiation column follows the case panel down the page,
+         so pinning it to the viewport would cut it in half. Back to a plain
+         block that grows with its content. */
+      body.condition-negotiation .negotiation-panel,
+      body.condition-negotiatev2 .negotiation-panel { height: auto; position: static; }
       body.condition-negotiation .chat-window, body.condition-negotiatev2 .chat-window { max-height: none; min-height: 520px; }
       .criteria-grid, .metric-grid, .single-model-metrics { grid-template-columns: repeat(2, 1fr); }
       .hint { padding-top: 4px; }
@@ -1146,17 +1195,17 @@
     </section>
   </main>
 
-  <script src="js/config-state.js?v=20260729-external-elicitation"></script>
-  <script src="js/utils-salience.js?v=20260729-external-elicitation"></script>
-  <script src="js/case-features.js?v=20260729-external-elicitation"></script>
-  <script src="js/persona-persistence.js?v=20260729-external-elicitation"></script>
-  <script src="js/profiles-stakes.js?v=20260729-external-elicitation"></script>
-  <script src="js/elicitation.js?v=20260729-external-elicitation"></script>
-  <script src="js/negotiation-ui.js?v=20260729-external-elicitation"></script>
-  <script src="js/summary-guards.js?v=20260729-external-elicitation"></script>
-  <script src="js/negotiation-engine.js?v=20260729-external-elicitation"></script>
-  <script src="js/chat-decision.js?v=20260729-external-elicitation"></script>
-  <script src="js/main.js?v=20260729-external-elicitation"></script>
-  <script src="js/tutorial.js?v=20260729-external-elicitation"></script>
+  <script src="js/config-state.js?v=20260803-negotiation-move-split"></script>
+  <script src="js/utils-salience.js?v=20260803-negotiation-move-split"></script>
+  <script src="js/case-features.js?v=20260803-negotiation-move-split"></script>
+  <script src="js/persona-persistence.js?v=20260803-negotiation-move-split"></script>
+  <script src="js/profiles-stakes.js?v=20260803-negotiation-move-split"></script>
+  <script src="js/elicitation.js?v=20260803-negotiation-move-split"></script>
+  <script src="js/negotiation-ui.js?v=20260803-negotiation-move-split"></script>
+  <script src="js/summary-guards.js?v=20260803-negotiation-move-split"></script>
+  <script src="js/negotiation-engine.js?v=20260803-negotiation-move-split"></script>
+  <script src="js/chat-decision.js?v=20260803-negotiation-move-split"></script>
+  <script src="js/main.js?v=20260803-negotiation-move-split"></script>
+  <script src="js/tutorial.js?v=20260803-negotiation-move-split"></script>
 </body>
 </html>

@@ -79,10 +79,16 @@
     // multi-stakeholder condition highlights this one, and the reconcile banner
     // names it in prose, so both read it from here rather than deriving it
     // separately and risking two different answers on screen at once.
+    // The "O" marker on the criteria table, the identity banner and the
+    // negotiation all have to point at one criterion. The live weights are what
+    // the negotiation actually argues from, so they decide; the persona's
+    // declared interest is only the fallback for a persona without weights.
     function otherStakeholderTopCriterion() {
       const other = proxyPersona || ensureDifferentProxyPersona();
-      return window.primaryCriterionKeyForPersona?.(other)
-        || topMetricKeyForWeights(other?.weights || proxyWeights || {});
+      const running = [proxyWeights, other?.weights].find((row) => row && criteriaOrder.some((key) => Number(row[key]) > 0));
+      return running
+        ? topMetricKeyForWeights(running)
+        : window.primaryCriterionKeyForPersona?.(other) || criteriaOrder[0];
     }
 
     function informedExposureOptions() {

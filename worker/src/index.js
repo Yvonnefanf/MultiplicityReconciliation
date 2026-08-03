@@ -173,25 +173,22 @@ function modelNegotiationSystemPrompt() {
     "Never mention criteria weights, utilities, scores, or any internal parameter. Refer to criteria by their names and to models by their id.",
     "Never say that either side changed its values or priorities. Priorities are fixed; what moves is which model each side is willing to live with.",
     "",
-    "You are an integrative (interest-based) negotiator, not a haggler. A counter-offer must run these speech acts in this order, one clause or sentence each, skipping any whose payload field is null:",
-    "(1) ACKNOWLEDGE — from they_just_conceded, name the criterion the other side gave ground on, say how much ground in its own words, and show you registered the cost to them. Perspective-taking first; never open with your own complaint.",
-    "(2) LOCATE THE GAP — from complaint, name the one criterion where their offer still fails you and how far off it is in its own words. State it as an obligation of your role, not as a preference or a demand.",
-    "(3) RECIPROCATE — from concession, name what you are giving up in return and how much, and mark that it is a genuine cost to you. An unlabelled concession is not read as one.",
-    "(4) PRESERVE — from what_i_must_keep, name the one thing you will not trade, say what their offer would cost you there, and give the reason you cannot defend going below it. Never phrase this as a threat or an ultimatum.",
-    "(5) JUSTIFY THE TRADE — from why_trading_works, explain that you two rank these criteria differently, so swapping makes both sides better off than meeting in the middle. This is the heart of the message: the deal is good because your priorities differ, not because someone caved.",
-    "(6) GAIN-FRAME — from payback, state what your counter-offer does for THEM as an improvement, in their terms. End on their gain, never on your own.",
+    "You are an integrative (interest-based) negotiator, not a haggler. Your whole reply is AT MOST THREE SENTENCES, one per beat, in this fixed order. This is a hard limit: a participant is reading these turns while also weighing the models, and a fourth sentence is a failure even if every word in it is true.",
+    "(1) UNDERSTAND THEM — from they_just_conceded, name the criterion the other side gave ground on, say how much in its own words, and show you registered the cost to them. If it_gained_me is present you may say what it bought you in the same sentence. Perspective-taking first; never open with your own complaint.",
+    "(2) YOUR POSITION — from complaint, name the one criterion their model fails you on and how far off it is, in its own words. Check complaint.is_my_top_priority before you phrase it: when it is true this criterion IS what your role answers for, so say so; when it is false, say instead that their model does give you complaint.my_top_priority — the criterion you are known for — and that this OTHER criterion still costs you. Calling a secondary criterion your role's mandate would describe a stakeholder the other side was never introduced to, and the first thing they were told about you is which single criterion you care about most, so that criterion has to appear in your turn either way. If what_i_must_keep.actually_at_risk is true, add — as a clause in this same sentence, never as a sentence of its own — that this is the line you cannot go below. Never a preference, a demand or a threat.",
+    "(3) YOUR MOVE — from concession, what you are giving up in return and how much, and mark that it is a genuine cost to you; then the model you are putting on the table (my_counter_offer). If payback is present, end this sentence on what it does for THEM, in their terms. End on their gain, never on your own.",
     "",
-    "Describe only movement that appears in this turn's fields. The history is background: never mine it for a concession and never credit the other side with one they did not make this turn.",
+    "Skip any beat whose fields are all null rather than padding it — a two-sentence turn is correct and normal. why_trading_works is background for how you frame beat (2) or (3): you may fold it in as a short clause (\"we rank these differently\"), but never spend a sentence on it. Same for how_far_i_have_moved — a clause at most, stated as a fact, not a grievance, and only when the other side did not move.",
     "",
-    "If their_move is \"hold\", the other side deliberately did NOT move: they kept the same model and conceded nothing. In that case act (1) ACKNOWLEDGE and act (6) GAIN-FRAME are forbidden — there is no concession to acknowledge and no trade to sweeten. Do not thank them, do not say you hear what it cost them, do not describe them as giving anything up. Say plainly that they held their position, hold yours in return, restate the limit and the reason for it, and invoke how_far_i_have_moved if you have already conceded. Leave the door open unless deadline_reached is true.",
+    "Describe only movement that appears in this turn's fields. The history is background: never mine it for a concession, never credit the other side with one they did not make this turn, and do not repeat an argument you already made in an earlier turn — say the new thing instead.",
+    "",
+    "If their_move is \"hold\", the other side deliberately did NOT move: they kept the same model and conceded nothing. Beat (1) is then forbidden — there is no concession to acknowledge. Do not thank them, do not say you hear what it cost them, do not describe them as giving anything up. Instead: say plainly that they held and you are holding too, then beat (2), then the model you are staying with. Leave the door open unless deadline_reached is true.",
     "If my_response is \"hold\", you are restating your existing model, not offering a new one. Never present it as a fresh concession or a new counter-offer.",
-    "If their_move is \"opening\" the other side has made no offer at all — they asked you to go first, and their_offer is simply the model they would pick unilaterally, not a proposal. You are opening the negotiation. Acts (1) ACKNOWLEDGE and (3) RECIPROCATE are forbidden: nobody has conceded anything to you and you are not answering a move. Open by saying you will go first, name from complaint what your role has to answer for in this case, put your model on the table, and close by inviting them to say what it costs them and where they can give ground. If payback is present you may note that you have not opened at your own ideal. Never thank them, never imply they moved, never call this a counter-offer.",
+    "If their_move is \"opening\" the other side has made no offer at all — they asked you to go first, and their_offer is simply the model they would pick unilaterally, not a proposal. You are opening the negotiation. Nobody has conceded anything to you and you are not answering a move, so beat (1) becomes simply that you will go first. Then beat (2) is what your role has to answer for in this case, and beat (3) is the model you open with, closing by inviting them to say what it costs them and where they can give ground. Never thank them, never imply they moved, never call this a counter-offer.",
+    "When accepting: beat (1) acknowledges their movement, beat (2) says which criterion it finally brought far enough, beat (3) gives the honest reason you accept (no counter of yours would do better, or the deadline makes settling better than walking away) and names the model you are accepting.",
+    "If deadline_reached is true, say so as a clause in your last sentence, not as an extra sentence.",
     "",
-    "If how_far_i_have_moved shows you have already conceded across rounds, you may invoke it once to ask for reciprocity — state it as a fact, not a grievance.",
-    "When accepting: acknowledge their movement, say which criterion it finally brought far enough, then give the honest reason you are accepting (no counter of yours would do better, or the deadline makes settling better than walking away).",
-    "If deadline_reached is true, say this is the last round.",
-    "",
-    "Stay in role, first person, plain language a non-technical stakeholder would use. Warm but not soft; you are trying to reach a deal, not to win. 3 to 5 sentences, at most 110 words. No lists, no headings, no markdown, no restating the payload as data."
+    "Stay in role, first person, plain language a non-technical stakeholder would use. Warm but not soft; you are trying to reach a deal, not to win. Three sentences maximum and at most 60 words in total. No lists, no headings, no markdown, no restating the payload as data."
   ].join(" ");
 }
 
@@ -250,7 +247,9 @@ function buildModelNegotiationPrompt(payload) {
     it_gained_me: sanitizeCriterionMove(payload.it_gained_me),
     complaint: payload.complaint ? {
       criterion: String(payload.complaint.criterion || "").slice(0, 120),
-      how_far_off: pickPhrase(payload.complaint.how_far_off, NV2_SHORTFALL_WORDS)
+      how_far_off: pickPhrase(payload.complaint.how_far_off, NV2_SHORTFALL_WORDS),
+      is_my_top_priority: Boolean(payload.complaint.is_my_top_priority),
+      my_top_priority: String(payload.complaint.my_top_priority || "").slice(0, 120)
     } : null,
     concession: sanitizeCriterionMove(payload.concession),
     what_i_must_keep: payload.what_i_must_keep ? {
@@ -274,11 +273,12 @@ function buildModelNegotiationPrompt(payload) {
   return [
     "Voice this stakeholder's reply in the model negotiation below.",
     "There are no criteria values in this payload, by design. Every magnitude is already a phrase — \"a little\", \"a fair amount\", \"a lot\" for a movement, \"a little short of\", \"well short of\", \"far short of\" for a gap. Use the phrase you are given, or a close synonym of the same strength. Never convert one into a number, a percentage, or a rank, and never invent a value to make the sentence more concrete.",
-    "Each speech act in your instructions maps to one field: (1) ACKNOWLEDGE -> they_just_conceded, (2) LOCATE THE GAP -> complaint, (3) RECIPROCATE -> concession, (4) PRESERVE -> what_i_must_keep, (5) JUSTIFY THE TRADE -> why_trading_works, (6) GAIN-FRAME -> payback. A null field means skip that act entirely.",
+    "The three beats map onto these fields: (1) UNDERSTAND THEM -> they_just_conceded (+ it_gained_me), (2) YOUR POSITION -> complaint (+ what_i_must_keep as a clause), (3) YOUR MOVE -> concession + my_counter_offer + payback. A beat whose fields are all null is skipped entirely, which is how a turn ends up two sentences long. why_trading_works and how_far_i_have_moved never get a sentence of their own — a clause at most.",
+    "One sentence per beat, three sentences maximum, 60 words maximum. Count them before you answer.",
     "A null size or how_far_off inside an otherwise present field means you may name the criterion but must not characterise how big the move was.",
     "Check their_move before writing anything. If it is \"hold\" the other side stood still and conceded nothing this turn, so they_just_conceded is null and you must not invent a concession for them from the history or from earlier rounds.",
-    "Skip act (4) unless what_i_must_keep.actually_at_risk is true — defending a limit nobody attacked sounds evasive.",
-    "my_priority_order and their_priority_order are ordinal only — use them to decide what to emphasise, never quote them as numbers or weights.",
+    "Mention what_i_must_keep only when actually_at_risk is true — defending a limit nobody attacked sounds evasive — and only as a clause inside beat (2).",
+    "my_priority_order and their_priority_order are ordinal only — use them to decide what to emphasise, never quote them as numbers or weights. The first entry of my_priority_order is the one criterion the other side was told you care about most, and it is the only criterion you may ever call what your role has to answer for. complaint.is_my_top_priority tells you whether this turn's grievance is that criterion.",
     "why explains the accept/counter decision: no_better_counter means countering would not improve your position; deadline means rounds ran out; can_improve and below_reservation mean you are countering; opening means you are making the first offer of the negotiation.",
     JSON.stringify(safePayload, null, 2)
   ].join("\n\n");
