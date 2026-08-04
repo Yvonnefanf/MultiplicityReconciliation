@@ -670,7 +670,7 @@
     /* 50px of criterion column: small type, no side padding, and the abbreviation
        wraps rather than pushing the score columns apart. The full name is on
        hover, so a two-line "Protect / Inn." still reads. */
-    .multi-optimal-table .exposure-performance-label { font-size: 12px; padding: 0 4px 0 0; white-space: nowrap;}
+    .multi-optimal-table .exposure-performance-label { font-size: 12px; padding: 0 4px 0 0;}
     .multi-optimal-table .exposure-performance-criteria-heading { font-size: 12px; }
     /* The 50px column is for the criterion name alone, so the owner tag is lifted
        out of the flow and hangs in the padding to the left of it. A criterion
@@ -901,16 +901,16 @@
     .composer-help.nv2-details { font-size: 13px; height: 26px; padding-bottom: 5px; width: 26px; }
     .negotiate-v2-composer .nv2-status { align-items: center; color: #57544e; display: inline-flex; flex-wrap: wrap; gap: 7px; min-width: 0; }
     .composer-bubble.negotiate-v2-composer .response-config { gap: 9px; margin-bottom: 0; }
-    /* The round is two different acts — what you ask of them, what you give in
-       return — and running all three selects along one strip made them read as
-       one setting with three knobs. Split into two captioned blocks with a rule
-       between, so the ask stands alone and the give-ground pair is visibly the
-       price attached to it. */
+    /* The v2 composer now asks for one concrete model offer. The details
+       popover carries the sacrifice/payback breakdown so the visible control
+       stays focused on the choice participants actually make. */
     .nv2-move { display: grid; gap: 11px; }
     .nv2-move-block { display: grid; gap: 6px; }
     .nv2-move-give { border-top: 1px solid #e8e6e1; padding-top: 11px; }
     .nv2-move-caption { color: #86827a; font-size: 10px; font-weight: 800; letter-spacing: .06em; text-transform: uppercase; }
     .composer-bubble.negotiate-v2-composer .nv2-ask-grid { grid-template-columns: minmax(0, 1fr); }
+    .composer-bubble.negotiate-v2-composer .nv2-model-grid { grid-template-columns: minmax(0, 1fr); }
+    .composer-bubble.negotiate-v2-composer .nv2-model-grid select { font-size: 11px; min-width: 0; text-overflow: ellipsis; }
     .composer-bubble.negotiate-v2-composer .nv2-give-grid { grid-template-columns: minmax(0, 1fr) minmax(0, 1.15fr); }
     /* Says in words what the two give-ground selects mean together, so the
        budget is never left to be inferred from an adjective. */

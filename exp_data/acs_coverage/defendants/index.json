@@ -1,170 +1,272 @@
 {
  "dataset": "acs_coverage",
  "user_role": "defendants",
- "case_count": 18,
- "agreement_count": 3,
+ "case_count": 20,
+ "agreement_count": 0,
+ "joint_alignment_counts": {
+  "self": 10,
+  "other": 10
+ },
  "cases": [
   {
    "case_id": 0,
-   "test_case_index": 63,
-   "other_role": "judges",
+   "test_case_index": 1041,
+   "other_role": "community_members",
    "agreement": false,
    "user_pred_class": 0,
    "other_pred_class": 1,
-   "multiplicity": 48
+   "joint_model_seed": 540,
+   "joint_pred_class": 0,
+   "joint_alignment": "self",
+   "multiplicity": 20,
+   "conflict_score": 1.2571428571428571
   },
   {
    "case_id": 1,
-   "test_case_index": 564,
-   "other_role": "community_members",
+   "test_case_index": 1064,
+   "other_role": "fairness_advocates",
    "agreement": false,
    "user_pred_class": 0,
    "other_pred_class": 1,
-   "multiplicity": 48
+   "joint_model_seed": 91,
+   "joint_pred_class": 1,
+   "joint_alignment": "other",
+   "multiplicity": 46,
+   "conflict_score": 0.6701449275362321
   },
   {
    "case_id": 2,
-   "test_case_index": 401,
+   "test_case_index": 905,
    "other_role": "judges",
    "agreement": false,
    "user_pred_class": 0,
    "other_pred_class": 1,
-   "multiplicity": 49
+   "joint_model_seed": 533,
+   "joint_pred_class": 0,
+   "joint_alignment": "self",
+   "multiplicity": 18,
+   "conflict_score": 0.2617511520737329
   },
   {
    "case_id": 3,
-   "test_case_index": 219,
+   "test_case_index": 185,
    "other_role": "community_members",
    "agreement": false,
    "user_pred_class": 0,
    "other_pred_class": 1,
-   "multiplicity": 49
+   "joint_model_seed": 534,
+   "joint_pred_class": 1,
+   "joint_alignment": "other",
+   "multiplicity": 29,
+   "conflict_score": 1.3714285714285714
   },
   {
    "case_id": 4,
-   "test_case_index": 731,
+   "test_case_index": 1213,
    "other_role": "fairness_advocates",
-   "agreement": true,
-   "user_pred_class": 1,
+   "agreement": false,
+   "user_pred_class": 0,
    "other_pred_class": 1,
-   "multiplicity": 49
+   "joint_model_seed": 2,
+   "joint_pred_class": 0,
+   "joint_alignment": "self",
+   "multiplicity": 9,
+   "conflict_score": 0.6109734513274336
   },
   {
    "case_id": 5,
-   "test_case_index": 423,
+   "test_case_index": 28,
    "other_role": "judges",
    "agreement": false,
    "user_pred_class": 0,
    "other_pred_class": 1,
-   "multiplicity": 49
+   "joint_model_seed": 58,
+   "joint_pred_class": 1,
+   "joint_alignment": "other",
+   "multiplicity": 32,
+   "conflict_score": 0.11957158675564183
   },
   {
    "case_id": 6,
-   "test_case_index": 407,
+   "test_case_index": 126,
    "other_role": "community_members",
    "agreement": false,
    "user_pred_class": 0,
    "other_pred_class": 1,
-   "multiplicity": 49
+   "joint_model_seed": 537,
+   "joint_pred_class": 0,
+   "joint_alignment": "self",
+   "multiplicity": 20,
+   "conflict_score": 1.2571428571428571
   },
   {
    "case_id": 7,
-   "test_case_index": 435,
-   "other_role": "judges",
+   "test_case_index": 16,
+   "other_role": "fairness_advocates",
    "agreement": false,
    "user_pred_class": 0,
    "other_pred_class": 1,
-   "multiplicity": 49
+   "joint_model_seed": 58,
+   "joint_pred_class": 1,
+   "joint_alignment": "other",
+   "multiplicity": 19,
+   "conflict_score": 0.6639080459770114
   },
   {
    "case_id": 8,
-   "test_case_index": 985,
-   "other_role": "community_members",
+   "test_case_index": 307,
+   "other_role": "judges",
    "agreement": false,
    "user_pred_class": 0,
    "other_pred_class": 1,
-   "multiplicity": 49
+   "joint_model_seed": 590,
+   "joint_pred_class": 0,
+   "joint_alignment": "self",
+   "multiplicity": 44,
+   "conflict_score": 0.24239631336405543
   },
   {
    "case_id": 9,
-   "test_case_index": 641,
-   "other_role": "judges",
+   "test_case_index": 588,
+   "other_role": "community_members",
    "agreement": false,
    "user_pred_class": 0,
    "other_pred_class": 1,
-   "multiplicity": 49
+   "joint_model_seed": 67,
+   "joint_pred_class": 1,
+   "joint_alignment": "other",
+   "multiplicity": 48,
+   "conflict_score": 1.3429280397022332
   },
   {
    "case_id": 10,
-   "test_case_index": 145,
-   "other_role": "fairness_advocates",
-   "agreement": true,
+   "test_case_index": 791,
+   "other_role": "judges",
+   "agreement": false,
    "user_pred_class": 0,
-   "other_pred_class": 0,
-   "multiplicity": 50
+   "other_pred_class": 1,
+   "joint_model_seed": 590,
+   "joint_pred_class": 0,
+   "joint_alignment": "self",
+   "multiplicity": 43,
+   "conflict_score": 0.24239631336405543
   },
   {
    "case_id": 11,
-   "test_case_index": 268,
-   "other_role": "community_members",
+   "test_case_index": 351,
+   "other_role": "fairness_advocates",
    "agreement": false,
    "user_pred_class": 0,
    "other_pred_class": 1,
-   "multiplicity": 50
+   "joint_model_seed": 91,
+   "joint_pred_class": 1,
+   "joint_alignment": "other",
+   "multiplicity": 26,
+   "conflict_score": 0.6434782608695653
   },
   {
    "case_id": 12,
-   "test_case_index": 958,
-   "other_role": "judges",
+   "test_case_index": 1030,
+   "other_role": "community_members",
    "agreement": false,
    "user_pred_class": 0,
    "other_pred_class": 1,
-   "multiplicity": 49
+   "joint_model_seed": 540,
+   "joint_pred_class": 0,
+   "joint_alignment": "self",
+   "multiplicity": 20,
+   "conflict_score": 1.2571428571428571
   },
   {
    "case_id": 13,
-   "test_case_index": 925,
-   "other_role": "community_members",
+   "test_case_index": 359,
+   "other_role": "fairness_advocates",
    "agreement": false,
    "user_pred_class": 0,
    "other_pred_class": 1,
-   "multiplicity": 50
+   "joint_model_seed": 91,
+   "joint_pred_class": 1,
+   "joint_alignment": "other",
+   "multiplicity": 25,
+   "conflict_score": 0.6434782608695653
   },
   {
    "case_id": 14,
-   "test_case_index": 532,
+   "test_case_index": 982,
    "other_role": "judges",
    "agreement": false,
    "user_pred_class": 0,
    "other_pred_class": 1,
-   "multiplicity": 50
+   "joint_model_seed": 590,
+   "joint_pred_class": 0,
+   "joint_alignment": "self",
+   "multiplicity": 43,
+   "conflict_score": 0.24239631336405543
   },
   {
    "case_id": 15,
-   "test_case_index": 434,
-   "other_role": "fairness_advocates",
-   "agreement": false,
-   "user_pred_class": 0,
-   "other_pred_class": 1,
-   "multiplicity": 6
-  },
-  {
-   "case_id": 16,
-   "test_case_index": 1090,
-   "other_role": "fairness_advocates",
-   "agreement": true,
-   "user_pred_class": 0,
-   "other_pred_class": 0,
-   "multiplicity": 50
-  },
-  {
-   "case_id": 17,
-   "test_case_index": 1176,
+   "test_case_index": 238,
    "other_role": "community_members",
    "agreement": false,
    "user_pred_class": 0,
    "other_pred_class": 1,
-   "multiplicity": 50
+   "joint_model_seed": 537,
+   "joint_pred_class": 1,
+   "joint_alignment": "other",
+   "multiplicity": 30,
+   "conflict_score": 1.3142857142857143
+  },
+  {
+   "case_id": 16,
+   "test_case_index": 391,
+   "other_role": "judges",
+   "agreement": false,
+   "user_pred_class": 0,
+   "other_pred_class": 1,
+   "joint_model_seed": 590,
+   "joint_pred_class": 0,
+   "joint_alignment": "self",
+   "multiplicity": 37,
+   "conflict_score": 0.24239631336405543
+  },
+  {
+   "case_id": 17,
+   "test_case_index": 371,
+   "other_role": "fairness_advocates",
+   "agreement": false,
+   "user_pred_class": 0,
+   "other_pred_class": 1,
+   "joint_model_seed": 116,
+   "joint_pred_class": 1,
+   "joint_alignment": "other",
+   "multiplicity": 4,
+   "conflict_score": 0.6189970501474925
+  },
+  {
+   "case_id": 18,
+   "test_case_index": 943,
+   "other_role": "community_members",
+   "agreement": false,
+   "user_pred_class": 0,
+   "other_pred_class": 1,
+   "joint_model_seed": 540,
+   "joint_pred_class": 0,
+   "joint_alignment": "self",
+   "multiplicity": 11,
+   "conflict_score": 1.2571428571428571
+  },
+  {
+   "case_id": 19,
+   "test_case_index": 389,
+   "other_role": "judges",
+   "agreement": false,
+   "user_pred_class": 0,
+   "other_pred_class": 1,
+   "joint_model_seed": 7,
+   "joint_pred_class": 1,
+   "joint_alignment": "other",
+   "multiplicity": 4,
+   "conflict_score": 0.11957158675564183
   }
  ]
 }

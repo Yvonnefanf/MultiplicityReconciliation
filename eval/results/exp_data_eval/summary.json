@@ -1,0 +1,213 @@
+{
+  "overall": {
+    "n": 160,
+    "datasets": [
+      "acs_coverage",
+      "compas"
+    ],
+    "roles": [
+      "judges",
+      "defendants",
+      "community_members",
+      "fairness_advocates"
+    ],
+    "failures": [],
+    "failure_count": 0,
+    "checks": {
+      "self_seed_match": 160,
+      "other_seed_match": 160,
+      "joint_seed_match": 160,
+      "self_other_conflict": 160,
+      "joint_is_third_model": 160,
+      "joint_improves_over_self": 160,
+      "joint_improves_other_over_self": 160,
+      "dropdown_has_candidate": 160
+    }
+  },
+  "by_dataset_role": {
+    "acs_coverage/community_members": {
+      "n": 20,
+      "self_other_conflicts": 20,
+      "joint_third_model": 20,
+      "joint_improves_over_self": 20,
+      "joint_improves_other_over_self": 20,
+      "dropdown_has_candidate": 20,
+      "joint_alignment": {
+        "self": 10,
+        "other": 10
+      },
+      "opponents": {
+        "defendants": 7,
+        "fairness_advocates": 6,
+        "judges": 7
+      },
+      "mean_self_loss_to_joint": 0.14677704644496167,
+      "mean_other_gain_from_self_to_joint": 0.5029104994989092,
+      "mean_joint_gain_from_self_to_joint": 0.3561334530539475,
+      "mean_self_share_at_joint": 0.6951491030620185,
+      "mean_other_share_at_joint": 0.7782261302004208,
+      "mean_dropdown_candidate_count": 9.15
+    },
+    "acs_coverage/defendants": {
+      "n": 20,
+      "self_other_conflicts": 20,
+      "joint_third_model": 20,
+      "joint_improves_over_self": 20,
+      "joint_improves_other_over_self": 20,
+      "dropdown_has_candidate": 20,
+      "joint_alignment": {
+        "self": 10,
+        "other": 10
+      },
+      "opponents": {
+        "community_members": 7,
+        "fairness_advocates": 6,
+        "judges": 7
+      },
+      "mean_self_loss_to_joint": 0.04542598751036153,
+      "mean_other_gain_from_self_to_joint": 0.20988719409121298,
+      "mean_joint_gain_from_self_to_joint": 0.16446120658085142,
+      "mean_self_share_at_joint": 0.9212780672207972,
+      "mean_other_share_at_joint": 0.7328221475367777,
+      "mean_dropdown_candidate_count": 4.7
+    },
+    "acs_coverage/fairness_advocates": {
+      "n": 20,
+      "self_other_conflicts": 20,
+      "joint_third_model": 20,
+      "joint_improves_over_self": 20,
+      "joint_improves_other_over_self": 20,
+      "dropdown_has_candidate": 20,
+      "joint_alignment": {
+        "self": 10,
+        "other": 10
+      },
+      "opponents": {
+        "community_members": 10,
+        "defendants": 5,
+        "judges": 5
+      },
+      "mean_self_loss_to_joint": 0.12219019822318015,
+      "mean_other_gain_from_self_to_joint": 0.29439745306604703,
+      "mean_joint_gain_from_self_to_joint": 0.17220725484286686,
+      "mean_self_share_at_joint": 0.8193735053123303,
+      "mean_other_share_at_joint": 0.8744793960555703,
+      "mean_dropdown_candidate_count": 8.85
+    },
+    "acs_coverage/judges": {
+      "n": 20,
+      "self_other_conflicts": 20,
+      "joint_third_model": 20,
+      "joint_improves_over_self": 20,
+      "joint_improves_other_over_self": 20,
+      "dropdown_has_candidate": 20,
+      "joint_alignment": {
+        "self": 10,
+        "other": 10
+      },
+      "opponents": {
+        "community_members": 7,
+        "fairness_advocates": 6,
+        "defendants": 7
+      },
+      "mean_self_loss_to_joint": 0.054707184426496226,
+      "mean_other_gain_from_self_to_joint": 0.3456735761972847,
+      "mean_joint_gain_from_self_to_joint": 0.2909663917707885,
+      "mean_self_share_at_joint": 0.7059528569226191,
+      "mean_other_share_at_joint": 0.8814242397690965,
+      "mean_dropdown_candidate_count": 10.15
+    },
+    "compas/community_members": {
+      "n": 20,
+      "self_other_conflicts": 20,
+      "joint_third_model": 20,
+      "joint_improves_over_self": 20,
+      "joint_improves_other_over_self": 20,
+      "dropdown_has_candidate": 20,
+      "joint_alignment": {
+        "self": 10,
+        "other": 10
+      },
+      "opponents": {
+        "defendants": 7,
+        "fairness_advocates": 6,
+        "judges": 7
+      },
+      "mean_self_loss_to_joint": 0.12367537192037274,
+      "mean_other_gain_from_self_to_joint": 0.3248431095981088,
+      "mean_joint_gain_from_self_to_joint": 0.20116773767773602,
+      "mean_self_share_at_joint": 0.7795088328173901,
+      "mean_other_share_at_joint": 0.6836753435229996,
+      "mean_dropdown_candidate_count": 7.55
+    },
+    "compas/defendants": {
+      "n": 20,
+      "self_other_conflicts": 20,
+      "joint_third_model": 20,
+      "joint_improves_over_self": 20,
+      "joint_improves_other_over_self": 20,
+      "dropdown_has_candidate": 20,
+      "joint_alignment": {
+        "self": 10,
+        "other": 10
+      },
+      "opponents": {
+        "community_members": 7,
+        "fairness_advocates": 6,
+        "judges": 7
+      },
+      "mean_self_loss_to_joint": 0.09876176917235284,
+      "mean_other_gain_from_self_to_joint": 0.29035894770950144,
+      "mean_joint_gain_from_self_to_joint": 0.19159717853714855,
+      "mean_self_share_at_joint": 0.845194769329149,
+      "mean_other_share_at_joint": 0.8743364489269098,
+      "mean_dropdown_candidate_count": 11.05
+    },
+    "compas/fairness_advocates": {
+      "n": 20,
+      "self_other_conflicts": 20,
+      "joint_third_model": 20,
+      "joint_improves_over_self": 20,
+      "joint_improves_other_over_self": 20,
+      "dropdown_has_candidate": 20,
+      "joint_alignment": {
+        "self": 10,
+        "other": 10
+      },
+      "opponents": {
+        "community_members": 6,
+        "defendants": 7,
+        "judges": 7
+      },
+      "mean_self_loss_to_joint": 0.03620217449622974,
+      "mean_other_gain_from_self_to_joint": 0.2344871562762656,
+      "mean_joint_gain_from_self_to_joint": 0.1982849817800359,
+      "mean_self_share_at_joint": 0.9351873033284889,
+      "mean_other_share_at_joint": 0.8073147788175333,
+      "mean_dropdown_candidate_count": 11.05
+    },
+    "compas/judges": {
+      "n": 20,
+      "self_other_conflicts": 20,
+      "joint_third_model": 20,
+      "joint_improves_over_self": 20,
+      "joint_improves_other_over_self": 20,
+      "dropdown_has_candidate": 20,
+      "joint_alignment": {
+        "self": 10,
+        "other": 10
+      },
+      "opponents": {
+        "community_members": 7,
+        "defendants": 7,
+        "fairness_advocates": 6
+      },
+      "mean_self_loss_to_joint": 0.036037844928282256,
+      "mean_other_gain_from_self_to_joint": 0.2808718245358127,
+      "mean_joint_gain_from_self_to_joint": 0.24483397960753042,
+      "mean_self_share_at_joint": 0.7518227951599338,
+      "mean_other_share_at_joint": 0.9012035802486009,
+      "mean_dropdown_candidate_count": 21.55
+    }
+  }
+}

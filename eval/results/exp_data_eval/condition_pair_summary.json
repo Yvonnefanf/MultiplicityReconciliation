@@ -1,0 +1,506 @@
+{
+  "community_members->defendants": {
+    "single": {
+      "n": 14,
+      "self_n": 0.7237927249527346,
+      "other_n": 0.3350133615851016,
+      "joint_n": 0.5294030432689181,
+      "consensus": 0.0,
+      "settled": 0.0
+    },
+    "singleoptimal": {
+      "n": 14,
+      "self_n": 1.0,
+      "other_n": 0.08426733944396614,
+      "joint_n": 0.5421336697219831,
+      "consensus": 0.0,
+      "settled": 0.0
+    },
+    "multioptimal": {
+      "n": 14,
+      "self_n": 1.0,
+      "other_n": 0.08426733944396614,
+      "joint_n": 0.5421336697219831,
+      "consensus": 0.0,
+      "settled": 0.0
+    },
+    "aggregate": {
+      "n": 14,
+      "self_n": 0.5843456264770677,
+      "other_n": 0.5560211518757554,
+      "joint_n": 0.5701833891764115,
+      "consensus": 0.0,
+      "settled": 0.0
+    },
+    "negotiatev2": {
+      "n": 14,
+      "self_n": 0.6887725788966975,
+      "other_n": 0.6601348244890948,
+      "joint_n": 0.6744537016928961,
+      "consensus": 0.8571428571428571,
+      "settled": 0.8571428571428571
+    }
+  },
+  "community_members->fairness_advocates": {
+    "single": {
+      "n": 12,
+      "self_n": 0.5855747475323865,
+      "other_n": 0.3722860297048463,
+      "joint_n": 0.4789303886186164,
+      "consensus": 0.0,
+      "settled": 0.0
+    },
+    "singleoptimal": {
+      "n": 12,
+      "self_n": 1.0,
+      "other_n": 0.18923800387904152,
+      "joint_n": 0.5946190019395208,
+      "consensus": 0.0,
+      "settled": 0.0
+    },
+    "multioptimal": {
+      "n": 12,
+      "self_n": 1.0,
+      "other_n": 0.18923800387904152,
+      "joint_n": 0.5946190019395208,
+      "consensus": 0.0,
+      "settled": 0.0
+    },
+    "aggregate": {
+      "n": 12,
+      "self_n": 0.5335682615756527,
+      "other_n": 0.6456399529761678,
+      "joint_n": 0.5896041072759103,
+      "consensus": 0.0,
+      "settled": 0.0
+    },
+    "negotiatev2": {
+      "n": 12,
+      "self_n": 0.5689701178961287,
+      "other_n": 0.749319582751009,
+      "joint_n": 0.6591448503235688,
+      "consensus": 0.8333333333333334,
+      "settled": 0.8333333333333334
+    }
+  },
+  "community_members->judges": {
+    "single": {
+      "n": 14,
+      "self_n": 0.3878298017208417,
+      "other_n": 0.5673539294960779,
+      "joint_n": 0.4775918656084598,
+      "consensus": 0.0,
+      "settled": 0.0
+    },
+    "singleoptimal": {
+      "n": 14,
+      "self_n": 1.0,
+      "other_n": 0.05262652935185746,
+      "joint_n": 0.5263132646759288,
+      "consensus": 0.0,
+      "settled": 0.0
+    },
+    "multioptimal": {
+      "n": 14,
+      "self_n": 1.0,
+      "other_n": 0.05262652935185746,
+      "joint_n": 0.5263132646759288,
+      "consensus": 0.0,
+      "settled": 0.0
+    },
+    "aggregate": {
+      "n": 14,
+      "self_n": 0.6506152532567295,
+      "other_n": 0.5111636350810482,
+      "joint_n": 0.5808894441688889,
+      "consensus": 0.0,
+      "settled": 0.0
+    },
+    "negotiatev2": {
+      "n": 14,
+      "self_n": 0.713060459920137,
+      "other_n": 0.6699245356997767,
+      "joint_n": 0.6914924978099568,
+      "consensus": 0.7857142857142857,
+      "settled": 0.7857142857142857
+    }
+  },
+  "defendants->community_members": {
+    "single": {
+      "n": 14,
+      "self_n": 0.27269439734755735,
+      "other_n": 0.7769948375706548,
+      "joint_n": 0.524844617459106,
+      "consensus": 0.0,
+      "settled": 0.0
+    },
+    "singleoptimal": {
+      "n": 14,
+      "self_n": 1.0,
+      "other_n": 0.18669738283722476,
+      "joint_n": 0.5933486914186125,
+      "consensus": 0.0,
+      "settled": 0.0
+    },
+    "multioptimal": {
+      "n": 14,
+      "self_n": 1.0,
+      "other_n": 0.18669738283722476,
+      "joint_n": 0.5933486914186125,
+      "consensus": 0.0,
+      "settled": 0.0
+    },
+    "aggregate": {
+      "n": 14,
+      "self_n": 0.5515865210585801,
+      "other_n": 0.5847662790486863,
+      "joint_n": 0.5681764000536332,
+      "consensus": 0.0,
+      "settled": 0.0
+    },
+    "negotiatev2": {
+      "n": 14,
+      "self_n": 0.7810088907789675,
+      "other_n": 0.6293597802407328,
+      "joint_n": 0.7051843355098502,
+      "consensus": 0.7142857142857143,
+      "settled": 0.7142857142857143
+    }
+  },
+  "defendants->fairness_advocates": {
+    "single": {
+      "n": 12,
+      "self_n": 0.5888278558417891,
+      "other_n": 0.585713070945055,
+      "joint_n": 0.5872704633934219,
+      "consensus": 0.0,
+      "settled": 0.0
+    },
+    "singleoptimal": {
+      "n": 12,
+      "self_n": 1.0,
+      "other_n": 0.6967200513475941,
+      "joint_n": 0.848360025673797,
+      "consensus": 0.0,
+      "settled": 0.0
+    },
+    "multioptimal": {
+      "n": 12,
+      "self_n": 1.0,
+      "other_n": 0.6967200513475941,
+      "joint_n": 0.848360025673797,
+      "consensus": 0.0,
+      "settled": 0.0
+    },
+    "aggregate": {
+      "n": 12,
+      "self_n": 0.6397673347287997,
+      "other_n": 0.8514578386026531,
+      "joint_n": 0.7456125866657263,
+      "consensus": 0.0,
+      "settled": 0.0
+    },
+    "negotiatev2": {
+      "n": 12,
+      "self_n": 0.8986135390586375,
+      "other_n": 0.9026388707392942,
+      "joint_n": 0.9006262048989658,
+      "consensus": 0.9166666666666666,
+      "settled": 0.9166666666666666
+    }
+  },
+  "defendants->judges": {
+    "single": {
+      "n": 14,
+      "self_n": 0.8303278578277993,
+      "other_n": 0.4824853823443921,
+      "joint_n": 0.6564066200860957,
+      "consensus": 0.0,
+      "settled": 0.0
+    },
+    "singleoptimal": {
+      "n": 14,
+      "self_n": 1.0,
+      "other_n": 0.45444468060249393,
+      "joint_n": 0.727222340301247,
+      "consensus": 0.0,
+      "settled": 0.0
+    },
+    "multioptimal": {
+      "n": 14,
+      "self_n": 1.0,
+      "other_n": 0.45444468060249393,
+      "joint_n": 0.727222340301247,
+      "consensus": 0.0,
+      "settled": 0.0
+    },
+    "aggregate": {
+      "n": 14,
+      "self_n": 0.8345347880096082,
+      "other_n": 0.6963371543115519,
+      "joint_n": 0.7654359711605799,
+      "consensus": 0.0,
+      "settled": 0.0
+    },
+    "negotiatev2": {
+      "n": 14,
+      "self_n": 0.9083812746335812,
+      "other_n": 0.6590657507765224,
+      "joint_n": 0.7837235127050518,
+      "consensus": 0.7857142857142857,
+      "settled": 0.7857142857142857
+    }
+  },
+  "fairness_advocates->community_members": {
+    "single": {
+      "n": 16,
+      "self_n": 0.3784578372662176,
+      "other_n": 0.524730819098562,
+      "joint_n": 0.4515943281823898,
+      "consensus": 0.0,
+      "settled": 0.0
+    },
+    "singleoptimal": {
+      "n": 16,
+      "self_n": 1.0,
+      "other_n": 0.16322246900929502,
+      "joint_n": 0.5816112345046475,
+      "consensus": 0.0,
+      "settled": 0.0
+    },
+    "multioptimal": {
+      "n": 16,
+      "self_n": 1.0,
+      "other_n": 0.16322246900929502,
+      "joint_n": 0.5816112345046475,
+      "consensus": 0.0,
+      "settled": 0.0
+    },
+    "aggregate": {
+      "n": 16,
+      "self_n": 0.6673843885698227,
+      "other_n": 0.5408708779223925,
+      "joint_n": 0.6041276332461076,
+      "consensus": 0.0,
+      "settled": 0.0
+    },
+    "negotiatev2": {
+      "n": 16,
+      "self_n": 0.8800104467745674,
+      "other_n": 0.44695818052457564,
+      "joint_n": 0.6634843136495715,
+      "consensus": 0.5625,
+      "settled": 0.5625
+    }
+  },
+  "fairness_advocates->defendants": {
+    "single": {
+      "n": 12,
+      "self_n": 0.6455971568092439,
+      "other_n": 0.5617598982238919,
+      "joint_n": 0.6036785275165679,
+      "consensus": 0.0,
+      "settled": 0.0
+    },
+    "singleoptimal": {
+      "n": 12,
+      "self_n": 1.0,
+      "other_n": 0.30473913112249446,
+      "joint_n": 0.6523695655612473,
+      "consensus": 0.0,
+      "settled": 0.0
+    },
+    "multioptimal": {
+      "n": 12,
+      "self_n": 1.0,
+      "other_n": 0.30473913112249446,
+      "joint_n": 0.6523695655612473,
+      "consensus": 0.0,
+      "settled": 0.0
+    },
+    "aggregate": {
+      "n": 12,
+      "self_n": 0.8393652059434538,
+      "other_n": 0.6439036244919483,
+      "joint_n": 0.741634415217701,
+      "consensus": 0.0,
+      "settled": 0.0
+    },
+    "negotiatev2": {
+      "n": 12,
+      "self_n": 0.9773721709220534,
+      "other_n": 0.527662760295969,
+      "joint_n": 0.7525174656090113,
+      "consensus": 0.5,
+      "settled": 0.5
+    }
+  },
+  "fairness_advocates->judges": {
+    "single": {
+      "n": 12,
+      "self_n": 0.39784052142676835,
+      "other_n": 0.3969784555473564,
+      "joint_n": 0.3974094884870623,
+      "consensus": 0.0,
+      "settled": 0.0
+    },
+    "singleoptimal": {
+      "n": 12,
+      "self_n": 1.0,
+      "other_n": 0.6214352029862735,
+      "joint_n": 0.8107176014931367,
+      "consensus": 0.0,
+      "settled": 0.0
+    },
+    "multioptimal": {
+      "n": 12,
+      "self_n": 1.0,
+      "other_n": 0.6214352029862735,
+      "joint_n": 0.8107176014931367,
+      "consensus": 0.08333333333333333,
+      "settled": 0.0
+    },
+    "aggregate": {
+      "n": 12,
+      "self_n": 0.7935381724920191,
+      "other_n": 0.7839248298314448,
+      "joint_n": 0.788731501161732,
+      "consensus": 0.0,
+      "settled": 0.0
+    },
+    "negotiatev2": {
+      "n": 12,
+      "self_n": 0.9230198106259803,
+      "other_n": 0.672309823280489,
+      "joint_n": 0.7976648169532347,
+      "consensus": 0.25,
+      "settled": 0.25
+    }
+  },
+  "judges->community_members": {
+    "single": {
+      "n": 14,
+      "self_n": 0.6986171477010299,
+      "other_n": 0.2557979401767302,
+      "joint_n": 0.4772075439388801,
+      "consensus": 0.0,
+      "settled": 0.0
+    },
+    "singleoptimal": {
+      "n": 14,
+      "self_n": 1.0,
+      "other_n": 0.2077575973241348,
+      "joint_n": 0.6038787986620674,
+      "consensus": 0.0,
+      "settled": 0.0
+    },
+    "multioptimal": {
+      "n": 14,
+      "self_n": 1.0,
+      "other_n": 0.2077575973241348,
+      "joint_n": 0.6038787986620674,
+      "consensus": 0.0,
+      "settled": 0.0
+    },
+    "aggregate": {
+      "n": 14,
+      "self_n": 0.5338538680573264,
+      "other_n": 0.6100997384877637,
+      "joint_n": 0.5719768032725451,
+      "consensus": 0.0,
+      "settled": 0.0
+    },
+    "negotiatev2": {
+      "n": 14,
+      "self_n": 0.9160414228414168,
+      "other_n": 0.3985493621943113,
+      "joint_n": 0.6572953925178641,
+      "consensus": 0.2857142857142857,
+      "settled": 0.2857142857142857
+    }
+  },
+  "judges->defendants": {
+    "single": {
+      "n": 14,
+      "self_n": 0.4481544464295711,
+      "other_n": 0.7693439757828593,
+      "joint_n": 0.6087492111062153,
+      "consensus": 0.0,
+      "settled": 0.0
+    },
+    "singleoptimal": {
+      "n": 14,
+      "self_n": 1.0,
+      "other_n": 0.6550617244456507,
+      "joint_n": 0.8275308622228253,
+      "consensus": 0.0,
+      "settled": 0.0
+    },
+    "multioptimal": {
+      "n": 14,
+      "self_n": 1.0,
+      "other_n": 0.6550617244456507,
+      "joint_n": 0.8275308622228253,
+      "consensus": 0.0,
+      "settled": 0.0
+    },
+    "aggregate": {
+      "n": 14,
+      "self_n": 0.7012916823322842,
+      "other_n": 0.8472657851216278,
+      "joint_n": 0.774278733726956,
+      "consensus": 0.0,
+      "settled": 0.0
+    },
+    "negotiatev2": {
+      "n": 14,
+      "self_n": 0.9690633227467718,
+      "other_n": 0.6757891620437546,
+      "joint_n": 0.8224262423952632,
+      "consensus": 0.07142857142857142,
+      "settled": 0.07142857142857142
+    }
+  },
+  "judges->fairness_advocates": {
+    "single": {
+      "n": 12,
+      "self_n": 0.30592411585451174,
+      "other_n": 0.32816680159873923,
+      "joint_n": 0.3170454587266255,
+      "consensus": 0.0,
+      "settled": 0.0
+    },
+    "singleoptimal": {
+      "n": 12,
+      "self_n": 1.0,
+      "other_n": 0.44774659775838693,
+      "joint_n": 0.7238732988791935,
+      "consensus": 0.0,
+      "settled": 0.0
+    },
+    "multioptimal": {
+      "n": 12,
+      "self_n": 1.0,
+      "other_n": 0.44774659775838693,
+      "joint_n": 0.7238732988791935,
+      "consensus": 0.0,
+      "settled": 0.0
+    },
+    "aggregate": {
+      "n": 12,
+      "self_n": 0.7563728772087744,
+      "other_n": 0.7612707678646995,
+      "joint_n": 0.758821822536737,
+      "consensus": 0.0,
+      "settled": 0.0
+    },
+    "negotiatev2": {
+      "n": 12,
+      "self_n": 0.992203984187585,
+      "other_n": 0.4629199212568463,
+      "joint_n": 0.7275619527222156,
+      "consensus": 0.08333333333333333,
+      "settled": 0.08333333333333333
+    }
+  }
+}

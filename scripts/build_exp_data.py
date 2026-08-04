@@ -1,33 +1,26 @@
 #!/usr/bin/env python3
 """Build the fixed study assignment under ``exp_data/``.
 
-    exp_data/<dataset>/<user_role>/<case_id>.json     case_id = 0 .. 17
+    exp_data/<dataset>/<user_role>/<case_id>.json     case_id = 0 .. 19
 
 Each file is one case a participant in that role will see, copied whole out of
 ``data/<dataset>/cases/<i>.json`` and carrying an extra ``assignment`` block. The
-point is to take the randomness out of the study: the participant's role and the
-case id are the only things in the URL, and everything else -- which underlying
-case, who the other stakeholder is, what weights that stakeholder holds -- is
-fixed here and read back from the file.
+participant's role and the case id are the only things the study URL needs; the
+opponent role, opponent weights, and expected optimal models are pinned here.
 
-What is guaranteed per role, per dataset:
+Current selection target, per dataset and user role:
 
-  * 18 distinct cases, ids 0..17.
-  * The other stakeholder is one of the three roles the participant is not, six
-    cases each, and their weights are that role's fixed persona weights.
-  * Exactly 3 of the 18 agree (both sides' optimal model predicts the same
-    class); the other 15 conflict. One agreement per opponent.
-  * The agreement/conflict verdict survives the participant's weights being a
-    little different from their role template, which is what ?..._weight= in the
-    URL does. Every case is checked against a neighbourhood of the role weights
-    (WEIGHT_NUDGES points moved between each pair of criteria) and only kept if
-    the participant's optimal model predicts the same class throughout.
-
-The other side needs no such check: their weights are pinned to the persona
-template, so their optimal model is a single deterministic answer.
+  * 20 distinct cases, ids 0..19.
+  * Every case is a Self/Other conflict: the Self-optimal model and the
+    Other-optimal model predict different classes.
+  * The joint-optimal model maximises Self utility + Other utility over the
+    Pareto frontier, and is neither side's individual optimum.
+  * In 10 cases the joint-optimal prediction matches Self's optimum; in 10 it
+    matches Other's optimum. The opponent role is embedded per case and kept
+    roughly balanced across the three possible opponents when the pools allow it.
 
     python3 scripts/build_exp_data.py --dataset compas
-    python3 scripts/build_exp_data.py --dataset compas --dry-run   # report only
+    python3 scripts/build_exp_data.py --dataset compas --dry-run
 """
 
 from __future__ import annotations
@@ -35,38 +28,32 @@ from __future__ import annotations
 import argparse
 import json
 import shutil
+from collections import Counter
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 DATA = ROOT / "data"
 EXP = ROOT / "exp_data"
 
-CASES_PER_ROLE = 18
-AGREEMENTS_PER_ROLE = 3
-# Where the three agreeing cases sit, the same for every role and dataset.
-AGREEMENT_CASE_IDS = (4, 10, 16)
-# Percentage points shifted between each ordered pair of criteria to build the
-# neighbourhood the verdict has to survive.
+CASES_PER_ROLE = 20
+ALIGN_PER_SIDE = CASES_PER_ROLE // 2
 WEIGHT_NUDGES = (5, 10, 15)
 
 CRITERIA = ["accuracy", "tpr", "tnr", "local_consistency"]
-# Mirrors modelCriterionValue() in js/summary-guards.js.
 METRIC_KEYS = {
     "accuracy": ["subgroup_accuracy", "local_accuracy"],
     "tpr": ["subgroup_tpr", "local_tpr", "local_true_positive_rate", "local_recall", "local_sensitivity"],
     "tnr": ["subgroup_tnr", "local_tnr", "local_true_negative_rate", "local_specificity"],
     "local_consistency": ["local_consistency"],
 }
-# personaTypes / personaRankDefaults in js/config-state.js. These weights are the
-# fixed profile the other stakeholder always holds.
 PERSONAS = {
-    "judges": ({"accuracy": 65, "tpr": 20, "tnr": 10, "local_consistency": 5},
+    "judges": ({"accuracy": 85, "tpr": 5, "tnr": 5, "local_consistency": 5},
                ["accuracy", "tpr", "tnr", "local_consistency"]),
-    "defendants": ({"accuracy": 10, "tpr": 5, "tnr": 65, "local_consistency": 20},
+    "defendants": ({"accuracy": 5, "tpr": 5, "tnr": 85, "local_consistency": 5},
                    ["tnr", "local_consistency", "accuracy", "tpr"]),
-    "community_members": ({"accuracy": 10, "tpr": 65, "tnr": 5, "local_consistency": 20},
+    "community_members": ({"accuracy": 5, "tpr": 85, "tnr": 5, "local_consistency": 5},
                           ["tpr", "local_consistency", "accuracy", "tnr"]),
-    "fairness_advocates": ({"accuracy": 10, "tpr": 5, "tnr": 20, "local_consistency": 65},
+    "fairness_advocates": ({"accuracy": 5, "tpr": 5, "tnr": 5, "local_consistency": 85},
                            ["local_consistency", "tnr", "accuracy", "tpr"]),
 }
 ROLES = list(PERSONAS)
@@ -77,6 +64,12 @@ def criterion_value(model, key):
         value = model.get(metric_key)
         if isinstance(value, (int, float)):
             return float(value)
+    fnr = model.get("local_fnr", model.get("local_false_negative_rate"))
+    if key == "tpr" and isinstance(fnr, (int, float)):
+        return 1.0 - float(fnr)
+    fpr = model.get("local_fpr", model.get("local_false_positive_rate"))
+    if key == "tnr" and isinstance(fpr, (int, float)):
+        return 1.0 - float(fpr)
     return None
 
 
@@ -107,21 +100,29 @@ def normalize(raw):
     return {k: v / total for k, v in clipped.items()}
 
 
+def utility(model, raw_weights):
+    effective = normalize(raw_weights)
+    return sum(effective[k] * (criterion_value(model, k) or 0.0) for k in CRITERIA)
+
+
 def select(frontier, raw_weights, priority_key):
     """selectedSingleOptimalModel() from js/summary-guards.js."""
-    effective = normalize(raw_weights)
-
     def rank(model):
-        utility = sum(effective[k] * (criterion_value(model, k) or 0.0) for k in CRITERIA)
-        return (-utility, -(criterion_value(model, priority_key) or 0.0), -float(model.get("pred_prob") or 0))
+        return (-utility(model, raw_weights), -(criterion_value(model, priority_key) or 0.0), -float(model.get("pred_prob") or 0))
+
+    return sorted(frontier, key=rank)[0]
+
+
+def select_joint(frontier, self_weights, other_weights):
+    def rank(model):
+        self_u = utility(model, self_weights)
+        other_u = utility(model, other_weights)
+        return (-(self_u + other_u), -min(self_u, other_u), -self_u, -other_u, -float(model.get("pred_prob") or 0))
 
     return sorted(frontier, key=rank)[0]
 
 
 def weight_neighbourhood(base):
-    """The role's weights plus every small shift of points between two criteria.
-    The participant's real weights arrive from the URL near, not exactly on, the
-    template, so a case only counts if the verdict holds across all of these."""
     yield dict(base)
     for source in CRITERIA:
         for target in CRITERIA:
@@ -138,12 +139,10 @@ def weight_neighbourhood(base):
 
 
 def analyse_case(path):
-    """Per role: the class that role's optimal model predicts, and whether that
-    survives the weight neighbourhood."""
     data = json.loads(path.read_text())
     frontier = pareto_frontier(data["models"])
-    if len({int(m["pred_class"]) for m in frontier}) < 2:
-        return None  # unanimous frontier: no opponent pairing could ever conflict
+    if len(frontier) < 3 or len({int(m["pred_class"]) for m in frontier}) < 2:
+        return None
 
     picks = {}
     for role, (weights, ranking) in PERSONAS.items():
@@ -152,15 +151,19 @@ def analyse_case(path):
             int(select(frontier, nudged, ranking[0])["pred_class"]) == int(model["pred_class"])
             for nudged in weight_neighbourhood(weights)
         )
-        picks[role] = {"seed": int(model["seed"]), "pred_class": int(model["pred_class"]), "stable": stable}
+        picks[role] = {
+            "seed": int(model["seed"]),
+            "pred_class": int(model["pred_class"]),
+            "stable": stable,
+            "utility": utility(model, weights),
+        }
 
     class1 = sum(1 for m in data["models"] if int(m["pred_class"]) == 1)
     return {
         "test_case_index": int(data["case"]["test_case_index"]),
+        "frontier": frontier,
         "picks": picks,
-        # How split the 100 models are; a case nobody disagrees about teaches
-        # nothing, so ties are broken toward the genuinely multiple ones.
-        "multiplicity": min(class1, 100 - class1),
+        "multiplicity": min(class1, len(data["models"]) - class1),
         "labels": data["label_names"],
     }
 
@@ -177,88 +180,106 @@ def scan(dataset):
     return rows
 
 
+def candidate_for(row, user_role, opponent):
+    user_weights, user_rank = PERSONAS[user_role]
+    other_weights, _ = PERSONAS[opponent]
+    user_pick = row["picks"][user_role]
+    other_pick = row["picks"][opponent]
+    if user_pick["pred_class"] == other_pick["pred_class"]:
+        return None
+
+    joint_model = select_joint(row["frontier"], user_weights, other_weights)
+    joint_seed = int(joint_model["seed"])
+    if joint_seed in {user_pick["seed"], other_pick["seed"]}:
+        return None
+    joint_pred = int(joint_model["pred_class"])
+    if joint_pred == user_pick["pred_class"]:
+        joint_alignment = "self"
+    elif joint_pred == other_pick["pred_class"]:
+        joint_alignment = "other"
+    else:
+        return None
+
+    self_at_self = utility(joint_model, user_weights)
+    other_at_joint = utility(joint_model, other_weights)
+    self_model = next(m for m in row["frontier"] if int(m["seed"]) == user_pick["seed"])
+    other_model = next(m for m in row["frontier"] if int(m["seed"]) == other_pick["seed"])
+    self_loss_at_other = utility(self_model, user_weights) - utility(other_model, user_weights)
+    other_loss_at_self = utility(other_model, other_weights) - utility(self_model, other_weights)
+    conflict_score = self_loss_at_other + other_loss_at_self
+    joint_utility = self_at_self + other_at_joint
+    individual_joint_best = user_pick["utility"] + other_pick["utility"]
+
+    return {
+        "row": row,
+        "opponent": opponent,
+        "joint_alignment": joint_alignment,
+        "joint_model_seed": joint_seed,
+        "joint_pred_class": joint_pred,
+        "joint_utility": joint_utility,
+        "joint_gap_from_individual_bests": individual_joint_best - joint_utility,
+        "conflict_score": conflict_score,
+        "multiplicity": row["multiplicity"],
+        "user_priority_value": criterion_value(self_model, user_rank[0]) or 0.0,
+    }
+
+
 def assign(rows, user_role):
-    """Pick this role's 18 cases: 15 conflicts and 3 agreements, spread over the
-    three opponents as evenly as the data allows.
-
-    An even six-per-opponent split is not always available. In acs_coverage the
-    defendants and fairness_advocates optima land on the same class in all but
-    one case, so demanding five conflicts from that pairing would fail. The
-    conflict budget is therefore water-filled: opponents are served scarcest pool
-    first, each taking an equal share of what is left, so a thin pairing is used
-    up to its limit and the slack goes to the pairings that can carry it. The
-    15/3 split itself is exact -- that is the number the study is designed on.
-
-    Cases are taken most-multiple first, so the study runs where the model set
-    genuinely splits, and no case is used twice within a role."""
     opponents = [r for r in ROLES if r != user_role]
-    # Only cases whose verdict is stable for this participant are eligible.
-    eligible = [r for r in rows if r["picks"][user_role]["stable"]]
-    eligible.sort(key=lambda r: (-r["multiplicity"], r["test_case_index"]))
+    candidates = []
+    for row in rows:
+        for opponent in opponents:
+            candidate = candidate_for(row, user_role, opponent)
+            if candidate:
+                candidates.append(candidate)
 
-    def agrees_with(row, opponent):
-        return row["picks"][user_role]["pred_class"] == row["picks"][opponent]["pred_class"]
-
-    def pool(opponent, want_agreement, used):
-        return [r for r in eligible
-                if r["test_case_index"] not in used and agrees_with(r, opponent) == want_agreement]
-
-    used = set()
-    picked = []
-
-    def take(opponent, want_agreement, count):
-        taken = 0
-        for row in pool(opponent, want_agreement, used):
-            if taken == count:
-                break
-            used.add(row["test_case_index"])
-            picked.append((row, opponent, want_agreement))
-            taken += 1
-        return taken
-
-    # Conflicts first, scarcest pairing first so an overlapping case is never
-    # spent on a pairing that had alternatives.
-    conflict_budget = CASES_PER_ROLE - AGREEMENTS_PER_ROLE
-    order = sorted(opponents, key=lambda o: len(pool(o, False, used)))
-    conflicts = {}
-    for position, opponent in enumerate(order):
-        share = -(-conflict_budget // (len(order) - position))  # ceil
-        conflicts[opponent] = take(opponent, False, min(share, len(pool(opponent, False, used))))
-        conflict_budget -= conflicts[opponent]
-    if conflict_budget:
-        raise SystemExit(
-            f"{user_role}: {conflict_budget} conflicting cases short; "
-            f"pools were {[(o, len(pool(o, False, set()))) for o in opponents]}"
+    def rank(candidate):
+        return (
+            -candidate["conflict_score"],
+            -candidate["multiplicity"],
+            candidate["joint_gap_from_individual_bests"],
+            -candidate["joint_utility"],
+            -candidate["user_priority_value"],
+            candidate["row"]["test_case_index"],
+            candidate["opponent"],
         )
 
-    # Agreements go to whoever has the fewest cases so far, which keeps every
-    # opponent present even when their conflict pool was thin.
-    for _ in range(AGREEMENTS_PER_ROLE):
-        counts = {o: sum(1 for _, op, _ in picked if op == o) for o in opponents}
-        for opponent in sorted(opponents, key=lambda o: (counts[o], o)):
-            if take(opponent, True, 1):
-                break
-        else:
-            raise SystemExit(f"{user_role}: no agreeing case left for any opponent")
+    selected = []
+    used_cases = set()
+    opponent_counts = Counter()
+    opponents = [r for r in ROLES if r != user_role]
+    opponent_quota = {opponent: CASES_PER_ROLE // len(opponents) for opponent in opponents}
+    for opponent in opponents[:CASES_PER_ROLE % len(opponents)]:
+        opponent_quota[opponent] += 1
 
-    # The three agreements sit at the same case ids for every role and dataset,
-    # spread through the run rather than clustered: a participant does not meet
-    # one first and does not meet all three at the end, and analysis can find
-    # them without reading the files. Conflicts round-robin the opponents so no
-    # opponent holds a contiguous block. All deterministic: nothing is shuffled.
-    picked.sort(key=lambda item: (item[0]["multiplicity"], item[0]["test_case_index"]))
-    queues = {o: [p for p in picked if p[1] == o and not p[2]] for o in opponents}
-    agreements = [p for p in picked if p[2]]
+    def take_one(alignment):
+        pool = sorted((c for c in candidates if c["joint_alignment"] == alignment), key=rank)
+        available = [c for c in pool if c["row"]["test_case_index"] not in used_cases]
+        under_quota = [c for c in available if opponent_counts[c["opponent"]] < opponent_quota[c["opponent"]]]
+        chosen_pool = under_quota or available
+        if not chosen_pool:
+            return None
+        # Keep conflict score primary, but when two candidates are close, spend
+        # the next slot on the opponent seen least often so the embedded other
+        # role does not collapse to one persona.
+        return sorted(chosen_pool, key=lambda c: (opponent_counts[c["opponent"]],) + rank(c))[0]
 
-    ordered = []
-    for case_id in range(CASES_PER_ROLE):
-        if case_id in AGREEMENT_CASE_IDS and agreements:
-            ordered.append(agreements.pop(0))
-            continue
-        # Longest queue first, so the leftovers cannot pile up at the end.
-        opponent = max(opponents, key=lambda o: (len(queues[o]), o))
-        ordered.append(queues[opponent].pop(0))
-    return ordered
+    alignment_counts = Counter()
+    for _ in range(ALIGN_PER_SIDE):
+        for alignment in ("self", "other"):
+            candidate = take_one(alignment)
+            if not candidate:
+                counts = {a: sum(1 for c in candidates if c["joint_alignment"] == a) for a in ("self", "other")}
+                raise SystemExit(
+                    f"{user_role}: need {ALIGN_PER_SIDE} joint-{alignment} cases, "
+                    f"found {alignment_counts[alignment]} after de-dup; candidate counts before de-dup {counts}"
+                )
+            selected.append(candidate)
+            used_cases.add(candidate["row"]["test_case_index"])
+            opponent_counts[candidate["opponent"]] += 1
+            alignment_counts[alignment] += 1
+
+    return selected
 
 
 def write_role(dataset, user_role, ordered, dry_run):
@@ -269,7 +290,9 @@ def write_role(dataset, user_role, ordered, dry_run):
         target_dir.mkdir(parents=True)
 
     summary = []
-    for case_id, (row, opponent, agrees) in enumerate(ordered):
+    for case_id, candidate in enumerate(ordered):
+        row = candidate["row"]
+        opponent = candidate["opponent"]
         source = DATA / dataset / "cases" / f"{row['test_case_index']}.json"
         payload = json.loads(source.read_text())
         user_pick = row["picks"][user_role]
@@ -280,16 +303,19 @@ def write_role(dataset, user_role, ordered, dry_run):
             "case_id": case_id,
             "test_case_index": row["test_case_index"],
             "other_role": opponent,
-            # The other side's profile is pinned here, so nothing downstream has
-            # to draw it or read it out of the URL.
             "other_weights": normalize(PERSONAS[opponent][0]),
             "other_rank_order": PERSONAS[opponent][1],
             "expected": {
-                "agreement": agrees,
+                "agreement": False,
                 "user_model_seed": user_pick["seed"],
                 "user_pred_class": user_pick["pred_class"],
                 "other_model_seed": other_pick["seed"],
                 "other_pred_class": other_pick["pred_class"],
+                "joint_model_seed": candidate["joint_model_seed"],
+                "joint_pred_class": candidate["joint_pred_class"],
+                "joint_alignment": candidate["joint_alignment"],
+                "joint_utility": candidate["joint_utility"],
+                "conflict_score": candidate["conflict_score"],
                 "user_verdict_stable_under_weight_nudges": user_pick["stable"],
             },
         }
@@ -299,19 +325,26 @@ def write_role(dataset, user_role, ordered, dry_run):
             "case_id": case_id,
             "test_case_index": row["test_case_index"],
             "other_role": opponent,
-            "agreement": agrees,
+            "agreement": False,
             "user_pred_class": user_pick["pred_class"],
             "other_pred_class": other_pick["pred_class"],
+            "joint_model_seed": candidate["joint_model_seed"],
+            "joint_pred_class": candidate["joint_pred_class"],
+            "joint_alignment": candidate["joint_alignment"],
             "multiplicity": row["multiplicity"],
+            "conflict_score": candidate["conflict_score"],
         })
 
     if not dry_run:
-        # Read by the app to build the case list without fetching all 18 files.
         (target_dir / "index.json").write_text(json.dumps({
             "dataset": dataset,
             "user_role": user_role,
             "case_count": len(summary),
-            "agreement_count": sum(1 for s in summary if s["agreement"]),
+            "agreement_count": 0,
+            "joint_alignment_counts": {
+                "self": sum(1 for s in summary if s["joint_alignment"] == "self"),
+                "other": sum(1 for s in summary if s["joint_alignment"] == "other"),
+            },
             "cases": summary,
         }, indent=1))
     return summary
@@ -324,11 +357,11 @@ def build(dataset, dry_run):
     for user_role in ROLES:
         ordered = assign(rows, user_role)
         summary = write_role(dataset, user_role, ordered, dry_run)
-        agree = sum(1 for s in summary if s["agreement"])
-        stable = all(r["picks"][user_role]["stable"] for r, _, _ in ordered)
+        align = {side: sum(1 for s in summary if s["joint_alignment"] == side) for side in ("self", "other")}
         per_opponent = {o: sum(1 for s in summary if s["other_role"] == o) for o in ROLES if o != user_role}
-        print(f"  {user_role:20s} {len(summary)} cases, {agree} agree, "
-              f"opponents {per_opponent}, all verdicts stable: {stable}")
+        avg_conflict = sum(s["conflict_score"] for s in summary) / len(summary)
+        print(f"  {user_role:20s} {len(summary)} conflicts, joint align {align}, "
+              f"opponents {per_opponent}, avg conflict {avg_conflict:.4f}")
 
 
 if __name__ == "__main__":
