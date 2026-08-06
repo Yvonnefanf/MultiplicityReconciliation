@@ -193,10 +193,10 @@ function modelNegotiationSystemPrompt() {
 }
 
 /* Magnitudes reach this protocol as words, not values — the client bands every
-   movement before it leaves the browser (see NV2_SIZE_BANDS). The vocabulary is
+   movement before it leaves the browser (see the browser NV2 cost/gain size bands). The vocabulary is
    closed on this side too: an unrecognised phrase is dropped rather than passed
    through, so nothing but these phrases can ever reach the model as a size. */
-const NV2_AMOUNT_WORDS = new Set(["a little", "a fair amount", "a lot"]);
+const NV2_AMOUNT_WORDS = new Set(["a little", "a fair amount", "some", "a lot"]);
 const NV2_SHORTFALL_WORDS = new Set(["a little short of", "well short of", "far short of"]);
 
 function pickPhrase(raw, allowed) {
@@ -272,7 +272,7 @@ function buildModelNegotiationPrompt(payload) {
 
   return [
     "Voice this stakeholder's reply in the model negotiation below.",
-    "There are no criteria values in this payload, by design. Every magnitude is already a phrase — \"a little\", \"a fair amount\", \"a lot\" for a movement, \"a little short of\", \"well short of\", \"far short of\" for a gap. Use the phrase you are given, or a close synonym of the same strength. Never convert one into a number, a percentage, or a rank, and never invent a value to make the sentence more concrete.",
+    "There are no criteria values in this payload, by design. Every magnitude is already a phrase — \"a little\", \"a fair amount\", \"some\", or \"a lot\" for a movement, \"a little short of\", \"well short of\", \"far short of\" for a gap. Use the phrase you are given, or a close synonym of the same strength. Never convert one into a number, a percentage, or a rank, and never invent a value to make the sentence more concrete.",
     "The three beats map onto these fields: (1) UNDERSTAND THEM -> they_just_conceded (+ it_gained_me), (2) YOUR POSITION -> complaint (+ what_i_must_keep as a clause), (3) YOUR MODEL CHOICE -> my_counter_offer + concession + payback. A beat whose fields are all null is skipped entirely, which is how a turn ends up two sentences long. why_trading_works and how_far_i_have_moved never get a sentence of their own — a clause at most.",
     "One sentence per beat, three sentences maximum, 60 words maximum. Count them before you answer.",
     "A null size or how_far_off inside an otherwise present field means you may name the criterion but must not characterise how big the move was.",
