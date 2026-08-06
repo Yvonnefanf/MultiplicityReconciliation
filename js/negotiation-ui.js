@@ -46,6 +46,7 @@
       }
       if (features) {
         features.innerHTML = renderFeatureExplanation(activeData.dataset || datasetSelect.value, selectedDefaultModel());
+        if (typeof wireAggregateRecommendationSlider === "function") wireAggregateRecommendationSlider();
       }
       enterReconcileView();
       if (isNegotiateV2Condition()) {
@@ -127,6 +128,7 @@
     function rerenderFeatureExplanationForCurrentWeights() {
       if (!features || !activeData) return;
       features.innerHTML = renderFeatureExplanation(activeData.dataset || datasetSelect.value, selectedDefaultModel());
+      if (typeof wireAggregateRecommendationSlider === "function") wireAggregateRecommendationSlider();
     }
 
     function setWeights(nextWeights, source = "Self offer") {
@@ -756,19 +758,25 @@
        the composer's "…" and in the model panels, which is where someone who
        wants to audit a number will actually look.
        ---------------------------------------------------------------------- */
-    const NV2_SIZE_BANDS = [
+    const NV2_COST_SIZE_BANDS = [
       { max: 0.03, amount: "a little", shortfall: "a little short of" },
       { max: 0.08, amount: "a fair amount", shortfall: "well short of" },
-      { max: Infinity, amount: "a lot", shortfall: "far short of" },
+      { max: Infinity, amount: "some", shortfall: "far short of" },
+    ];
+    const NV2_GAIN_SIZE_BANDS = [
+      { max: 0.03, amount: "a little" },
+      { max: 0.08, amount: "a fair amount" },
+      { max: Infinity, amount: "a lot" },
     ];
 
-    function nv2Band(delta) {
+    function nv2Band(delta, bands = NV2_COST_SIZE_BANDS) {
       const size = Math.abs(Number(delta) || 0);
-      return NV2_SIZE_BANDS.find((band) => size < band.max) || NV2_SIZE_BANDS[NV2_SIZE_BANDS.length - 1];
+      return bands.find((band) => size < band.max) || bands[bands.length - 1];
     }
 
-    // "a little" / "a fair amount" / "a lot" — the size of a movement.
-    const nv2Amount = (delta) => nv2Band(delta).amount;
+    // Costs sound deliberately softer than gains: "some" vs "a lot" at the top band.
+    const nv2CostAmount = (delta) => nv2Band(delta, NV2_COST_SIZE_BANDS).amount;
+    const nv2GainAmount = (delta) => nv2Band(delta, NV2_GAIN_SIZE_BANDS).amount;
     // "a little short of" / "well short of" / "far short of" — the size of a gap.
     const nv2Shortfall = (delta) => nv2Band(delta).shortfall;
 
@@ -1270,11 +1278,11 @@
     function nv2CandidateOptionText(candidate) {
       if (!candidate) return "";
       const sacrifice = candidate.sacrifice
-        ? `give up ${nv2Amount(candidate.sacrifice.amount)} on your ${candidate.sacrifice.label}`
+        ? `give up ${nv2CostAmount(candidate.sacrifice.amount)} on your ${candidate.sacrifice.label}`
         : "give up nothing measurable";
       const payback = candidate.payback
-        ? `help them ${nv2Amount(candidate.payback.amount)} on ${candidate.payback.label}`
-        : `improve the overall deal ${nv2Amount(candidate.jointGain)}`;
+        ? `help them ${nv2GainAmount(candidate.payback.amount)} on ${candidate.payback.label}`
+        : `improve the overall deal ${nv2GainAmount(candidate.jointGain)}`;
       return `${nv2ModelTag(candidate.model)}: ${sacrifice}; ${payback}; predicts ${nv2PredictionLabel(candidate.model)}`;
     }
 
@@ -1597,21 +1605,21 @@
               my_top_priority: criteriaLabels[nv2HeadlineCriterion("other")] || "",
             }
           : null,
-        concession: concession && concession.drop > 0.001 ? { criterion: concession.label, size: nv2Amount(concession.drop) } : null,
-        payback: payback && payback.gain > 0.001 ? { criterion: payback.label, size: nv2Amount(payback.gain) } : null,
+        concession: concession && concession.drop > 0.001 ? { criterion: concession.label, size: nv2CostAmount(concession.drop) } : null,
+        payback: payback && payback.gain > 0.001 ? { criterion: payback.label, size: nv2GainAmount(payback.gain) } : null,
         // rhetorical ingredients
-        they_just_conceded: theirMove?.gaveUp ? { criterion: theirMove.gaveUp.label, size: nv2Amount(theirMove.gaveUp.drop) } : null,
-        it_gained_me: theirMove?.gainedMe ? { criterion: theirMove.gainedMe.label, size: nv2Amount(theirMove.gainedMe.gain) } : null,
+        they_just_conceded: theirMove?.gaveUp ? { criterion: theirMove.gaveUp.label, size: nv2CostAmount(theirMove.gaveUp.drop) } : null,
+        it_gained_me: theirMove?.gainedMe ? { criterion: theirMove.gainedMe.label, size: nv2GainAmount(theirMove.gainedMe.gain) } : null,
         what_i_must_keep: {
           criterion: limit.label,
           // Only size the threat when there is one. Banding an unthreatened
           // limit would hand the model "a little" for a cost of zero.
-          their_offer_would_cost_me: limit.at_risk ? nv2Amount(limit.cost) : null,
+          their_offer_would_cost_me: limit.at_risk ? nv2CostAmount(limit.cost) : null,
           actually_at_risk: limit.at_risk,
         },
         why_trading_works: nv2PriorityContrast("other"),
         how_far_i_have_moved: movement && movement.given_up > 0.001
-          ? { rounds_moved: movement.rounds_moved, criterion: movement.criterion, given_up: nv2Amount(movement.given_up) }
+          ? { rounds_moved: movement.rounds_moved, criterion: movement.criterion, given_up: nv2CostAmount(movement.given_up) }
           : null,
         deadline_reached: versionIndex >= NV2_MAX_VERSION,
         history: compactHistoryForProxy(),
@@ -1692,22 +1700,22 @@
       const parts = [];
 
       if (theirMove?.gaveUp) {
-        parts.push(`You moved ${nv2Amount(theirMove.gaveUp.drop)} on ${escapeHtml(theirMove.gaveUp.label)}, and I can see what that cost you.`);
+        parts.push(`You moved ${nv2CostAmount(theirMove.gaveUp.drop)} on ${escapeHtml(theirMove.gaveUp.label)}, and I can see what that cost you.`);
       }
 
       if (offerModel && targetModel && String(offerModel.seed ?? offerModel.id) === String(targetModel.seed ?? targetModel.id)) {
         parts.push(concession.drop > 0.001
-          ? `I can meet you on model ${nv2ModelTag(targetModel)} because the tradeoff is still workable for me, even though it costs me ${nv2Amount(concession.drop)} on ${escapeHtml(concession.label)}.`
+          ? `I can meet you on model ${nv2ModelTag(targetModel)} because the tradeoff is still workable for me, even though it costs me ${nv2CostAmount(concession.drop)} on ${escapeHtml(concession.label)}.`
           : `I can meet you on model ${nv2ModelTag(targetModel)} because it is a workable shared choice for this case.`);
         return parts.join(" ");
       }
 
       const carries = `model ${nv2ModelTag(offerModel)} (${escapeHtml(nv2PredictionLabel(offerModel))})`;
       const cost = concession.drop > 0.001
-        ? `It costs me ${nv2Amount(concession.drop)} on ${escapeHtml(concession.label)}`
+        ? `It costs me ${nv2CostAmount(concession.drop)} on ${escapeHtml(concession.label)}`
         : "It does not cost me much on my side";
       const gain = payback && payback.gain > 0.001
-        ? `and gives you ${nv2Amount(payback.gain)} on ${escapeHtml(payback.label)}`
+        ? `and gives you ${nv2GainAmount(payback.gain)} on ${escapeHtml(payback.label)}`
         : "and improves the joint deal";
       const ask = demandKey ? ` while moving ${escapeHtml(demandLabel)} closer to what I can stand behind` : "";
       parts.push(`I chose ${carries} as the offer${ask}. ${cost}, ${gain}.`);
@@ -1720,7 +1728,7 @@
     function nv2OtherFallbackText(decision, move, incomingModel, previousModel, versionIndex, theirPreviousModel = null) {
       const theirMove = nv2TheirLastMove("other", theirPreviousModel, incomingModel);
       const acknowledge = theirMove?.gaveUp
-        ? `You let ${escapeHtml(theirMove.gaveUp.label)} slip ${nv2Amount(theirMove.gaveUp.drop)} to get here, and I can see what that cost you.`
+        ? `You let ${escapeHtml(theirMove.gaveUp.label)} slip ${nv2CostAmount(theirMove.gaveUp.drop)} to get here, and I can see what that cost you.`
         : null;
       const lastRound = versionIndex >= NV2_MAX_VERSION;
 
@@ -1728,7 +1736,7 @@
         const parts = [];
         if (acknowledge) parts.push(acknowledge);
         parts.push(theirMove?.gainedMe
-          ? `${escapeHtml(theirMove.gainedMe.label)} comes up ${nv2Amount(theirMove.gainedMe.gain)}, far enough that I can defend it to the people I answer to.`
+          ? `${escapeHtml(theirMove.gainedMe.label)} comes up ${nv2GainAmount(theirMove.gainedMe.gain)}, far enough that I can defend it to the people I answer to.`
           : `This clears the bar I set for my role.`);
         parts.push(decision.reason === "deadline"
           ? `We are out of rounds, so I accept model ${nv2ModelTag(incomingModel)} rather than have us both walk away with nothing.`
@@ -1742,7 +1750,7 @@
       if (move.stonewalled) {
         const parts = [];
         parts.push(movement && movement.given_up > 0.001
-          ? `I have already come down ${nv2Amount(movement.given_up)} on ${escapeHtml(movement.criterion)} across this negotiation, and this round you did not move at all.`
+          ? `I have already come down ${nv2CostAmount(movement.given_up)} on ${escapeHtml(movement.criterion)} across this negotiation, and this round you did not move at all.`
           : `You did not move this round, so I am not going to either.`);
         if (complaint) parts.push(`${escapeHtml(complaint.label)} is still ${nv2Shortfall(complaint.gap)} what I answer for, and nothing about that has changed.`);
         parts.push(lastRound
@@ -1767,14 +1775,14 @@
           tail: holds,
         }));
       } else if (limit.at_risk) {
-        parts.push(`${escapeHtml(limit.label)} is still the line I need to protect, and your model would cost me ${nv2Amount(limit.cost)} there.`);
+        parts.push(`${escapeHtml(limit.label)} is still the line I need to protect, and your model would cost me ${nv2CostAmount(limit.cost)} there.`);
       }
       const carries = `model ${nv2ModelTag(move.model)} (${escapeHtml(nv2PredictionLabel(move.model))})`;
       const cost = concession.drop > 0.001
-        ? `it costs me ${nv2Amount(concession.drop)} on ${escapeHtml(concession.label)}`
+        ? `it costs me ${nv2CostAmount(concession.drop)} on ${escapeHtml(concession.label)}`
         : "it does not cost me much on my side";
       const forYou = payback && payback.gain > 0.001
-        ? `and gives you ${nv2Amount(payback.gain)} on ${escapeHtml(payback.label)}`
+        ? `and gives you ${nv2GainAmount(payback.gain)} on ${escapeHtml(payback.label)}`
         : "and improves the joint deal";
       const closer = lastRound ? ` This is my last round, so it is this or no agreement.` : "";
       parts.push(`My counter is ${carries}: ${cost}, ${forYou}.${closer}`);
@@ -1799,7 +1807,7 @@
       }
       const opensWith = `model ${nv2ModelTag(move.model)} (${escapeHtml(nv2PredictionLabel(move.model))})`;
       parts.push(payback && payback.gain > 0.001
-        ? `So I open with ${opensWith}, a model that already moves ${escapeHtml(payback.label)} ${nv2Amount(payback.gain)} toward you — tell me which model tradeoff you can live with.`
+        ? `So I open with ${opensWith}, a model that already moves ${escapeHtml(payback.label)} ${nv2GainAmount(payback.gain)} toward you — tell me which model tradeoff you can live with.`
         : `So I open with ${opensWith} — tell me which model tradeoff you can live with.`);
       return parts.join(" ");
     }

@@ -1101,6 +1101,9 @@
           </div>
         `;
       };
+      const aggregatePredictionHtml = isAggregateCondition() && typeof aggregateRecommendationHtml === "function"
+        ? aggregateRecommendationHtml()
+        : "";
       // Same three stacked sections as the single conditions -- Input Case,
       // Prediction, Performance -- with the two model columns splitting the
       // bottom two. Both share one column template -- a narrow criterion-name
@@ -1123,6 +1126,7 @@
           <div class="single-diagram-heading single-row-label">Prediction</div>
           <div class="single-row-content multi-prediction-section" style="grid-template-columns: ${performanceGridColumns};" aria-label="Model predictions">
             ${activeItems.map(predictionCell).join("")}
+            ${aggregatePredictionHtml}
           </div>
 
           <div class="single-diagram-heading single-row-label single-performance-label">

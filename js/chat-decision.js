@@ -311,8 +311,6 @@
       ].join("\n");
     }
 
-    // Aggregate shows exactly the multi-optimal banner with this block appended
-    // after it, so the two conditions differ by the slider alone.
     function aggregateRecommendationHtml() {
       const rec = aggregateRecommendation();
       const selfPct = Math.round(rec.selfShare * 100);
@@ -337,8 +335,9 @@
     }
 
     function wireAggregateRecommendationSlider() {
-      const slider = finalDecisionStatusBanner.querySelector("#aggregateSelfSlider");
-      if (slider) {
+      const slider = document.getElementById("aggregateSelfSlider");
+      if (slider && slider.dataset.aggregateSliderWired !== "true") {
+        slider.dataset.aggregateSliderWired = "true";
         const updateAggregateBannerInPlace = () => {
           aggregateSelfShare = (Number(slider.value) || 0) / 100;
           const updated = aggregateRecommendation();
@@ -420,7 +419,7 @@
       const otherLabel = activeData?.label_names?.[otherClassId] || otherWinner?.label || `Class ${otherClassId}`;
       const versionPrefix = versionLabel ? `${escapeHtml(versionLabel)}: ` : "";
       finalDecisionStatusBanner.classList.remove("hidden", "conflict");
-      const extraHtml = isAggregateCondition() ? aggregateRecommendationHtml() : "";
+      const extraHtml = "";
       // Named the way the two columns above are named, so the multiplicity stage
       // does not announce a stakeholder it has not introduced yet.
       const selfName = escapeHtml(modelRoleLabel("self", "Self"));

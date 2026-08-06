@@ -33,8 +33,8 @@
     // reading the live values.
     const criteriaLabels = {
       accuracy: "Accuracy",
-      tpr: "Catch High-Risk",
-      tnr: "Protect Innocents",
+      tpr: "Catch High Risk",
+      tnr: "Protect Low Risk",
       local_consistency: "Individual Fairness"
     };
     // Single condition pins ONE fixed model per dataset -- the lowest seed the
@@ -200,8 +200,8 @@
     // label on hover, so nothing is only ever shown abbreviated.
     const criteriaAbbrLabels = {
       accuracy: "Accuracy",
-      tpr: "Catch HR",
-      tnr: "Protect Inn.",
+      tpr: "Catch High Risk",
+      tnr: "Protect Low Risk",
       local_consistency: "Fairness"
     };
     const criteriaFullLabels = {
@@ -281,7 +281,7 @@
     ];
 
     // Persona weights are intentionally face-valid and extreme: each role puts
-    // 85% on its core criterion and 5% on each remaining criterion. This makes
+    // 70% on its core criterion and 10% on each remaining criterion. This makes
     // Self/Other optima visibly different while preserving small side-payments
     // for joint-utility-improving compromise models. The same weights live in
     // scripts/build_exp_data.py; regenerate exp_data whenever these change.
@@ -298,7 +298,7 @@
         boundary: "Accuracy matters most for this role, while local error asymmetry and fairness should still be considered during deliberation.",
         positionExample: "I want the decision to follow the most accurate model group.",
         interests: [{ key: "accuracy", label: "Overall accuracy", rationale: "Judges need a decision process that is correct as often as possible across cases." }],
-        weights: { accuracy: 85, tpr: 5, tnr: 5, local_consistency: 5 }
+        weights: { accuracy: 70, tpr: 10, tnr: 10, local_consistency: 10 }
       },
       defendants: {
         key: "defendants",
@@ -312,7 +312,7 @@
         boundary: "Local specificity and false-positive protection matter most for this role, while local sensitivity and fairness should still be discussed.",
         positionExample: "I do not want this person to be labeled high risk unless the evidence is reliable.",
         interests: [{ key: "tnr", label: "False-positive harm protection", rationale: "Defendants are harmed when a low-risk person is incorrectly labeled high risk." }],
-        weights: { accuracy: 5, tpr: 5, tnr: 85, local_consistency: 5 }
+        weights: { accuracy: 10, tpr: 10, tnr: 70, local_consistency: 10 }
       },
       community_members: {
         key: "community_members",
@@ -326,7 +326,7 @@
         boundary: "Sensitivity and community safety matter most for this role, while false-positive harm and fairness should still be respected.",
         positionExample: "I want the decision process to avoid missing people who may require intervention.",
         interests: [{ key: "tpr", label: "False-negative harm protection", rationale: "Community members are harmed when a truly high-risk case is missed." }],
-        weights: { accuracy: 5, tpr: 85, tnr: 5, local_consistency: 5 }
+        weights: { accuracy: 10, tpr: 70, tnr: 10, local_consistency: 10 }
       },
       fairness_advocates: {
         key: "fairness_advocates",
@@ -340,7 +340,7 @@
         boundary: "Individual fairness matters most for this role, while predictive performance and safety concerns should still be part of the negotiation.",
         positionExample: "I want the decision to avoid relying on models that treat similar people differently.",
         interests: [{ key: "local_consistency", label: "Consistent treatment of similar people", rationale: "Fairness advocates are concerned when people with similar backgrounds receive different predictions." }],
-        weights: { accuracy: 5, tpr: 5, tnr: 5, local_consistency: 85 }
+        weights: { accuracy: 10, tpr: 10, tnr: 10, local_consistency: 70 }
       }
     };
     const personaKeys = Object.keys(personaTypes);
@@ -382,7 +382,7 @@
         criteriaLabels: {
           accuracy: "Accuracy",
           tpr: "Catch High-Risk",
-          tnr: "Protect Innocents",
+          tnr: "Protect Low-Risk",
           local_consistency: "Individual Fairness"
         },
         criteriaShortLabels: {
@@ -393,8 +393,8 @@
         },
         criteriaAbbrLabels: {
           accuracy: "Accuracy",
-          tpr: "Catch HR",
-          tnr: "Protect Inn.",
+          tpr: "Catch High Risk",
+          tnr: "Protect Low Risk",
           local_consistency: "Fairness"
         },
         criteriaFullLabels: {
