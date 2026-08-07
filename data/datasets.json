@@ -1,1 +1,1 @@
-[{"case_count":1235,"key":"compas","label":"COMPAS","label_names":["Low Risk","High Risk"],"model_count":100},{"case_count":1240,"key":"acs_coverage","label":"Public Health Coverage","label_names":["No Public Coverage","Public Coverage"],"model_count":100}]
+[{"case_count":1235,"key":"compas","label":"COMPAS","label_names":["Low Risk","High Risk"],"model_count":100},{"case_count":1240,"key":"acs_coverage","label":"Welfare Allocation","label_names":["No Need Cover","Should Cover"],"model_count":100}]

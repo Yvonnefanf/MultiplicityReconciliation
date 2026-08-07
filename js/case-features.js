@@ -2,7 +2,6 @@
    Part of the Negotiated Rashomon Reconciliation app. Loaded as an ordered
    classic script; all top-level declarations share one global scope. */
 
-    const FEATURE_DISPLAY_LIMIT = 6;
     // Fixed row order for the input attributes, applied in every condition.
     // Ordering by |SHAP| made the rows reshuffle between cases, models and
     // conditions, so nothing could be compared across panels at a glance.
@@ -21,13 +20,12 @@
     }
 
     // Sort into the fixed order, falling back to magnitude for any attribute the
-    // fixed list does not cover, then keep the leading rows.
+    // fixed list does not cover.
     function orderRowsForDisplay(pairs, magnitudeOf, dataset) {
       return pairs
         .slice()
         .sort((a, b) => featureOrderIndex(dataset, a.row?.label) - featureOrderIndex(dataset, b.row?.label)
-          || (magnitudeOf(b) - magnitudeOf(a)))
-        .slice(0, FEATURE_DISPLAY_LIMIT);
+          || (magnitudeOf(b) - magnitudeOf(a)));
     }
 
     function escapeHtml(value) {
@@ -513,7 +511,7 @@
       const allValues = allRows.map((row) => shapValueFor(influencePattern.features, row.keys));
       const rowPairs = allRows.map((row, index) => ({ row, value: allValues[index] }));
       const topPairs = orderRowsForDisplay(rowPairs, (pair) => Math.abs(pair.value), dataset);
-      const visiblePairs = topPairs.length ? topPairs : rowPairs.slice(0, FEATURE_DISPLAY_LIMIT);
+      const visiblePairs = topPairs.length ? topPairs : rowPairs;
       const rows = visiblePairs.map((pair) => pair.row);
       const shapValues = visiblePairs.map((pair) => pair.value);
       const maxAbs = Math.max(Number(shapPatterns?.max_abs_value) || 0, ...shapValues.map((value) => Math.abs(value)), 0.001);

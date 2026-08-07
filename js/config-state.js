@@ -370,15 +370,17 @@
     // `judges` is the accuracy slot, `defendants` the TNR slot,
     // `community_members` the TPR slot, `fairness_advocates` the consistency slot.
     //
-    // For acs_coverage the positive class is "has public coverage", so in the
-    // allocation framing a positive prediction means "already covered, do not
-    // prioritise for assistance". That flips who each error rate protects:
-    //   TNR -- a truly uncovered person wrongly recorded as covered gets passed
-    //          over, so TNR is the applicant's protection (the defendants slot).
-    //   TPR -- correctly recognising people who already have coverage is what
-    //          stops outreach budget being spent twice (the community slot).
+    // For acs_coverage the positive class is now framed as "should receive public coverage".
+    // That makes the model output an allocation recommendation rather than a record
+    // of existing coverage:
+    //   TPR -- correctly recommending coverage for someone who should receive it,
+    //          so this is the applicants' protection (the community slot).
+    //   TNR -- correctly withholding coverage when it is not needed, so this is
+    //          the budget office's protection (the defendants slot).
     const DATASET_COPY = {
       compas: {
+        datasetLabel: "COMPAS",
+        labelNames: ["Low Risk", "High Risk"],
         criteriaLabels: {
           accuracy: "Accuracy",
           tpr: "Catch High-Risk",
@@ -461,10 +463,12 @@
         }
       },
       acs_coverage: {
+        datasetLabel: "Welfare Allocation",
+        labelNames: ["No Need Cover", "Should Cover"],
         criteriaLabels: {
           accuracy: "Accuracy",
-          tpr: "Identify Already-Covered",
-          tnr: "Don't Overlook Uncovered",
+          tpr: "Cover Need",
+          tnr: "Avoid Extra",
           local_consistency: "Individual Fairness"
         },
         criteriaShortLabels: {
@@ -475,20 +479,20 @@
         },
         criteriaAbbrLabels: {
           accuracy: "Accuracy",
-          tpr: "ID Covered",
-          tnr: "Don't Overlook",
+          tpr: "Cover Need",
+          tnr: "Avoid Extra",
           local_consistency: "Fairness"
         },
         criteriaFullLabels: {
           accuracy: "Overall Accuracy / Correct Predictions Across All Test Cases",
-          tpr: "Local True Positive Rate / Correctly Identify People Who Already Have Public Coverage, in the 30-neighbor local region",
-          tnr: "Local True Negative Rate / Avoid Recording an Uncovered Person as Already Covered, in the 30-neighbor local region",
+          tpr: "Local True Positive Rate / Correctly Recommend Should Cover, in the 30-neighbor local region",
+          tnr: "Local True Negative Rate / Correctly Recommend No Need Cover, in the 30-neighbor local region",
           local_consistency: "Individual Fairness"
         },
         criteriaDescriptions: {
           accuracy: "How often the AI makes the correct prediction across all cases.",
-          tpr: "Correctly identify people who already have public health coverage.",
-          tnr: "Protect people without coverage from being wrongly recorded as already covered.",
+          tpr: "Correctly recommend public coverage for people who should receive it.",
+          tnr: "Avoid assigning public coverage to people who do not need it.",
           local_consistency: "People with similar backgrounds and circumstances should receive similar predictions."
         },
         personas: {
@@ -498,35 +502,35 @@
             rolePhrase: "program administrator",
             priority: "increasing overall Accuracy",
             metricLabel: "Accuracy",
-            context: "Program Administrators might want to prioritize overall accuracy when considering the design of a public health coverage screening system.",
+            context: "Program Administrators might want to prioritize overall accuracy when considering the design of a public coverage allocation system.",
             concern: "They are accountable for the program as a whole and may prefer a decision rule that is correct as often as possible across applicants.",
             boundary: "Accuracy matters most for this role, while local error asymmetry and fairness should still be considered during deliberation.",
             positionExample: "I want the decision to follow the most accurate model group.",
-            interests: [{ key: "accuracy", label: "Overall accuracy", rationale: "Administrators need a screening process that is correct as often as possible across applicants." }]
+            interests: [{ key: "accuracy", label: "Overall accuracy", rationale: "Administrators need an allocation process that is correct as often as possible across applicants." }]
           },
           defendants: {
-            label: "Applicants",
-            role: "Applicants",
-            rolePhrase: "applicant",
-            priority: "decreasing False Positive Rate (Specificity)",
-            metricLabel: "False Positive Rate (Specificity)",
-            context: "Applicants might want to prioritize decreasing False Positive Rate (Specificity) because they are worried about being wrongly recorded as already covered and passed over for assistance.",
-            concern: "They are most concerned about being marked as already having public coverage when in fact they have none.",
-            boundary: "Local specificity and protection against being wrongly marked as covered matter most for this role, while correctly recognising existing coverage and fairness should still be discussed.",
-            positionExample: "I do not want this person recorded as already covered unless the evidence is reliable.",
-            interests: [{ key: "tnr", label: "Protection from being wrongly marked as covered", rationale: "Applicants are harmed when someone with no coverage is recorded as already covered and passed over." }]
-          },
-          community_members: {
             label: "Public Budget Office",
             role: "Public Budget Office",
             rolePhrase: "budget officer",
-            priority: "decreasing False Negative Rate (Sensitivity)",
-            metricLabel: "False Negative Rate (Sensitivity)",
-            context: "The Public Budget Office might want to prioritize decreasing False Negative Rate (Sensitivity) because it is responsible for spending limited outreach funds where they are actually needed.",
-            concern: "They are most concerned about failing to recognise people who already hold public coverage, so effort is spent twice on the same person.",
-            boundary: "Sensitivity and responsible use of program funds matter most for this role, while the harm of overlooking uncovered people and fairness should still be respected.",
-            positionExample: "I want the decision process to correctly recognise people who already have coverage.",
-            interests: [{ key: "tpr", label: "Responsible use of program funds", rationale: "The budget office is harmed when someone who already holds coverage is not recognised as such." }]
+            priority: "avoiding unnecessary coverage allocations",
+            metricLabel: "Avoid Unneeded Coverage",
+            context: "The Public Budget Office might want to prioritize avoiding unnecessary public coverage allocations because it is responsible for preserving limited program funds for people who need them.",
+            concern: "They are most concerned about assigning coverage to someone who does not need public coverage, so limited funds are spent where they are not needed.",
+            boundary: "Avoiding unneeded coverage matters most for this role, while coverage access and fairness should still be discussed.",
+            positionExample: "I do not want public coverage assigned unless this person should receive it.",
+            interests: [{ key: "tnr", label: "Avoid unneeded coverage", rationale: "The budget office is harmed when limited coverage funds are assigned to someone who does not need them." }]
+          },
+          community_members: {
+            label: "Applicants",
+            role: "Applicants",
+            rolePhrase: "applicant",
+            priority: "avoiding missed coverage for people who should receive it",
+            metricLabel: "Cover Those in Need",
+            context: "Applicants might want to prioritize correctly recommending public coverage for people who should receive it because they are worried about being passed over for assistance.",
+            concern: "They are most concerned about someone who should receive public coverage being marked as no need cover.",
+            boundary: "Coverage access matters most for this role, while avoiding unneeded allocations and fairness should still be discussed.",
+            positionExample: "I want this person covered if they should receive public coverage.",
+            interests: [{ key: "tpr", label: "Coverage access for people in need", rationale: "Applicants are harmed when someone who should receive public coverage is marked no need cover." }]
           },
           fairness_advocates: {
             label: "Fairness Advocates",
@@ -561,6 +565,29 @@
         if (personaTypes[key]) Object.assign(personaTypes[key], persona);
       });
       return activeDatasetCopyKey;
+    }
+
+    function applyDatasetFramingToCaseData(dataset, caseData) {
+      const labelNames = DATASET_COPY[dataset]?.labelNames;
+      if (!caseData || !labelNames) return caseData;
+      const labelFor = (classId, fallback = null) => {
+        const index = Number(classId);
+        return Number.isFinite(index) && labelNames[index] ? labelNames[index] : fallback;
+      };
+      caseData.label_names = labelNames.slice();
+      if (DATASET_COPY[dataset]?.datasetLabel) caseData.dataset_label = DATASET_COPY[dataset].datasetLabel;
+      const relabelByClass = (item) => {
+        if (!item || item.class_id == null) return;
+        const label = labelFor(item.class_id, item.label);
+        if (label) item.label = label;
+      };
+      (caseData.summary || []).forEach(relabelByClass);
+      (caseData.reconciliation?.groups || []).forEach(relabelByClass);
+      Object.entries(caseData.shap_patterns?.by_class || {}).forEach(([classId, pattern]) => {
+        const label = labelFor(classId, pattern?.label);
+        if (pattern && label) pattern.label = label;
+      });
+      return caseData;
     }
 
     function primaryCriterionKeyForPersona(persona) {

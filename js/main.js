@@ -187,6 +187,7 @@
         : experimentIndex
           ? await fetchJson(`/api/${dataset}/exp/${experimentIndex.user_role}/${caseIndex}`)
           : await fetchJson(`/api/${dataset}/cases/${caseIndex}`);
+      applyDatasetFramingToCaseData(dataset, activeData);
       resetFinalDecision();
       currentPersona = null;
       proxyPersona = null;
