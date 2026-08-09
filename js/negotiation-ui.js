@@ -76,8 +76,39 @@
       setWeights(elicitedWeights, "Elicited initial offer");
     }
 
+    function historyTextForExport(html) {
+      const element = document.createElement("div");
+      element.innerHTML = html || "";
+      return element.textContent.replace(/\s+/g, " ").trim();
+    }
+
+    function emitQualtricsNegotiationEvent(type, payload = {}) {
+      const params = new URLSearchParams(window.location.search);
+      window.parent.postMessage({
+        source: "multiplicity-reconciliation",
+        protocol: "negotiatev2",
+        type,
+        timestamp: new Date().toISOString(),
+        payload: {
+          caseId: params.get("case"),
+          persona: params.get("persona"),
+          appId: params.get("appId"),
+          ...payload,
+        },
+      }, "*");
+    }
+
     function addHistory(role, title, text, eventWeights = weights, extra = {}) {
-      negotiationEvents.push({ role, title, text, weights: eventWeights ? { ...eventWeights } : null, ...extra });
+      const event = { role, title, text, weights: eventWeights ? { ...eventWeights } : null, ...extra };
+      negotiationEvents.push(event);
+      if (isNegotiateV2Condition()) {
+        emitQualtricsNegotiationEvent("history_added", {
+          role,
+          title,
+          text: historyTextForExport(text),
+          weights: event.weights,
+        });
+      }
       renderHistory();
     }
 
