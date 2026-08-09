@@ -34,6 +34,7 @@
  *                 its own final position (the app leaves the decision to Self)
  *
  * Usage: node eval/run_modeling_eval.mjs [--datasets compas,acs_coverage] [--limit N]
+ *        [--aggregateSelfShare 0.7] [--multioptimalSelfOwnProb 0.8]
  *        [--epsilon 0.02] [--opener self|other] [--out eval/results]
  */
 
@@ -50,8 +51,11 @@ const args = Object.fromEntries(
 );
 const DATASETS = (args.datasets || "compas,acs_coverage").split(",").map((s) => s.trim()).filter(Boolean);
 const LIMIT = args.limit ? Number(args.limit) : Infinity;
-const EPSILON = args.epsilon ? Number(args.epsilon) : 0.02; // multioptimal cheap-adoption tolerance
+const EPSILON = args.epsilon ? Number(args.epsilon) : 0.02; // legacy cheap-adoption tolerance
 const OPENER = args.opener === "other" ? "other" : "self";
+const AGGREGATE_SELF_SHARE_MIN = args.aggregateSelfShareMin ? Number(args.aggregateSelfShareMin) : 0.6;
+const AGGREGATE_SELF_SHARE_MAX = args.aggregateSelfShareMax ? Number(args.aggregateSelfShareMax) : 0.8;
+const MULTIOPTIMAL_SELF_OWN_PROB = args.multioptimalSelfOwnProb ? Number(args.multioptimalSelfOwnProb) : 0.8;
 const OUT_DIR = path.join(repo, args.out || "eval/results");
 
 /* ---------------- sandbox: evaluate the app's own scripts ---------------- */
@@ -141,6 +145,16 @@ function buildSandbox() {
 
 const predOf = (m) => Number(m?.pred_class);
 
+function stableUnitInterval(...parts) {
+  const str = parts.join("|");
+  let h = 2166136261;
+  for (let i = 0; i < str.length; i += 1) {
+    h ^= str.charCodeAt(i);
+    h = Math.imul(h, 16777619);
+  }
+  return (h >>> 0) / 0x100000000;
+}
+
 // single: the pinned model the Ignore condition shows.
 function runSingle(S, data, ds) {
   const seed = S.SINGLE_MODEL_SEED_BY_DATASET[ds];
@@ -153,18 +167,15 @@ function runSingleOptimal(S) {
   return { deployed: S.selectedSingleOptimalModel(S.weightsFor("self")), selfStance: null, otherStance: null };
 }
 
-// multioptimal: both optima are on screen. A side adopts the other side's
-// optimum iff that costs it at most EPSILON of its own utility (cheap
-// magnanimity); Self is the decision maker, so Self's adopted model deploys.
-function runMultiOptimal(S) {
-  const selfW = S.weightsFor("self");
-  const otherW = S.weightsFor("other");
-  const selfBest = S.selectedSingleOptimalModel(selfW);
-  const otherBest = S.selectedSingleOptimalModel(otherW);
-  const adopt = (mineW, mine, theirs) =>
-    S.utility(theirs, mineW) >= S.utility(mine, mineW) - EPSILON ? theirs : mine;
-  const selfStance = adopt(selfW, selfBest, otherBest);
-  const otherStance = adopt(otherW, otherBest, selfBest);
+// multioptimal: both optima are on screen. In the conflict-only modelling
+// sample, Self keeps its own optimal model in 80% of runs and adopts Other's
+// model in 20% of runs. The choice is deterministic per dataset/case/persona
+// pair so the CSV is reproducible while matching the requested rate.
+function runMultiOptimal(S, chooseSelfOwn) {
+  const selfBest = S.selectedSingleOptimalModel(S.weightsFor("self"));
+  const otherBest = S.selectedSingleOptimalModel(S.weightsFor("other"));
+  const selfStance = chooseSelfOwn ? selfBest : otherBest;
+  const otherStance = otherBest;
   return { deployed: selfStance, selfStance, otherStance };
 }
 
@@ -172,12 +183,11 @@ function runMultiOptimal(S) {
 // criteria-blended package (utility is linear in criteria, so this equals the
 // same blend of the two models' utilities); the prediction comes from the
 // blended P(high) exactly as aggregateRecommendation() computes it.
-function runAggregate(S) {
+function runAggregate(S, selfShare) {
   const selfW = S.weightsFor("self");
   const otherW = S.weightsFor("other");
   const selfModel = S.selectedSingleOptimalModel(selfW);
   const otherModel = S.selectedSingleOptimalModel(otherW);
-  const selfShare = 0.5; // app default aggregateSelfShare
   const selfWeight = selfShare * Math.max(0, S.utility(selfModel, selfW));
   const otherWeight = (1 - selfShare) * Math.max(0, S.utility(otherModel, otherW));
   const denom = selfWeight + otherWeight;
@@ -191,7 +201,7 @@ function runAggregate(S) {
     // expose under the first key modelCriterionValue resolves for `key`
     blended[{ accuracy: "subgroup_accuracy", tpr: "subgroup_tpr", tnr: "subgroup_tnr" }[key] || key] = blend;
   }
-  return { deployed: blended, selfStance: null, otherStance: null };
+  return { deployed: blended, selfStance: null, otherStance: null, aggregate_self_share: selfShare };
 }
 
 // negotiatev2: the protocol, both sides played by the engine's own negotiator.
@@ -297,18 +307,42 @@ function score(S, outcome, latentSelfBest, latentOtherBest, bands) {
   const norm = (u, b) => (b.hi - b.lo > 1e-9 ? (u - b.lo) / (b.hi - b.lo) : 1);
   const selfN = norm(selfU, bands.self);
   const otherN = norm(otherU, bands.other);
+  const totalU = selfU + otherU;
+  const totalN = selfN + otherN;
+  const worstU = Math.min(selfU, otherU);
+  const worstN = Math.min(selfN, otherN);
+  const meanU = totalU / 2;
+  const meanN = totalN / 2;
+  const utilityVariance = ((selfU - meanU) ** 2 + (otherU - meanU) ** 2) / 2;
+  const utilityVarianceN = ((selfN - meanN) ** 2 + (otherN - meanN) ** 2) / 2;
+  const selfUtility100 = selfN * 100;
+  const otherUtility100 = otherN * 100;
+  const totalUtility100 = meanN * 100;
+  const worstStakeholderUtility100 = worstN * 100;
+  const utilityVariance100 = utilityVarianceN * 10000;
   // Stances that a condition never moves stay at the latent optima.
   const selfStance = outcome.selfStance || latentSelfBest;
   const otherStance = outcome.otherStance || latentOtherBest;
   return {
+    self_utility: selfUtility100,
+    other_utility: otherUtility100,
+    total_utility_0_100: totalUtility100,
+    worst_stakeholder_utility_0_100: worstStakeholderUtility100,
+    utility_variance_0_100: utilityVariance100,
     self_u: selfU,
     other_u: otherU,
-    joint_mean: (selfU + otherU) / 2,
-    joint_min: Math.min(selfU, otherU),
+    total_utility: totalU,
+    worst_stakeholder_utility: worstU,
+    utility_variance: utilityVariance,
+    joint_mean: meanU,
+    joint_min: worstU,
     joint_nash: Math.max(0, selfU) * Math.max(0, otherU),
     self_n: selfN,
     other_n: otherN,
-    joint_n: (selfN + otherN) / 2,
+    total_utility_n: totalN,
+    worst_stakeholder_utility_n: worstN,
+    utility_variance_n: utilityVarianceN,
+    joint_n: meanN,
     band_self: bands.self.hi - bands.self.lo,
     band_other: bands.other.hi - bands.other.lo,
     consensus: predOf(selfStance) === predOf(otherStance) ? 1 : 0,
@@ -328,6 +362,7 @@ for (const a of personas) for (const b of personas) if (a.key !== b.key) pairs.p
 fs.mkdirSync(OUT_DIR, { recursive: true });
 const CONDITIONS = ["single", "singleoptimal", "multioptimal", "aggregate", "negotiatev2"];
 const rows = [];
+let skippedNonConflicting = 0;
 const t0 = Date.now();
 
 for (const ds of DATASETS) {
@@ -346,6 +381,15 @@ for (const ds of DATASETS) {
       S.setPersonas(selfP, otherP);
       const latentSelfBest = S.selectedSingleOptimalModel(S.weightsFor("self"));
       const latentOtherBest = S.selectedSingleOptimalModel(S.weightsFor("other"));
+      const selfModelPred = predOf(latentSelfBest);
+      const otherModelPred = predOf(latentOtherBest);
+      if (selfModelPred === otherModelPred) {
+        skippedNonConflicting += 1;
+        continue;
+      }
+      const multioptimalChooseSelf = stableUnitInterval(ds, idx, selfP.key, otherP.key, "multioptimal") < MULTIOPTIMAL_SELF_OWN_PROB;
+      const aggre50Label = predOf(runAggregate(S, 0.5).deployed);
+      const aggre80Label = predOf(runAggregate(S, 0.8).deployed);
       const bands = {
         self: achievableBand(S, data.models || [], S.weightsFor("self")),
         other: achievableBand(S, data.models || [], S.weightsFor("other")),
@@ -354,17 +398,26 @@ for (const ds of DATASETS) {
         const outcome =
           condition === "single" ? runSingle(S, data, ds)
           : condition === "singleoptimal" ? runSingleOptimal(S)
-          : condition === "multioptimal" ? runMultiOptimal(S)
-          : condition === "aggregate" ? runAggregate(S)
+          : condition === "multioptimal" ? runMultiOptimal(S, multioptimalChooseSelf)
+          : condition === "aggregate" ? runAggregate(S, AGGREGATE_SELF_SHARE_MIN + stableUnitInterval(ds, idx, selfP.key, otherP.key, "aggregate") * (AGGREGATE_SELF_SHARE_MAX - AGGREGATE_SELF_SHARE_MIN))
           : runNegotiate(S);
         const m = score(S, outcome, latentSelfBest, latentOtherBest, bands);
         rows.push({
           dataset: ds,
           case: idx,
+          case_ID: `${ds}_${idx}`,
           high_disagreement: caseMeta.high_disagreement ? 1 : 0,
           self: selfP.key,
           other: otherP.key,
+          self_model_pred: selfModelPred,
+          other_model_pred: otherModelPred,
           condition,
+          final_modelling_label: predOf(outcome.deployed),
+          aggre_50: aggre50Label,
+          aggre_80: aggre80Label,
+          aggregate_self_share: condition === "aggregate" ? outcome.aggregate_self_share : "",
+          multioptimal_self_own_prob: condition === "multioptimal" ? MULTIOPTIMAL_SELF_OWN_PROB : "",
+          multioptimal_chose_self_model: condition === "multioptimal" ? (multioptimalChooseSelf ? 1 : 0) : "",
           ...m,
         });
       }
@@ -378,12 +431,20 @@ for (const ds of DATASETS) {
 /* ---------------- write outputs ---------------- */
 
 const header = Object.keys(rows[0]);
-const csv = [header.join(","), ...rows.map((r) => header.map((h) => r[h]).join(","))].join("\n");
+const csvEscape = (v) => {
+  const str = String(v ?? "");
+  return /[",\n\r]/.test(str) ? `"${str.replaceAll('"', '""')}"` : str;
+};
+const csv = [header.join(","), ...rows.map((r) => header.map((h) => csvEscape(r[h])).join(","))].join("\n");
 fs.writeFileSync(path.join(OUT_DIR, "runs.csv"), csv);
+fs.writeFileSync(path.join(OUT_DIR, "modeling_analysis_runs.csv"), csv);
 
 const SUMMARY_KEYS = [
-  "self_u", "other_u", "joint_mean", "joint_min", "joint_nash",
-  "self_n", "other_n", "joint_n", "band_self", "band_other",
+  "self_utility", "other_utility", "total_utility_0_100", "worst_stakeholder_utility_0_100", "utility_variance_0_100",
+  "self_u", "other_u", "total_utility", "worst_stakeholder_utility", "utility_variance",
+  "joint_mean", "joint_min", "joint_nash",
+  "self_n", "other_n", "total_utility_n", "worst_stakeholder_utility_n", "utility_variance_n",
+  "joint_n", "band_self", "band_other",
   "consensus", "settled",
 ];
 const byCondition = {};
@@ -398,15 +459,26 @@ const summary = Object.fromEntries(
     return [c, Object.fromEntries(SUMMARY_KEYS.map((k) => [k, b[k] / b.n]).concat([["n", b.n]]))];
   })
 );
-fs.writeFileSync(path.join(OUT_DIR, "summary.json"), JSON.stringify({ epsilon: EPSILON, opener: OPENER, datasets: DATASETS, summary }, null, 2));
+fs.writeFileSync(path.join(OUT_DIR, "summary.json"), JSON.stringify({
+  epsilon: EPSILON,
+  opener: OPENER,
+  datasets: DATASETS,
+  conflict_only: true,
+  skipped_non_conflicting_pairs: skippedNonConflicting,
+  aggregate_self_share_min: AGGREGATE_SELF_SHARE_MIN,
+  aggregate_self_share_max: AGGREGATE_SELF_SHARE_MAX,
+  multioptimal_self_own_prob: MULTIOPTIMAL_SELF_OWN_PROB,
+  summary,
+}, null, 2));
 
-console.log(`\n${rows.length} runs in ${((Date.now() - t0) / 1000).toFixed(1)}s -> ${path.relative(repo, OUT_DIR)}/`);
-console.log("condition        self_u  other_u  joint  | self%  other% joint% | consensus  settled");
+console.log(`\n${rows.length} conflict-only runs in ${((Date.now() - t0) / 1000).toFixed(1)}s -> ${path.relative(repo, OUT_DIR)}/`);
+console.log(`skipped ${skippedNonConflicting} non-conflicting dataset/case/persona pairs where self_model_pred === other_model_pred`);
+console.log("condition        self  other  total  worst  variance | raw_self raw_other | consensus  settled");
 for (const c of CONDITIONS) {
   const s = summary[c];
   const pct = (v) => `${(v * 100).toFixed(1)}%`.padStart(6);
   console.log(
-    `${c.padEnd(15)} ${s.self_u.toFixed(3)}   ${s.other_u.toFixed(3)}   ${s.joint_mean.toFixed(3)}  |${pct(s.self_n)}${pct(s.other_n)}${pct(s.joint_n)} | ${pct(s.consensus)}     ${c === "negotiatev2" ? pct(s.settled) : "-"}`
+    `${c.padEnd(15)} ${s.self_utility.toFixed(1).padStart(5)}  ${s.other_utility.toFixed(1).padStart(5)}  ${s.total_utility_0_100.toFixed(1).padStart(5)}  ${s.worst_stakeholder_utility_0_100.toFixed(1).padStart(5)}  ${s.utility_variance_0_100.toFixed(1).padStart(8)} | ${s.self_u.toFixed(3)}    ${s.other_u.toFixed(3)} | ${pct(s.consensus)}     ${c === "negotiatev2" ? pct(s.settled) : "-"}`
   );
 }
 console.log(`\nmean achievable utility band per case: self ${summary.single.band_self.toFixed(3)}, other ${summary.single.band_other.toFixed(3)}`);

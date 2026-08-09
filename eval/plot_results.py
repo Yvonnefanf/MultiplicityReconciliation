@@ -1,25 +1,16 @@
 #!/usr/bin/env python3
-"""plot_results.py — figure for the headless modeling eval.
+"""plot_results.py — figures for the headless conflict-only modelling eval.
 
-Two rows, because the full sample dilutes the effect: in 81.6% of
-case x persona-pair runs the two sides' optimal models already predict the
-same class, and no mechanism can improve on agreement that is already there.
-
-  Row 1  all runs
-  Row 2  conflicting runs only — the two sides' own optima disagree, which is
-         where reconciliation is the thing under test
-
-  Left   grouped bars: mean Self / Other / Joint utility of the deployed model
-  Right  consensus rate (both sides end standing behind the same prediction)
-
-Palette (validated: CVD dE 24.7, normal dE 33.6, all >= 3:1 on #fcfcfb):
-  Self #2a78d6   Other #eb6834   Joint #4a3aa7   Consensus #1baf7a
+The modelling CSV is restricted to runs where Self's optimal model and Other's
+optimal model recommend different labels. The figure shows all five conditions
+and all core evaluation metrics with 95% CI error bars.
 """
 
 import csv
 import json
+import math
 import sys
-from collections import Counter, defaultdict
+from collections import defaultdict
 from pathlib import Path
 
 import matplotlib
@@ -28,170 +19,186 @@ import matplotlib.pyplot as plt
 
 REPO = Path(__file__).resolve().parent.parent
 RESULTS = REPO / "eval" / "results"
-OUT = RESULTS / "modeling_eval.png"
 
 CONDITIONS = ["single", "singleoptimal", "multioptimal", "aggregate", "negotiatev2"]
-COND_LABELS = ["Ignore", "Self-\nOptimal", "Multi-\nOptimal", "Aggregate", "Negotiate"]
-METRICS = (
-    "self_u", "other_u", "joint_mean", "joint_min",
-    "self_n", "other_n", "joint_n", "band_self",
-    "consensus", "settled",
-)
+COND_LABELS = ["Ignore", "Self\nOptimal", "Multi\nOptimal", "Aggregate", "Negotiate"]
+COND_COLORS = ["#69707a", "#2a78d6", "#7b61b8", "#e18b2d", "#1baf7a"]
+
+METRICS = [
+    ("self_utility", "Self Utility", "normalized utility of final selected model for Self", "higher"),
+    ("other_utility", "Other Utility", "normalized utility of final selected model for Other", "higher"),
+    ("total_utility_0_100", "Total Utility", "mean of normalized Self and Other utility", "higher"),
+    ("worst_stakeholder_utility_0_100", "Worst-Stakeholder Utility", "lower of normalized Self/Other utility", "higher"),
+    ("utility_variance_0_100", "Stakeholder Utility Variance", "variance of normalized Self/Other utility", "lower"),
+    ("consensus", "Consensus Rate", "same final prediction/stance", "higher"),
+]
 
 SURFACE = "#fcfcfb"
 TEXT_PRIMARY = "#0b0b0b"
 TEXT_SECONDARY = "#52514e"
 GRID = "#e6e5e2"
-C_SELF, C_OTHER, C_JOINT, C_CONSENSUS = "#2a78d6", "#eb6834", "#4a3aa7", "#1baf7a"
+
+
+def parse_args():
+    only = None
+    out_name = None
+    if "--dataset" in sys.argv:
+        only = sys.argv[sys.argv.index("--dataset") + 1]
+    if "--out" in sys.argv:
+        out_name = sys.argv[sys.argv.index("--out") + 1]
+    return only, out_name
+
+
+def mean_ci(values):
+    vals = [float(v) for v in values]
+    n = len(vals)
+    if n == 0:
+        return {"mean": 0.0, "ci95": 0.0, "sd": 0.0, "n": 0}
+    mean = sum(vals) / n
+    if n == 1:
+        return {"mean": mean, "ci95": 0.0, "sd": 0.0, "n": 1}
+    var = sum((v - mean) ** 2 for v in vals) / (n - 1)
+    sd = math.sqrt(var)
+    return {"mean": mean, "ci95": 1.96 * sd / math.sqrt(n), "sd": sd, "n": n}
 
 
 def aggregate(rows):
-    totals = defaultdict(lambda: defaultdict(float))
-    n = Counter()
+    grouped = defaultdict(list)
     for r in rows:
-        c = r["condition"]
-        n[c] += 1
-        for k in METRICS:
-            totals[c][k] += float(r[k] or 0)
-    return {c: {k: totals[c][k] / n[c] for k in METRICS} | {"n": n[c]} for c in CONDITIONS}
+        for key, *_ in METRICS:
+            grouped[(r["condition"], key)].append(r[key])
+    return {c: {key: mean_ci(grouped[(c, key)]) for key, *_ in METRICS} for c in CONDITIONS}
 
 
-def draw_row(ax_u, ax_c, agg, row_title, note, show_legend):
-    for ax in (ax_u, ax_c):
-        ax.set_facecolor(SURFACE)
-        for side in ("top", "right", "left"):
-            ax.spines[side].set_visible(False)
-        ax.spines["bottom"].set_color(GRID)
-        ax.tick_params(colors=TEXT_SECONDARY, labelsize=9, length=0)
-        ax.yaxis.grid(True, color=GRID, linewidth=0.8)
-        ax.set_axisbelow(True)
+def style_axis(ax):
+    ax.set_facecolor(SURFACE)
+    for side in ("top", "right", "left"):
+        ax.spines[side].set_visible(False)
+    ax.spines["bottom"].set_color(GRID)
+    ax.tick_params(colors=TEXT_SECONDARY, labelsize=8.5, length=0)
+    ax.yaxis.grid(True, color=GRID, linewidth=0.8)
+    ax.set_axisbelow(True)
 
+
+def draw_metric(ax, stats, metric):
+    key, title, subtitle, direction = metric
+    style_axis(ax)
     x = list(range(len(CONDITIONS)))
-    w = 0.26
-    for i, (label, color, key) in enumerate(
-        [("Self utility", C_SELF, "self_n"), ("Other utility", C_OTHER, "other_n"), ("Joint utility", C_JOINT, "joint_n")]
-    ):
-        ax_u.bar(
-            [xi + (i - 1) * (w + 0.02) for xi in x],
-            [agg[c][key] for c in CONDITIONS],
-            width=w,
-            color=color,
-            label=label,
-            edgecolor=SURFACE,
-            linewidth=1.0,
-            zorder=3,
-        )
-    ax_u.set_xticks(x)
-    ax_u.set_xticklabels(COND_LABELS, color=TEXT_PRIMARY, fontsize=9.5)
-    ax_u.set_ylim(0, 1.0)
-    ax_u.set_yticks([0, 0.25, 0.5, 0.75, 1.0])
-    ax_u.set_yticklabels(["0%", "25%", "50%", "75%", "100%"])
-    ax_u.set_title(
-        f"{row_title} — utility captured, as a share of what the case could deliver",
-        color=TEXT_PRIMARY, fontsize=10.5, loc="left", pad=26 if show_legend else 10,
+    means = [stats[c][key]["mean"] for c in CONDITIONS]
+    cis = [stats[c][key]["ci95"] for c in CONDITIONS]
+    ax.bar(
+        x,
+        means,
+        yerr=cis,
+        capsize=3.2,
+        width=0.68,
+        color=COND_COLORS,
+        edgecolor=SURFACE,
+        linewidth=1.0,
+        error_kw={"elinewidth": 1.0, "ecolor": TEXT_PRIMARY, "capthick": 1.0},
+        zorder=3,
     )
-    if show_legend:
-        ax_u.legend(
-            loc="lower left", bbox_to_anchor=(0, 1.005), ncol=3, frameon=False,
-            fontsize=8.5, labelcolor=TEXT_SECONDARY, handlelength=1.1,
-            handleheight=1.1, borderaxespad=0, columnspacing=1.2,
-        )
+    ax.set_xticks(x)
+    ax.set_xticklabels(COND_LABELS, color=TEXT_PRIMARY, fontsize=8.8)
+    ax.set_title(title, color=TEXT_PRIMARY, fontsize=10.5, loc="left", pad=17)
+    ax.text(0, 1.02, subtitle, transform=ax.transAxes, fontsize=7.5, color=TEXT_SECONDARY, va="bottom")
 
-    consensus = [agg[c]["consensus"] for c in CONDITIONS]
-    ax_c.bar(x, consensus, width=0.66, color=C_CONSENSUS, edgecolor=SURFACE, linewidth=1.0, zorder=3)
-    for xi, v in zip(x, consensus):
-        ax_c.text(xi, v + 0.025, f"{v * 100:.0f}%", ha="center", va="bottom", fontsize=9, color=TEXT_PRIMARY)
-    settle = agg["negotiatev2"]["settled"]
-    if consensus[-1] > 0.3:
-        ax_c.text(x[-1], consensus[-1] / 2, f"settled\n{settle * 100:.0f}%", ha="center", va="center", fontsize=7, color=SURFACE, linespacing=1.4)
-    ax_c.set_xticks(x)
-    ax_c.set_xticklabels(COND_LABELS, color=TEXT_PRIMARY, fontsize=9.5)
-    ax_c.set_ylim(0, 1.0)
-    ax_c.set_yticks([0, 0.25, 0.5, 0.75, 1.0])
-    ax_c.set_yticklabels(["0%", "25%", "50%", "75%", "100%"])
-    ax_c.set_title(
-        f"{row_title} — both sides behind the same prediction",
-        color=TEXT_PRIMARY, fontsize=10.5, loc="left", pad=26 if show_legend else 10,
-    )
-    ax_c.text(
-        0.0, -0.19, note, transform=ax_c.transAxes, fontsize=7.5, color=TEXT_SECONDARY, va="top",
-    )
+    top = max((m + ci for m, ci in zip(means, cis)), default=1)
+    bottom = min((m - ci for m, ci in zip(means, cis)), default=0)
+    if key == "consensus":
+        ax.set_ylim(0, 1.0)
+        ax.set_yticks([0, 0.25, 0.5, 0.75, 1.0])
+        ax.set_yticklabels(["0%", "25%", "50%", "75%", "100%"])
+        for xi, v in zip(x, means):
+            ax.text(xi, min(v + 0.035, 0.98), f"{v * 100:.1f}%", ha="center", va="bottom", fontsize=7.2, color=TEXT_PRIMARY)
+    else:
+        pad = (top - bottom) * 0.18 if top > bottom else 0.05
+        ax.set_ylim(max(0, bottom - pad), top + pad)
+        for xi, v in zip(x, means):
+            label = f"{v:.1f}" if key.endswith("_0_100") or key in ("self_utility", "other_utility") else f"{v:.3f}"
+            ax.text(xi, v + pad * 0.14, label, ha="center", va="bottom", fontsize=6.8, color=TEXT_PRIMARY)
+    if key in ("self_utility", "other_utility", "total_utility_0_100", "worst_stakeholder_utility_0_100"):
+        ax.set_ylabel("0-100 normalized utility", fontsize=8, color=TEXT_SECONDARY)
+    if direction == "lower":
+        ax.text(0.995, 1.02, "lower is better", transform=ax.transAxes, fontsize=7.2, color=TEXT_SECONDARY, ha="right", va="bottom")
 
 
-def table(title, agg):
-    band = agg["single"]["band_self"]
-    lines = [
-        f"\n== {title}   (n = {agg[CONDITIONS[0]]['n']:,} per condition; "
-        f"mean achievable band {band:.3f} wide)",
-        f"{'':<15}{'--- raw utility ---':>25}   {'--- share of band ---':>23}",
-        f"{'condition':<15}{'self':>8}{'other':>8}{'joint':>9}   {'self':>7}{'other':>8}{'joint':>8}{'consensus':>12}",
-    ]
-    for c, label in zip(CONDITIONS, ["Ignore", "Self-Optimal", "Multi-Optimal", "Aggregate", "Negotiate"]):
-        s = agg[c]
+def write_metric_summary(stats, path, dataset_label):
+    fields = ["dataset", "condition", "metric", "mean", "ci95", "sd", "n"]
+    with path.open("w", newline="") as f:
+        writer = csv.writer(f)
+        writer.writerow(fields)
+        for c in CONDITIONS:
+            for key, *_ in METRICS:
+                s = stats[c][key]
+                writer.writerow([dataset_label, c, key, s["mean"], s["ci95"], s["sd"], s["n"]])
+
+
+def table(stats, dataset_label):
+    lines = [f"\n== CONFLICTING-LABEL MODELLING METRICS [{dataset_label}] =="]
+    lines.append(f"{'condition':<15}{'self':>9}{'other':>9}{'total':>10}{'worst':>10}{'variance':>12}{'consensus':>12}{'n':>9}")
+    labels = ["Ignore", "Self-Optimal", "Multi-Optimal", "Aggregate", "Negotiate"]
+    for c, label in zip(CONDITIONS, labels):
+        self_s = stats[c]["self_utility"]
+        other_s = stats[c]["other_utility"]
+        total = stats[c]["total_utility_0_100"]
+        worst = stats[c]["worst_stakeholder_utility_0_100"]
+        var = stats[c]["utility_variance_0_100"]
+        consensus = stats[c]["consensus"]
         lines.append(
-            f"{label:<15}{s['self_u']:8.3f}{s['other_u']:8.3f}{s['joint_mean']:9.3f}   "
-            f"{s['self_n'] * 100:6.1f}%{s['other_n'] * 100:7.1f}%{s['joint_n'] * 100:7.1f}%{s['consensus'] * 100:11.1f}%"
+            f"{label:<15}{self_s['mean']:9.3f}{other_s['mean']:9.3f}{total['mean']:10.3f}{worst['mean']:10.3f}{var['mean']:12.4f}{consensus['mean'] * 100:11.1f}%{total['n']:9,}"
         )
     return "\n".join(lines)
 
 
 def main():
-    # --dataset X restricts the figure to one dataset. Runs are independent per
-    # case, so filtering the pooled CSV is identical to re-running the sweep
-    # with --datasets X, without paying for it again.
-    only = None
-    if "--dataset" in sys.argv:
-        only = sys.argv[sys.argv.index("--dataset") + 1]
-
+    only, out_name = parse_args()
     rows = list(csv.DictReader((RESULTS / "runs.csv").open()))
-    meta = json.loads((RESULTS / "summary.json").read_text())
     if only:
         rows = [r for r in rows if r["dataset"] == only]
         if not rows:
-            sys.exit(f"no runs for dataset {only!r}; have: {sorted({r['dataset'] for r in rows})}")
-        meta["datasets"] = [only]
+            raise SystemExit(f"no rows for dataset {only!r}")
+    dataset_label = only or "pooled_conflicting_labels"
+    stats = aggregate(rows)
 
-    # A run "conflicts" when the two sides' own optimal models predict different
-    # classes — a per (dataset, case, self, other) property, condition-independent.
-    rid = lambda r: (r["dataset"], r["case"], r["self"], r["other"])
-    conflicted = {rid(r) for r in rows if r["condition"] == "singleoptimal" and r["consensus"] == "0"}
-    conflict_rows = [r for r in rows if rid(r) in conflicted]
-
-    agg_all = aggregate(rows)
-    agg_conflict = aggregate(conflict_rows)
-    share = len(conflicted) / (len(rows) / len(CONDITIONS))
-
-    fig, axes = plt.subplots(2, 2, figsize=(12.8, 8.4), dpi=200, width_ratios=[1.35, 1.0])
+    fig, axes = plt.subplots(2, 3, figsize=(15.2, 8.2), dpi=220)
     fig.patch.set_facecolor(SURFACE)
-    draw_row(
-        axes[0][0], axes[0][1], agg_all, "All runs",
-        f"n = {agg_all['single']['n']:,} per condition · every test case × every ordered persona pair",
-        show_legend=True,
-    )
-    draw_row(
-        axes[1][0], axes[1][1], agg_conflict, "Conflicting runs",
-        f"n = {agg_conflict['single']['n']:,} per condition ({share * 100:.1f}% of runs) · "
-        "the two sides' own optimal models predict different classes",
-        show_legend=False,
+    for ax, metric in zip(axes.ravel(), METRICS):
+        draw_metric(ax, stats, metric)
+
+    n_per_condition = stats[CONDITIONS[0]][METRICS[0][0]]["n"]
+    try:
+        meta = json.loads((RESULTS / "summary.json").read_text())
+        dataset_note = ", ".join(meta.get("datasets", []))
+        setting_note = f"aggregate self share = {meta.get('aggregate_self_share_min', '')}-{meta.get('aggregate_self_share_max', '')}; multi-optimal Self own-model prob = {meta.get('multioptimal_self_own_prob', '')}"
+    except Exception:
+        dataset_note = dataset_label
+        setting_note = ""
+    fig.suptitle(
+        f"Modelling evaluation over conflicting self/other recommendations: {dataset_label.replace('_', ' ')}",
+        x=0.01,
+        ha="left",
+        fontsize=14,
+        color=TEXT_PRIMARY,
+        fontweight="bold",
     )
     fig.text(
-        0.008, 0.012,
-        f"Datasets: {', '.join(meta['datasets'])} · utility = the app's weighted-criteria utility, normalized per case "
-        f"(0% = worst model available, 100% = best for that side; mean band {agg_all['single']['band_self']:.3f} wide) · "
-        "no LLM: both negotiators are the production engine's policy",
-        fontsize=7.5, color=TEXT_SECONDARY,
+        0.01,
+        0.014,
+        f"Datasets: {dataset_note} · n = {n_per_condition:,} runs per condition · utilities normalized to 0-100 per case/persona · error bars are 95% CI · {setting_note}",
+        fontsize=8,
+        color=TEXT_SECONDARY,
     )
-    fig.tight_layout(rect=(0, 0.03, 1, 1), h_pad=3.4)
-    out = OUT.with_name(f"modeling_eval_{only}.png") if only else OUT
-    fig.savefig(out, facecolor=SURFACE, bbox_inches="tight")
-    print(f"wrote {out}")
+    fig.tight_layout(rect=(0, 0.045, 1, 0.93), h_pad=2.6, w_pad=2.0)
 
-    scope = f" [{only} only]" if only else ""
-    print(table(f"ALL RUNS{scope}", agg_all))
-    print(table(f"CONFLICTING RUNS ({share * 100:.1f}% of runs){scope}", agg_conflict))
-    (RESULTS / f"summary_subgroups{'_' + only if only else ''}.json").write_text(
-        json.dumps({"dataset": only or "pooled", "conflict_share": share, "all": agg_all, "conflict": agg_conflict}, indent=2)
-    )
+    out = RESULTS / (out_name or (f"modeling_eval_{only}.png" if only else "modeling_eval.png"))
+    fig.savefig(out, facecolor=SURFACE, bbox_inches="tight")
+
+    summary_csv = RESULTS / (f"modeling_metrics_summary_{only}.csv" if only else "modeling_metrics_summary.csv")
+    write_metric_summary(stats, summary_csv, dataset_label)
+    print(f"wrote {out}")
+    print(f"wrote {summary_csv}")
+    print(table(stats, dataset_label))
 
 
 if __name__ == "__main__":
