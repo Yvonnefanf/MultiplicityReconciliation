@@ -24,7 +24,7 @@ CONDITIONS = ["single", "singleoptimal", "multioptimal", "aggregate", "negotiate
 COND_LABELS = ["Ignore", "Self\nOptimal", "Multi\nOptimal", "Aggregate", "Negotiate"]
 COND_COLORS = ["#69707a", "#2a78d6", "#7b61b8", "#e18b2d", "#1baf7a"]
 
-METRICS = [
+BASE_METRICS = [
     ("self_utility", "Self Utility", "normalized utility of final selected model for Self", "higher"),
     ("other_utility", "Other Utility", "normalized utility of final selected model for Other", "higher"),
     ("total_utility_0_100", "Total Utility", "mean of normalized Self and Other utility", "higher"),
@@ -32,6 +32,17 @@ METRICS = [
     ("utility_variance_0_100", "Stakeholder Utility Variance", "variance of normalized Self/Other utility", "lower"),
     ("consensus", "Consensus Rate", "same final prediction/stance", "higher"),
 ]
+
+BY_LABEL_METRICS = [
+    ("self_utility_by_label", "Self Utility By Label", "normalized utility of final decision label for Self", "higher"),
+    ("other_utility_by_label", "Other Utility By Label", "normalized utility of final decision label for Other", "higher"),
+    ("total_utility_0_100_by_label", "Total Utility By Label", "mean of normalized Self and Other label utility", "higher"),
+    ("worst_stakeholder_utility_0_100_by_label", "Worst-Stakeholder Utility By Label", "lower of normalized Self/Other label utility", "higher"),
+    ("utility_variance_0_100_by_label", "Stakeholder Utility Variance By Label", "variance of normalized Self/Other label utility", "lower"),
+    ("consensus", "Consensus Rate", "same final prediction/stance", "higher"),
+]
+
+METRICS = BASE_METRICS
 
 SURFACE = "#fcfcfb"
 TEXT_PRIMARY = "#0b0b0b"
@@ -42,11 +53,12 @@ GRID = "#e6e5e2"
 def parse_args():
     only = None
     out_name = None
+    by_label = "--by-label" in sys.argv or "--by_label" in sys.argv
     if "--dataset" in sys.argv:
         only = sys.argv[sys.argv.index("--dataset") + 1]
     if "--out" in sys.argv:
         out_name = sys.argv[sys.argv.index("--out") + 1]
-    return only, out_name
+    return only, out_name, by_label
 
 
 def mean_ci(values):
@@ -115,9 +127,14 @@ def draw_metric(ax, stats, metric):
         pad = (top - bottom) * 0.18 if top > bottom else 0.05
         ax.set_ylim(max(0, bottom - pad), top + pad)
         for xi, v in zip(x, means):
-            label = f"{v:.1f}" if key.endswith("_0_100") or key in ("self_utility", "other_utility") else f"{v:.3f}"
+            is_utility_100 = key.endswith("_0_100") or key.endswith("_0_100_by_label") or key in ("self_utility", "other_utility", "self_utility_by_label", "other_utility_by_label")
+            label = f"{v:.1f}" if is_utility_100 else f"{v:.3f}"
             ax.text(xi, v + pad * 0.14, label, ha="center", va="bottom", fontsize=6.8, color=TEXT_PRIMARY)
-    if key in ("self_utility", "other_utility", "total_utility_0_100", "worst_stakeholder_utility_0_100"):
+    utility_keys = (
+        "self_utility", "other_utility", "total_utility_0_100", "worst_stakeholder_utility_0_100",
+        "self_utility_by_label", "other_utility_by_label", "total_utility_0_100_by_label", "worst_stakeholder_utility_0_100_by_label",
+    )
+    if key in utility_keys:
         ax.set_ylabel("0-100 normalized utility", fontsize=8, color=TEXT_SECONDARY)
     if direction == "lower":
         ax.text(0.995, 1.02, "lower is better", transform=ax.transAxes, fontsize=7.2, color=TEXT_SECONDARY, ha="right", va="bottom")
@@ -134,16 +151,24 @@ def write_metric_summary(stats, path, dataset_label):
                 writer.writerow([dataset_label, c, key, s["mean"], s["ci95"], s["sd"], s["n"]])
 
 
-def table(stats, dataset_label):
-    lines = [f"\n== CONFLICTING-LABEL MODELLING METRICS [{dataset_label}] =="]
+def table(stats, dataset_label, by_label=False):
+    label_note = " BY FINAL LABEL" if by_label else ""
+    lines = [f"\n== CONFLICTING-LABEL MODELLING METRICS{label_note} [{dataset_label}] =="]
     lines.append(f"{'condition':<15}{'self':>9}{'other':>9}{'total':>10}{'worst':>10}{'variance':>12}{'consensus':>12}{'n':>9}")
     labels = ["Ignore", "Self-Optimal", "Multi-Optimal", "Aggregate", "Negotiate"]
+    keys = {
+        "self": "self_utility_by_label" if by_label else "self_utility",
+        "other": "other_utility_by_label" if by_label else "other_utility",
+        "total": "total_utility_0_100_by_label" if by_label else "total_utility_0_100",
+        "worst": "worst_stakeholder_utility_0_100_by_label" if by_label else "worst_stakeholder_utility_0_100",
+        "var": "utility_variance_0_100_by_label" if by_label else "utility_variance_0_100",
+    }
     for c, label in zip(CONDITIONS, labels):
-        self_s = stats[c]["self_utility"]
-        other_s = stats[c]["other_utility"]
-        total = stats[c]["total_utility_0_100"]
-        worst = stats[c]["worst_stakeholder_utility_0_100"]
-        var = stats[c]["utility_variance_0_100"]
+        self_s = stats[c][keys["self"]]
+        other_s = stats[c][keys["other"]]
+        total = stats[c][keys["total"]]
+        worst = stats[c][keys["worst"]]
+        var = stats[c][keys["var"]]
         consensus = stats[c]["consensus"]
         lines.append(
             f"{label:<15}{self_s['mean']:9.3f}{other_s['mean']:9.3f}{total['mean']:10.3f}{worst['mean']:10.3f}{var['mean']:12.4f}{consensus['mean'] * 100:11.1f}%{total['n']:9,}"
@@ -152,7 +177,9 @@ def table(stats, dataset_label):
 
 
 def main():
-    only, out_name = parse_args()
+    global METRICS
+    only, out_name, by_label = parse_args()
+    METRICS = BY_LABEL_METRICS if by_label else BASE_METRICS
     rows = list(csv.DictReader((RESULTS / "runs.csv").open()))
     if only:
         rows = [r for r in rows if r["dataset"] == only]
@@ -174,8 +201,9 @@ def main():
     except Exception:
         dataset_note = dataset_label
         setting_note = ""
+    metric_scope = "final decision label" if by_label else "final selected model"
     fig.suptitle(
-        f"Modelling evaluation over conflicting self/other recommendations: {dataset_label.replace('_', ' ')}",
+        f"Modelling evaluation over conflicting self/other recommendations ({metric_scope}): {dataset_label.replace('_', ' ')}",
         x=0.01,
         ha="left",
         fontsize=14,
@@ -191,14 +219,15 @@ def main():
     )
     fig.tight_layout(rect=(0, 0.045, 1, 0.93), h_pad=2.6, w_pad=2.0)
 
-    out = RESULTS / (out_name or (f"modeling_eval_{only}.png" if only else "modeling_eval.png"))
+    suffix = "_by_label" if by_label else ""
+    out = RESULTS / (out_name or (f"modeling_eval_{only}{suffix}.png" if only else f"modeling_eval{suffix}.png"))
     fig.savefig(out, facecolor=SURFACE, bbox_inches="tight")
 
-    summary_csv = RESULTS / (f"modeling_metrics_summary_{only}.csv" if only else "modeling_metrics_summary.csv")
+    summary_csv = RESULTS / (f"modeling_metrics_summary_{only}{suffix}.csv" if only else f"modeling_metrics_summary{suffix}.csv")
     write_metric_summary(stats, summary_csv, dataset_label)
     print(f"wrote {out}")
     print(f"wrote {summary_csv}")
-    print(table(stats, dataset_label))
+    print(table(stats, dataset_label, by_label))
 
 
 if __name__ == "__main__":

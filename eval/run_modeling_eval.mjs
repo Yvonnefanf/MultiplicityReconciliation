@@ -297,6 +297,57 @@ function achievableBand(S, models, w) {
   return { lo, hi };
 }
 
+function decisionGroupForLabel(data, label) {
+  const groups = data?.reconciliation?.groups || [];
+  return groups.find((g) => Number(g.class_id) === Number(label)) || null;
+}
+
+function decisionSummaryForLabel(data, label) {
+  const summary = Array.isArray(data?.summary) ? data.summary : [];
+  return summary.find((g) => Number(g.class_id) === Number(label)) || null;
+}
+
+function decisionFairnessForLabel(data, label) {
+  const group = decisionGroupForLabel(data, label);
+  const summary = decisionSummaryForLabel(data, label);
+  const candidates = [
+    group?.criteria?.local_consistency,
+    group?.fairness_components?.local_consistency,
+    summary?.avg_local_consistency,
+    summary?.avg_similar_100_case_fairness,
+  ];
+  for (const value of candidates) {
+    const numeric = Number(value);
+    if (Number.isFinite(numeric)) return numeric;
+  }
+  return 0;
+}
+
+function decisionForLabel(data, label, trueLabel) {
+  const pred = Number(label);
+  const truth = Number(trueLabel);
+  const isCorrect = Number.isFinite(truth) && pred === truth ? 1 : 0;
+  const isPositiveDecision = pred === 1 ? 1 : 0;
+  const isNegativeDecision = pred === 0 ? 1 : 0;
+  return {
+    pred_class: pred,
+    subgroup_accuracy: isCorrect,
+    local_accuracy: isCorrect,
+    subgroup_tpr: isPositiveDecision,
+    local_tpr: isPositiveDecision,
+    subgroup_tnr: isNegativeDecision,
+    local_tnr: isNegativeDecision,
+    local_consistency: decisionFairnessForLabel(data, pred),
+  };
+}
+
+function decisionLabelOptions(data, trueLabel) {
+  const labels = new Set([0, 1]);
+  for (const group of data?.reconciliation?.groups || []) labels.add(Number(group.class_id));
+  for (const label of data?.label_names?.keys?.() || []) labels.add(Number(label));
+  return [...labels].filter((label) => Number.isFinite(label)).sort((a, b) => a - b).map((label) => decisionForLabel(data, label, trueLabel));
+}
+
 function score(S, outcome, latentSelfBest, latentOtherBest, bands) {
   const selfW = S.weightsFor("self");
   const otherW = S.weightsFor("other");
@@ -352,6 +403,70 @@ function score(S, outcome, latentSelfBest, latentOtherBest, bands) {
   };
 }
 
+function scoreByLabel(S, outcome, decisionOptions, labelBands) {
+  const label = predOf(outcome.deployed);
+  const selfW = S.weightsFor("self");
+  const otherW = S.weightsFor("other");
+  const norm = (u, b) => (b.hi - b.lo > 1e-9 ? (u - b.lo) / (b.hi - b.lo) : 1);
+  const scored = Object.fromEntries(decisionOptions.map((decision) => {
+    const decisionLabel = predOf(decision);
+    const selfUForLabel = S.utility(decision, selfW);
+    const otherUForLabel = S.utility(decision, otherW);
+    return [decisionLabel, {
+      selfU: selfUForLabel,
+      otherU: otherUForLabel,
+      selfN: norm(selfUForLabel, labelBands.self),
+      otherN: norm(otherUForLabel, labelBands.other),
+    }];
+  }));
+  const chosen = scored[label] || scored[predOf(decisionOptions[0])];
+  const label0 = scored[0] || { selfU: 0, otherU: 0, selfN: 0, otherN: 0 };
+  const label1 = scored[1] || { selfU: 0, otherU: 0, selfN: 0, otherN: 0 };
+  const selfU = chosen.selfU;
+  const otherU = chosen.otherU;
+  const selfN = chosen.selfN;
+  const otherN = chosen.otherN;
+  const totalU = selfU + otherU;
+  const totalN = selfN + otherN;
+  const worstU = Math.min(selfU, otherU);
+  const worstN = Math.min(selfN, otherN);
+  const meanU = totalU / 2;
+  const meanN = totalN / 2;
+  const utilityVariance = ((selfU - meanU) ** 2 + (otherU - meanU) ** 2) / 2;
+  const utilityVarianceN = ((selfN - meanN) ** 2 + (otherN - meanN) ** 2) / 2;
+  return {
+    self_utility_by_label: selfN * 100,
+    other_utility_by_label: otherN * 100,
+    total_utility_0_100_by_label: meanN * 100,
+    worst_stakeholder_utility_0_100_by_label: worstN * 100,
+    utility_variance_0_100_by_label: utilityVarianceN * 10000,
+    self_u_by_label: selfU,
+    other_u_by_label: otherU,
+    total_utility_by_label: totalU,
+    worst_stakeholder_utility_by_label: worstU,
+    utility_variance_by_label: utilityVariance,
+    joint_mean_by_label: meanU,
+    joint_min_by_label: worstU,
+    joint_nash_by_label: Math.max(0, selfU) * Math.max(0, otherU),
+    self_n_by_label: selfN,
+    other_n_by_label: otherN,
+    total_utility_n_by_label: totalN,
+    worst_stakeholder_utility_n_by_label: worstN,
+    utility_variance_n_by_label: utilityVarianceN,
+    joint_n_by_label: meanN,
+    band_self_by_label: labelBands.self.hi - labelBands.self.lo,
+    band_other_by_label: labelBands.other.hi - labelBands.other.lo,
+    self_u_label_0_by_label: label0.selfU,
+    self_u_label_1_by_label: label1.selfU,
+    other_u_label_0_by_label: label0.otherU,
+    other_u_label_1_by_label: label1.otherU,
+    self_n_label_0_by_label: label0.selfN,
+    self_n_label_1_by_label: label1.selfN,
+    other_n_label_0_by_label: label0.otherN,
+    other_n_label_1_by_label: label1.otherN,
+  };
+}
+
 /* ---------------- sweep ---------------- */
 
 const S = buildSandbox();
@@ -364,6 +479,10 @@ const CONDITIONS = ["single", "singleoptimal", "multioptimal", "aggregate", "neg
 const rows = [];
 let skippedNonConflicting = 0;
 const t0 = Date.now();
+
+const testLabelsByDataset = Object.fromEntries(
+  DATASETS.map((ds) => [ds, JSON.parse(read(`data/${ds}/test_labels.json`)).labels || []])
+);
 
 for (const ds of DATASETS) {
   const caseList = JSON.parse(read(`data/${ds}/cases.json`)).slice(0, LIMIT);
@@ -394,6 +513,12 @@ for (const ds of DATASETS) {
         self: achievableBand(S, data.models || [], S.weightsFor("self")),
         other: achievableBand(S, data.models || [], S.weightsFor("other")),
       };
+      const trueLabel = testLabelsByDataset[ds]?.[idx];
+      const decisionOptions = decisionLabelOptions(data, trueLabel);
+      const labelBands = {
+        self: achievableBand(S, decisionOptions, S.weightsFor("self")),
+        other: achievableBand(S, decisionOptions, S.weightsFor("other")),
+      };
       for (const condition of CONDITIONS) {
         const outcome =
           condition === "single" ? runSingle(S, data, ds)
@@ -402,6 +527,7 @@ for (const ds of DATASETS) {
           : condition === "aggregate" ? runAggregate(S, AGGREGATE_SELF_SHARE_MIN + stableUnitInterval(ds, idx, selfP.key, otherP.key, "aggregate") * (AGGREGATE_SELF_SHARE_MAX - AGGREGATE_SELF_SHARE_MIN))
           : runNegotiate(S);
         const m = score(S, outcome, latentSelfBest, latentOtherBest, bands);
+        const labelM = scoreByLabel(S, outcome, decisionOptions, labelBands);
         rows.push({
           dataset: ds,
           case: idx,
@@ -419,6 +545,7 @@ for (const ds of DATASETS) {
           multioptimal_self_own_prob: condition === "multioptimal" ? MULTIOPTIMAL_SELF_OWN_PROB : "",
           multioptimal_chose_self_model: condition === "multioptimal" ? (multioptimalChooseSelf ? 1 : 0) : "",
           ...m,
+          ...labelM,
         });
       }
     }
@@ -445,6 +572,11 @@ const SUMMARY_KEYS = [
   "joint_mean", "joint_min", "joint_nash",
   "self_n", "other_n", "total_utility_n", "worst_stakeholder_utility_n", "utility_variance_n",
   "joint_n", "band_self", "band_other",
+  "self_utility_by_label", "other_utility_by_label", "total_utility_0_100_by_label", "worst_stakeholder_utility_0_100_by_label", "utility_variance_0_100_by_label",
+  "self_u_by_label", "other_u_by_label", "total_utility_by_label", "worst_stakeholder_utility_by_label", "utility_variance_by_label",
+  "joint_mean_by_label", "joint_min_by_label", "joint_nash_by_label",
+  "self_n_by_label", "other_n_by_label", "total_utility_n_by_label", "worst_stakeholder_utility_n_by_label", "utility_variance_n_by_label",
+  "joint_n_by_label", "band_self_by_label", "band_other_by_label",
   "consensus", "settled",
 ];
 const byCondition = {};

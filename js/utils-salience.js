@@ -2,7 +2,7 @@
    Part of the Negotiated Rashomon Reconciliation app. Loaded as an ordered
    classic script; all top-level declarations share one global scope. */
 
-    const STATIC_DATA_VERSION = "20260725-nv2-model-negotiation";
+    const STATIC_DATA_VERSION = "20260813-summative-data";
 
     function staticApiUrl(url) {
       if (url === "/api/datasets") return "data/datasets.json";
@@ -14,9 +14,9 @@
       if (match) return `data/${match[1]}/tutorial_case.json`;
       // The fixed study assignment: one folder per role, one file per case id.
       match = url.match(/^\/api\/([^/]+)\/exp\/([^/]+)$/);
-      if (match) return `exp_data/${match[1]}/${match[2]}/index.json`;
+      if (match) return `summative_data/${match[1]}/${match[2]}/index.json`;
       match = url.match(/^\/api\/([^/]+)\/exp\/([^/]+)\/(\d+)$/);
-      if (match) return `exp_data/${match[1]}/${match[2]}/${match[3]}.json`;
+      if (match) return `summative_data/${match[1]}/${match[2]}/${match[3]}.json`;
       match = url.match(/^\/api\/([^/]+)\/cases\/(\d+)$/);
       if (match) return `data/${match[1]}/cases/${match[2]}.json`;
       return url;
