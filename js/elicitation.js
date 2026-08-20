@@ -6,9 +6,9 @@
    only turns what the URL hands over into the state the negotiation reads. */
 
     // Who the other stakeholder is comes from the case file, not from a draw and
-    // not from ?other=: exp_data pins one opponent per (role, case id), so the
+    // not from ?other=: Final_summative_study pins one opponent per (role, case id), so the
     // participant's role and the case id determine the whole screen. See
-    // scripts/build_exp_data.py.
+    // eval/build_final_summative_study.py.
     function assignedOtherPersonaKey() {
       const key = normalizePersonaKey(activeData?.assignment?.other_role);
       return personaTypes[key] ? key : null;

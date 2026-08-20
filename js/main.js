@@ -23,7 +23,7 @@
       const role = ensurePersonaKey();
       const index = await fetchJson(`/api/${dataset}/exp/${role}`).catch(() => null);
       if (!index?.cases?.length) {
-        console.warn(`No assignment at exp_data/${dataset}/${role}/ -- falling back to the full case tree.`);
+        console.warn(`No assignment at Final_summative_study/${dataset}/${role}/ -- falling back to the full case tree.`);
         return null;
       }
       return index;
@@ -37,7 +37,7 @@
       setLoading("Loading cases...");
       modelGlobalMetrics = await fetchJson(`/api/${dataset}/model-global-metrics`).catch(() => null);
       // The study runs off the fixed assignment: the participant's role picks
-      // the folder, ?case= is the 0..17 id within it, and the case list is that
+      // the folder, ?case= is the role-local case id within it, and the case list is that
       // folder's index. Only a link with no usable role falls back to browsing
       // the full case tree.
       experimentIndex = await loadExperimentIndex(dataset);

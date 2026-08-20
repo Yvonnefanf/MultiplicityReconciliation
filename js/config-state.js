@@ -215,7 +215,7 @@
     // The participant's fixed assignment for this dataset: which cases they
     // see, and who the other stakeholder is on each. Null when no assignment
     // exists for their role, in which case the app browses the full case tree.
-    // Built by scripts/build_exp_data.py.
+    // Built by eval/build_final_summative_study.py.
     let experimentIndex = null;
     let modelGlobalMetrics = null;
     let weights = { accuracy: 1/4, tpr: 1/4, tnr: 1/4, local_consistency: 1/4 };
@@ -284,7 +284,8 @@
     // 70% on its core criterion and 10% on each remaining criterion. This makes
     // Self/Other optima visibly different while preserving small side-payments
     // for joint-utility-improving compromise models. The same weights live in
-    // scripts/build_exp_data.py; regenerate exp_data whenever these change.
+    // eval/build_final_summative_study.py; regenerate Final_summative_study
+    // whenever these change.
     const personaTypes = {
       judges: {
         key: "judges",
@@ -604,4 +605,3 @@
         .sort((a, b) => b.value - a.value)[0]?.key || criteriaOrder[0];
     }
     window.primaryCriterionKeyForPersona = primaryCriterionKeyForPersona;
-

@@ -384,14 +384,17 @@
         finalDecisionStatusBanner.innerHTML = `Agreement reached: both sides stand behind model #${escapeHtml(String(selfModel.seed ?? "-"))}, which predicts <strong>${escapeHtml(selfLabel)}</strong>.`;
         return;
       }
-      finalDecisionStatusBanner.classList.add("conflict");
       if (state?.status === "impasse") {
+        finalDecisionStatusBanner.classList.add("conflict");
         finalDecisionStatusBanner.innerHTML = `No agreement: your final model predicts <strong>${escapeHtml(selfLabel)}</strong>, the Other-party's predicts <strong>${escapeHtml(otherLabel)}</strong>. The final decision is yours.`;
         return;
       }
-      finalDecisionStatusBanner.innerHTML = Number(selfModel.pred_class) === Number(otherModel.pred_class)
-        ? `Still negotiating (${escapeHtml(state?.label || "")}): the two standing models already agree on <strong>${escapeHtml(selfLabel)}</strong>, but you have not settled on one model.`
-        : `Still negotiating (${escapeHtml(state?.label || "")}): your model predicts <strong>${escapeHtml(selfLabel)}</strong>, the Other-party's predicts <strong>${escapeHtml(otherLabel)}</strong>.`;
+      if (Number(selfModel.pred_class) === Number(otherModel.pred_class)) {
+        finalDecisionStatusBanner.innerHTML = `Recommendation: <strong>${escapeHtml(selfLabel)}</strong>. Both sides' standing models support this decision.`;
+        return;
+      }
+      finalDecisionStatusBanner.classList.add("conflict");
+      finalDecisionStatusBanner.innerHTML = `Still negotiating (${escapeHtml(state?.label || "")}): your model predicts <strong>${escapeHtml(selfLabel)}</strong>, the Other-party's predicts <strong>${escapeHtml(otherLabel)}</strong>.`;
     }
 
     function renderFinalDecisionStatusBanner() {
@@ -629,4 +632,3 @@
         decisionReason.textContent = "No group is available for this case.";
       }
     }
-

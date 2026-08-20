@@ -776,7 +776,6 @@
     const NV2_CONCESSION_SCHEDULE = [0, 0.34, 0.62, 0.84];
     const NV2_DEMAND_EPSILON = 0.005;
     const NV2_ACCEPT_TOLERANCE = 0.004;
-
     /* ---- how movement gets said out loud ---------------------------------
        Every fact in this protocol is a share between 0 and 1, and the first
        version of the dialogue simply read them out: half a dozen percentages
@@ -840,6 +839,84 @@
     function nv2Utility(model, side) {
       if (!model || !nv2) return 0;
       return modelWeightedUtility(model, nv2.weights[side]);
+    }
+
+    // Estimate which final decision is better before the outcome is known.
+    // The probability comes only from the current case's Rashomon predictions;
+    // unlike the offline evaluator, this never reads the case's true label.
+    // TPR/TNR are decision-direction benefits, and fairness is the observed
+    // consistency of the models already predicting that label.
+    function nv2ExpectedDecisionDirection() {
+      if (!nv2 || !activeData) return null;
+      const models = (activeData.models || []).filter(Boolean);
+      if (!models.length) return null;
+      const probabilities = models
+        .map((model) => Number(model.pred_prob))
+        .filter(Number.isFinite)
+        .map((value) => Math.max(0, Math.min(1, value)));
+      const positiveProbability = probabilities.length
+        ? probabilities.reduce((total, value) => total + value, 0) / probabilities.length
+        : models.filter((model) => Number(model.pred_class) === 1).length / models.length;
+      const groups = activeData.reconciliation?.groups || [];
+      const summaries = Array.isArray(activeData.summary) ? activeData.summary : [];
+      const fairnessFor = (label) => {
+        const group = groups.find((item) => Number(item.class_id) === label);
+        const summary = summaries.find((item) => Number(item.class_id) === label);
+        const values = [
+          group?.criteria?.local_consistency,
+          group?.fairness_components?.local_consistency,
+          summary?.avg_local_consistency,
+          summary?.avg_similar_100_case_fairness,
+        ];
+        const value = values.map(Number).find(Number.isFinite);
+        return Number.isFinite(value) ? value : 0;
+      };
+      const rows = [0, 1].map((label) => {
+        const performance = {
+          accuracy: label === 1 ? positiveProbability : 1 - positiveProbability,
+          tpr: label === 1 ? 1 : 0,
+          tnr: label === 0 ? 1 : 0,
+          local_consistency: fairnessFor(label),
+        };
+        const utilityFor = (side) => {
+          // Keep this on the elicited weights themselves. The label-utility
+          // evaluator uses those weights directly; redistributing an inactive
+          // model criterion here would optimize a different objective.
+          const rowWeights = nv2.weights[side];
+          return criteriaOrder.reduce(
+            (total, key) => total + (rowWeights[key] || 0) * (performance[key] || 0),
+            0
+          );
+        };
+        const selfUtility = utilityFor("self");
+        const otherUtility = utilityFor("other");
+        return { label, selfUtility, otherUtility, jointUtility: selfUtility + otherUtility };
+      }).sort((a, b) => b.jointUtility - a.jointUtility || a.label - b.label);
+      const margin = rows[0].jointUtility - rows[1].jointUtility;
+      return {
+        // Always take the expected-joint argmax. Even when the margin is small,
+        // this guarantees that the production policy never knowingly chooses
+        // a lower-scoring decision direction; exact ties resolve to label 0.
+        preferredLabel: rows[0].label,
+        margin,
+        positiveProbability,
+        byLabel: rows,
+      };
+    }
+
+    // Direction is a feasibility preference, not a new hard constraint: if a
+    // round has no rational offer in the preferred label, retain the original
+    // feasible set rather than forcing an impossible or one-sided move.
+    function nv2PreferExpectedDecision(items, modelForItem = (item) => item) {
+      const preferredLabel = nv2?.decisionDirection?.preferredLabel;
+      if (preferredLabel == null) return items;
+      const aligned = items.filter((item) => Number(modelForItem(item)?.pred_class) === Number(preferredLabel));
+      return aligned.length ? aligned : items;
+    }
+
+    function nv2FollowsExpectedDecision(model) {
+      const preferredLabel = nv2?.decisionDirection?.preferredLabel;
+      return preferredLabel == null || Number(model?.pred_class) === Number(preferredLabel);
     }
 
     function nv2ModelBySeed(seed) {
@@ -1068,9 +1145,11 @@
       const ownForThem = nv2Utility(own, other);
       const moveBar = Number.isFinite(improvementTarget) ? improvementTarget : giveAmount;
       for (const tier of tiers) {
-        const feasible = pool.filter(tier.test);
-        if (!feasible.length) continue;
-        const moving = feasible.filter((model) => nv2Utility(model, other) - ownForThem >= moveBar - 1e-9);
+        const allFeasible = pool.filter(tier.test);
+        if (!allFeasible.length) continue;
+        const allMoving = allFeasible.filter((model) => nv2Utility(model, other) - ownForThem >= moveBar - 1e-9);
+        const moving = nv2PreferExpectedDecision(allMoving);
+        const feasible = nv2PreferExpectedDecision(allFeasible);
         // Concede the least that still moves them. Maximising *their* utility
         // instead would spend the whole reservation budget in one round, which
         // is not how a negotiator behaves — it is capitulation.
@@ -1087,6 +1166,23 @@
             })[0];
         if (pick && pick !== own && nv2Utility(pick, other) > ownForThem + 1e-6) {
           return { model: pick, tier: tier.name, reservation, giveFloor, demandFloor, reachedTarget: moving.length > 0, held: false };
+        }
+      }
+      // v0 is intentionally unconstrained, but a side that is still standing
+      // on the opposite decision by v2 must actually start converging. Choose
+      // the best direction-aligned model that remains above reservation when
+      // possible; this is a late fallback, not an opening-position rewrite.
+      if (versionIndex >= 2 && !nv2FollowsExpectedDecision(own)) {
+        const directional = pool.filter((model) => model !== own && nv2FollowsExpectedDecision(model));
+        const individuallyRational = directional.filter(aboveReservation);
+        const candidates = individuallyRational.length ? individuallyRational : directional;
+        const pick = candidates.slice().sort((a, b) => {
+          const jointDelta = (nv2Utility(b, side) + nv2Utility(b, other)) - (nv2Utility(a, side) + nv2Utility(a, other));
+          if (Math.abs(jointDelta) > 0.000001) return jointDelta;
+          return nv2Utility(b, side) - nv2Utility(a, side);
+        })[0];
+        if (pick) {
+          return { model: pick, tier: "decision_direction", reservation, giveFloor, demandFloor, reachedTarget: false, held: false };
         }
       }
       return { model: own, tier: "held", reservation, giveFloor, demandFloor, reachedTarget: false, held: true };
@@ -1135,7 +1231,8 @@
       // Tit-for-tat: answer a concession with a concession, and a stonewall
       // with a stonewall. Without this the other side keeps sweetening against
       // a party that never moves, and impasse becomes unreachable.
-      if (Number.isFinite(receivedGain) && receivedGain <= 0.001) {
+      const needsDecisionMove = !nv2FollowsExpectedDecision(nv2Position(side)?.model);
+      if (Number.isFinite(receivedGain) && receivedGain <= 0.001 && !(needsDecisionMove && versionIndex >= 2)) {
         return {
           model: nv2Position(side)?.model,
           tier: "hold",
@@ -1167,6 +1264,11 @@
       const plan = nv2AutoMove(side, offerModel, versionIndex, receivedGain);
       const counterUtility = plan.model ? nv2Utility(plan.model, side) : utility;
       const reservation = nv2Reservation(side, versionIndex);
+      // The opening optima may disagree, but accepting an off-direction model
+      // after bargaining starts would undo the case-level joint decision goal.
+      if (!nv2FollowsExpectedDecision(offerModel)) {
+        return { accept: false, reason: "lower_expected_joint_decision", utility, counterUtility, reservation, plan };
+      }
       if (utility >= counterUtility - NV2_ACCEPT_TOLERANCE) {
         return { accept: true, reason: "no_better_counter", utility, counterUtility, reservation, plan };
       }
@@ -1293,14 +1395,26 @@
     function nv2OfferCandidates() {
       if (!nv2) return [];
       const versionIndex = Math.min(NV2_MAX_VERSION, nv2NextVersion());
-      return (nv2.options || [])
+      const evaluated = (nv2.options || [])
         .map((model) => nv2CandidateFromModel(model, versionIndex))
-        .filter((item) => item && item.jointGain > 0.001 && item.otherGain > 0.001)
+        .filter(Boolean);
+      const improving = evaluated
+        .filter((item) => item && item.jointGain > 0.001 && item.otherGain > 0.001);
+      // Crossing into the better decision can be worthwhile even when the
+      // concrete model tradeoff is not model-utility-positive by itself. Keep
+      // such a direction-aligned fallback so the dropdown cannot strand Self
+      // on the wrong v0 label.
+      const offerable = improving.length ? improving : evaluated.filter((item) => nv2FollowsExpectedDecision(item.model));
+      // Never guide Self below its current reservation when at least one
+      // individually acceptable direction-aligned offer exists.
+      const acceptable = offerable.filter((item) => item.aboveReservation);
+      const rational = acceptable.length ? acceptable : offerable;
+      return nv2PreferExpectedDecision(rational, (item) => item.model)
         .sort((a, b) => {
-          const selfDelta = b.selfUtility - a.selfUtility;
-          if (Math.abs(selfDelta) > 0.000001) return selfDelta;
           const jointDelta = b.jointUtility - a.jointUtility;
           if (Math.abs(jointDelta) > 0.000001) return jointDelta;
+          const selfDelta = b.selfUtility - a.selfUtility;
+          if (Math.abs(selfDelta) > 0.000001) return selfDelta;
           return b.otherUtility - a.otherUtility;
         })
         .slice(0, 5);
@@ -1349,8 +1463,9 @@
     function resetNegotiateV2State() {
       if (!activeData) return;
       ensureDifferentProxyPersona();
-      const frontier = paretoOptimalModels(activeData.models || []);
-      const options = frontier.length ? frontier : (activeData.models || []);
+      const allModels = activeData.models || [];
+      const frontier = paretoOptimalModels(allModels);
+      const options = frontier.length ? frontier : allModels;
       const selfWeights = normalizeWeights(elicitedWeights || userWeights || weights);
       const otherWeights = normalizeWeights(proxyWeights || proxyIdealWeights());
       // Weights are captured once and never mutated again: they are each
@@ -1365,12 +1480,31 @@
         status: "open",
         agreed: null,
         pending: null,
+        decisionDirection: null,
         draft: { demandKey: null, giveKey: null, giveStep: "medium", selectedModelSeed: null },
         mutualHolds: 0,
         log: [],
       };
+      // Opening positions remain the two unconstrained stakeholder optima.
+      // The expected joint-decision direction guides negotiation only after
+      // v0; applying it before these anchors would manufacture agreement at
+      // the opening instead of letting the parties negotiate toward it.
       const selfBest = nv2BestModelFor("self", options);
       const otherBest = nv2BestModelFor("other", options);
+      nv2.decisionDirection = nv2ExpectedDecisionDirection();
+      // Once the case-level expected decision is known, negotiate *within*
+      // that decision. Otherwise model-level utility can pull a late offer
+      // back across the classification boundary and erase the decision gain.
+      // Pareto filtering is repeated inside the selected label because a model
+      // dominated globally by the opposite label can still be the best
+      // implementable version of the preferred final decision.
+      if (nv2.decisionDirection?.preferredLabel != null) {
+        const directionalModels = allModels.filter(
+          (model) => Number(model.pred_class) === Number(nv2.decisionDirection.preferredLabel)
+        );
+        const directionalFrontier = paretoOptimalModels(directionalModels);
+        if (directionalModels.length) nv2.options = directionalFrontier.length ? directionalFrontier : directionalModels;
+      }
       nv2.anchors = {
         self: { best: nv2Utility(selfBest, "self"), atTheirBest: nv2Utility(otherBest, "self") },
         other: { best: nv2Utility(otherBest, "other"), atTheirBest: nv2Utility(selfBest, "other") },
@@ -2323,4 +2457,3 @@
         });
       }
     }
-
