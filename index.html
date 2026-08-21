@@ -1097,6 +1097,10 @@
     .tutorial-badge-below { bottom: -28px; left: 50%; transform: translateX(-50%); }
     .tutorial-badge-left { left: -32px; top: 50%; transform: translateY(-50%); }
     .tutorial-badge-right { right: -20px; top: 50%; transform: translateY(-50%); }
+    .tutorial-badge-top-left { left: -32px; top: 16px; }
+    .tutorial-badge-tight-left { right: calc(100% + 3px); top: 50%; transform: translateY(-50%); }
+    .tutorial-badge-tight-right { left: calc(100% + 3px); top: 50%; transform: translateY(-50%); }
+    .tutorial-badge-tight-above { bottom: calc(100% + 3px); left: 50%; transform: translateX(-50%); }
     /* Grey = a part the walkthrough already covered on an earlier screen, kept
        on screen so the numbering stays continuous but stepped back from the
        parts this screen is actually about. */
@@ -1111,6 +1115,14 @@
     /* The header cells above the two score columns are empty spacers; give them
        height so the circle naming each column has somewhere to sit. */
     body.tutorial-mode .multi-optimal-table > .multi-optimal-corner { min-height: 26px; }
+    /* Keep the new negotiation labels visible inside the otherwise clipped chat
+       surface, and leave a little air above the three adjacent action badges. */
+    body.tutorial-mode.condition-negotiatev2 .chat-window { overflow: visible; }
+    body.tutorial-mode.condition-negotiatev2 .chat-window { border-color: #1f6fd0; }
+    body.tutorial-mode.condition-negotiatev2 .composer-actions { padding-top: 18px; }
+    .negotiate-v2-model-version-wrap { display: inline-flex; }
+    .negotiate-v2-model-offer-wrap { display: block; }
+    .negotiate-v2-model-offer-wrap > select { width: 100%; }
   </style>
 </head>
 <body>
@@ -1206,17 +1218,17 @@
     </section>
   </main>
 
-  <script src="js/config-state.js?v=20260807-welfare-framing"></script>
+  <script src="js/config-state.js?v=20260821-negotiation-tutorial"></script>
   <script src="js/utils-salience.js?v=20260820-final-summative-study"></script>
-  <script src="js/case-features.js?v=20260807-all-features"></script>
+  <script src="js/case-features.js?v=20260821-negotiation-tutorial"></script>
   <script src="js/persona-persistence.js?v=20260803-negotiation-move-split"></script>
   <script src="js/profiles-stakes.js?v=20260803-negotiation-move-split"></script>
   <script src="js/elicitation.js?v=20260803-negotiation-move-split"></script>
-  <script src="js/negotiation-ui.js?v=20260803-negotiation-move-split"></script>
+  <script src="js/negotiation-ui.js?v=20260821-negotiation-tutorial"></script>
   <script src="js/summary-guards.js?v=20260803-negotiation-move-split"></script>
   <script src="js/negotiation-engine.js?v=20260803-negotiation-move-split"></script>
   <script src="js/chat-decision.js?v=20260820-decision-recommendation"></script>
   <script src="js/main.js?v=20260807-welfare-framing"></script>
-  <script src="js/tutorial.js?v=20260803-negotiation-move-split"></script>
+  <script src="js/tutorial.js?v=20260821-negotiation-tutorial"></script>
 </body>
 </html>

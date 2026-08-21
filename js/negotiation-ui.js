@@ -136,7 +136,7 @@
         const isSystem = event.role === "system";
         if (!isSystem) turn += 1;
         return `
-        <div class="history-item ${event.role}${event.actionable ? " actionable" : ""}">
+        <div class="history-item ${event.role}${event.actionable ? " actionable" : ""}${event.tutorialPart ? ` tutorial-history-${event.tutorialPart}` : ""}">
           <div class="history-title">${isSystem ? "" : `${turn}. `}${event.title}</div>
           <div>${event.text}</div>
           ${event.weights ? `<div class="history-weights">${shortWeights(event.weights)}</div>` : ""}
@@ -1529,8 +1529,37 @@
           + `Your best is ${nv2ModelTag(selfBest)} (${escapeHtml(nv2PredictionLabel(selfBest))}); the ${escapeHtml(otherRole)}'s is ${nv2ModelTag(otherBest)} (${escapeHtml(nv2PredictionLabel(otherBest))})`
           + (sameClass ? ", and they point to the same decision." : ", and they point to opposite decisions.")
           + ` You get up to ${NV2_MAX_VERSION} offers; "Let them open" costs you nothing.`,
-        null
+        null,
+        isTutorialMode() ? { tutorialPart: "original" } : {}
       );
+      // The negotiation tutorial needs a short, stable exchange to point at.
+      // It is display-only: it does not alter either side's offer track, spend
+      // a round, or emit study telemetry.
+      if (isTutorialMode() && tutorialStage() === "negotiatev2") {
+        const tutorialSelfOffer = nv2OfferCandidates()[0]?.model || selfBest;
+        // Show both version controls at v1, matching the example first-round
+        // offers in the history below. These tutorial-only positions do not
+        // spend a real round or change the negotiation log.
+        nv2PushPosition("self", { version: 1, model: tutorialSelfOffer, act: "tutorial-example" });
+        nv2PushPosition("other", { version: 1, model: otherBest, act: "tutorial-example" });
+        negotiationEvents.push(
+          {
+            role: "user",
+            title: "My offer (example)",
+            text: `I can move from my original position and offer model ${nv2ModelTag(tutorialSelfOffer)} if we keep my highest-priority concern protected.`,
+            weights: null,
+            tutorialPart: "my-offer",
+          },
+          {
+            role: "proxy",
+            title: "Other-party offer (example)",
+            text: `That movement helps. I would counter with model ${nv2ModelTag(otherBest)}, which better protects my priorities.`,
+            weights: null,
+            tutorialPart: "other-offer",
+          }
+        );
+        renderHistory();
+      }
     }
 
     function negotiateV2SelectedItems() {
@@ -2224,7 +2253,11 @@
 
       const { candidates, selected } = nv2EnsureSelectedCandidate();
       const busy = negotiateV2Busy;
-      const canRequestOpening = nv2CanRequestOtherOpening();
+      // The tutorial shows a staged v1 exchange but still needs all three
+      // opening actions visible so the walkthrough can explain them. Outside
+      // the tutorial, the button disappears as soon as either side has moved.
+      const canRequestOpening = nv2CanRequestOtherOpening()
+        || (isTutorialMode() && tutorialStage() === "negotiatev2");
       const targetModel = nv2Position("other")?.model;
       const offerModel = selected?.model || null;
       const candidateHtml = candidates.map((candidate) => `
@@ -2278,7 +2311,7 @@
               <div class="response-config nv2-model-grid">
                 <div class="response-field">
                   <label for="nv2ModelSelect">Choose model to offer</label>
-                  ${modelSelectHtml}
+                  <span class="negotiate-v2-model-offer-wrap">${modelSelectHtml}</span>
                 </div>
               </div>
               <div class="nv2-give-hint">Options show the top 5 models that improve joint utility and the Other-party from your current position, sorted by your utility.</div>

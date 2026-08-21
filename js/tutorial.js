@@ -63,6 +63,27 @@
       { n: "6b", selector: ".multi-optimal-table > .multi-optimal-corner", index: 1, place: "inside", title: "{other}'s scores, 100% is perfect" },
     ];
 
+    // Negotiation is the fourth tutorial section. Everything already explained
+    // on the stakeholder-comparison screen remains numbered but steps back to
+    // grey; only D and the new negotiation controls are blue.
+    const TUTORIAL_NEGOTIATE_V2_BADGES = [
+      ...TUTORIAL_MULTI_OPTIMAL_BADGES.map((item) => ({ ...item, muted: true })),
+      { n: "D", selector: ".negotiation-panel", place: "top-left", title: "The negotiation workspace" },
+      // Native selects cannot contain a badge, so each version badge anchors
+      // to the role wrapper immediately around its dropdown.
+      { n: "7a", selector: ".negotiate-v2-model-version-wrap", index: 0, place: "tight-left", title: "Review my current or earlier model version" },
+      { n: "7b", selector: ".negotiate-v2-model-version-wrap", index: 1, place: "tight-right", title: "Review the Other-party's current or earlier model version" },
+      { n: "8a", selector: ".tutorial-history-original", place: "above", title: "Both sides' original positions" },
+      { n: "8b", selector: ".tutorial-history-my-offer", place: "right", title: "An example of my offer" },
+      { n: "8c", selector: ".tutorial-history-other-offer", place: "left", title: "An example of the Other-party's offer" },
+      // A select cannot reliably contain a span, so the badge anchors to the
+      // field that wraps it while still pointing at the model list itself.
+      { n: "9a", selector: ".negotiate-v2-model-offer-wrap", place: "tight-above", title: "Choose the model to offer" },
+      { n: "9b", selector: "#nv2OtherOpensButton", place: "above", title: "Let the Other-party make the first move" },
+      { n: "9c", selector: "#nv2HoldButton", place: "above", title: "Keep my current model" },
+      { n: "9d", selector: "#nv2SendButton", place: "above", title: "Send the selected offer" },
+    ];
+
     // Keyed by walkthrough stage first, then by condition so that opening any
     // condition with `_tutorial` still gets whatever that condition has. The
     // multiplicity and multistakeholder stages annotate the same screen and so
@@ -74,6 +95,7 @@
       multiplicity: TUTORIAL_MULTI_OPTIMAL_BADGES,
       multistakeholder: TUTORIAL_MULTI_OPTIMAL_BADGES,
       multioptimal: TUTORIAL_MULTI_OPTIMAL_BADGES,
+      negotiatev2: TUTORIAL_NEGOTIATE_V2_BADGES,
     };
 
     function tutorialBadgeSpec() {

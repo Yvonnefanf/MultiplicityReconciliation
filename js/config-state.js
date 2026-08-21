@@ -100,6 +100,9 @@
       // What this session has been opening; same screen as multiplicity.
       multioptimal: { condition: "multioptimal", neutralModelNames: true },
       multistakeholder: { condition: "multioptimal" },
+      // The final walkthrough stage keeps the stakeholder comparison on the
+      // left and introduces the negotiation workspace on the right.
+      negotiatev2: { condition: "negotiatev2" },
     };
     const activeTutorialStage = activeTutorialMode && TUTORIAL_STAGES[configuredStudyCondition]
       ? configuredStudyCondition

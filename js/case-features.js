@@ -1056,7 +1056,7 @@
         const optionsHtml = versions.map((version, index) =>
           `<option value="${index}" ${index === current ? "selected" : ""}>${escapeHtml(version.label)}${version.shared ? " ✓" : ""}</option>`
         ).join("");
-        return `<select class="negotiate-v2-model-version-select" data-role="${escapeHtml(item.role || "")}" title="This is the model ${escapeHtml(role)} stood behind at the selected round. Switch to review an earlier offer.">${optionsHtml}</select>`;
+        return `<span class="negotiate-v2-model-version-wrap"><select class="negotiate-v2-model-version-select" data-role="${escapeHtml(item.role || "")}" title="This is the model ${escapeHtml(role)} stood behind at the selected round. Switch to review an earlier offer.">${optionsHtml}</select></span>`;
       };
       // Each side's prediction cell sits directly above that side's score column
       // and names the role, so the scores below need no header of their own.
@@ -1227,4 +1227,3 @@
         <div class="case-pattern-note">Signed SHAP patterns: red supports High Risk; teal supports Low Risk.</div>
       `;
     }
-
