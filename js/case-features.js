@@ -1082,7 +1082,7 @@
                   `).join("")}
                 </div>
                 <div class="single-influence-box exposure-influence-column">
-                  <div class="single-diagram-heading">Model #${escapeHtml(modelId)} SHAP</div>
+                  <div class="single-diagram-heading">Influence</div>
                   <div class="single-framed-plot single-influence-plot exposure-influence-plot" style="grid-template-rows: repeat(${visiblePairs.length}, var(--single-row-height));">
                     ${visiblePairs.map((pair) => renderSingleInfluenceBar(shapValueFor(pattern.features, pair.row.keys), maxAbs)).join("")}
                   </div>
