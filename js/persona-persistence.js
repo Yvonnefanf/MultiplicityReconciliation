@@ -89,43 +89,11 @@
       return APP_ID_TO_DATASET[DEFAULT_APP_ID];
     }
 
-    // ---- Incoming preference ----------------------------------------------
-    //
-    // Elicitation happens on the external platform, so the participant's
-    // criterion weights are handed over in the URL. Values may be shares or
-    // percentages; normalizeWeights() rescales either.
-    // The first spelling of each criterion is the one the platform sends; the
-    // rest are accepted so a hand-written link still works. The internal key for
-    // individual fairness is local_consistency, but the URL spells it fairness.
-    const WEIGHT_URL_ALIASES = {
-      accuracy: ["accuracy_weight", "accuracy"],
-      tpr: ["tpr_weight", "tpr"],
-      tnr: ["tnr_weight", "tnr"],
-      local_consistency: ["fairness_weight", "fairness", "local_consistency_weight", "local_consistency"],
-    };
-
-    function weightsFromUrl() {
-      const raw = {};
-      let provided = false;
-      criteriaOrder.forEach((key) => {
-        const names = WEIGHT_URL_ALIASES[key] || [`${key}_weight`, key];
-        const value = urlParam(...names);
-        if (value == null) return;
-        const numeric = Number(value);
-        if (!Number.isFinite(numeric) || numeric < 0) return;
-        raw[key] = numeric;
-        provided = true;
-      });
-      // A partial vector is honoured -- an omitted criterion counts as zero --
-      // but an all-zero or empty one is not a preference, it is the platform
-      // having passed nothing, which is what the persona default is for.
-      if (!provided || !criteriaOrder.some((key) => raw[key] > 0)) return null;
-      return normalizeWeights(raw);
-    }
-
     function currentPersonaKeyFromUrl() {
-      const params = new URLSearchParams(window.location.search);
-      const value = normalizePersonaKey(params.get("persona"));
+      // Role is the only preference input accepted from the URL. `persona` is
+      // retained as the canonical/legacy spelling, while `role` and
+      // `user_role` let the study platform state the same assignment directly.
+      const value = normalizePersonaKey(urlParam("role", "persona", "user_role"));
       return personaTypes[value] ? value : null;
     }
 
@@ -175,8 +143,9 @@
 
     // The persona is assigned by the study platform. Without one the participant
     // still needs a role to speak from, and community_members is the agreed
-    // default -- it is also the fallback source of weights when the platform
-    // passed no ?..._weight= at all.
+    // default. Weights always come from that role's fixed template; URL weight
+    // parameters are deliberately ignored so a hand-edited link cannot change
+    // model selection or negotiation outcomes.
     function ensurePersonaKey() {
       const key = currentPersonaKeyFromUrl() || DEFAULT_PERSONA_KEY;
       setPersonaKeyInUrl(key);
@@ -184,7 +153,7 @@
     }
 
     function initialUserWeights() {
-      return weightsFromUrl() || normalizeWeights(personaTypes[ensurePersonaKey()]?.weights || weights);
+      return normalizeWeights(personaTypes[ensurePersonaKey()]?.weights || weights);
     }
 
     function rankOrderFromWeights(rawWeights) {
@@ -208,4 +177,3 @@
         negotiationProfile: buildNegotiationProfile(preference, weights),
       };
     }
-

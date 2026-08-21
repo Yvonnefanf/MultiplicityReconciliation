@@ -30,7 +30,7 @@
         proxyWeights = normalizeWeights(activeData.assignment?.other_weights || activeData.reconciliation.proxy_weights || weights);
       }
       if (showsNegotiationPanel()) {
-        resetNegotiationState("Start from your elicited preference. Choose an opening negotiation move, then send your first package offer.");
+        resetNegotiationState("Start from your role-default preference. Choose an opening negotiation move, then send your first package offer.");
       } else {
         negotiationEvents = [];
         pendingProxyCounter = null;
@@ -54,7 +54,7 @@
         composerNote = "Say what the Other-party's model costs you and what you can give up; the system finds the model that repays them most for it.";
         nv2Rerender();
       } else {
-        beginUserOpeningOffer(elicitedWeights, "Elicited preference baseline");
+        beginUserOpeningOffer(elicitedWeights, "Role-default preference baseline");
       }
     }
 
@@ -63,17 +63,15 @@
       currentPersona = makePersonaPreference();
       currentPersona.salienceParams = currentSalienceParams();
       applyInitialPreference();
-      // The participant's weights come from outside, so the role they speak from
-      // carries those weights and their implied ranking rather than the role
-      // template: otherwise their negotiation floors and targets would guard a
-      // criterion the platform never said they cared about.
+      // The URL selects the participant's role; that role's fixed default
+      // weights and implied ranking drive negotiation floors and targets.
       currentPersona.weights = { ...elicitedWeights };
       currentPersona.rankOrder = [...rankedCriteria];
       applySalienceParamsToCurrentPersona();
       proxyPersona = makeProxyPersonaPreference(currentPersona.key);
       personaInitialWeights = normalizeWeights(currentPersona.weights);
       resetNegotiationState("Start from your stated preference and send your first package offer.");
-      setWeights(elicitedWeights, "Elicited initial offer");
+      setWeights(elicitedWeights, "Role-default initial offer");
     }
 
     function historyTextForExport(html) {
@@ -213,7 +211,7 @@
         .map((key) => ({ key, option: degreeAdjustmentOptions.find((item) => item.key === composerAdjustments[key]) || degreeAdjustmentOptions[1] }))
         .filter((item) => item.option.key !== "keep");
       if (!changed.length) {
-        return hasSubmittedUserOffer() ? "Self keeps the Other-party offer about the same." : "Self keeps the elicited preference about the same.";
+        return hasSubmittedUserOffer() ? "Self keeps the Other-party offer about the same." : "Self keeps the role-default preference about the same.";
       }
       return `Self ${changed.map((item) => `${item.option.phrase} ${criteriaLabels[item.key]}`).join(", ")}.`;
     }
@@ -741,7 +739,7 @@
        negotiatev2 — model-space negotiation (core condition)
 
        The negotiated object is a MODEL drawn from the Pareto-optimal option
-       set, never a weight vector. Each side's elicited weights stay FIXED as
+       set, never a weight vector. Each side's role-default weights stay FIXED as
        a private utility function, so "giving ground" happens in outcome
        space and never implies that a stakeholder's values changed.
 
@@ -879,7 +877,7 @@
           local_consistency: fairnessFor(label),
         };
         const utilityFor = (side) => {
-          // Keep this on the elicited weights themselves. The label-utility
+          // Keep this on the role-default weights themselves. The label-utility
           // evaluator uses those weights directly; redistributing an inactive
           // model criterion here would optimize a different objective.
           const rowWeights = nv2.weights[side];

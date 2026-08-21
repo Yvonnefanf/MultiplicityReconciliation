@@ -4,8 +4,8 @@
 
     function buildNegotiationProfile(persona, idealWeights = persona?.weights) {
       const ideal = normalizeWeights(idealWeights || {});
-      // The participant's own persona carries the ranking implied by the weights
-      // the study platform passed in; the proxy roles keep their fixed template.
+      // Both participant and proxy carry the fixed ranking implied by their
+      // role-default weights; URL weight parameters are intentionally ignored.
       const rankOrder = persona?.rankOrder || personaRankDefaults[persona?.key] || criteriaOrder;
       const salienceParams = normalizeSalienceParams(persona?.salienceParams || defaultSalienceParams());
       const issues = {};
@@ -365,4 +365,3 @@
       active.forEach((key) => { expanded[key] = activeMass * (effective[key] || 0); });
       return normalizeWeights(expanded);
     }
-

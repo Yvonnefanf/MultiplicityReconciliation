@@ -1,9 +1,9 @@
-/* elicitation.js — proxy persona selection and the incoming participant preference
+/* elicitation.js — proxy persona selection and the role-default participant preference
    Part of the Negotiated Rashomon Reconciliation app. Loaded as an ordered
    classic script; all top-level declarations share one global scope.
 
-   Preference elicitation itself lives on the external study platform: this file
-   only turns what the URL hands over into the state the negotiation reads. */
+   The external study platform supplies only the participant role. This file
+   turns that role's fixed default weights into the state negotiation reads. */
 
     // Who the other stakeholder is comes from the case file, not from a draw and
     // not from ?other=: Final_summative_study pins one opponent per (role, case id), so the
@@ -119,10 +119,9 @@
       return [...preferred, ...fallback.filter((key) => !preferred.includes(key))].slice(0, criteriaOrder.length);
     }
 
-    // The participant's preference is fixed for the whole session: it is elicited
-    // on the external study platform and arrives in the URL, or falls back to the
-    // named persona's template weights. Nothing inside the app edits it, so it is
-    // simply re-derived whenever per-case state is reset.
+    // The participant's preference is fixed for the whole session and always
+    // comes from the named role's template. Nothing inside the app edits it, so
+    // it is simply re-derived whenever per-case state is reset.
     function applyInitialPreference() {
       elicitedWeights = initialUserWeights();
       rankedCriteria = rankOrderFromWeights(elicitedWeights);

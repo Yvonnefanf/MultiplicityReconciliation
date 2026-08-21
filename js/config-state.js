@@ -240,7 +240,7 @@
     let currentPersona = null;
     let proxyPersona = null;
     let personaInitialWeights = null;
-    // Ordered highest-weight-first, derived from the incoming preference; the
+    // Ordered highest-weight-first, derived from the selected role's defaults; the
     // app reads rankedCriteria[0] wherever it marks "the criterion you care
     // most about".
     let rankedCriteria = [];
