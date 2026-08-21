@@ -321,7 +321,9 @@
         <div class="aggregate-rec" title="${escapeHtml(tooltip)}">
           <div class="aggregate-rec-row aggregate-slider-row">
             <span class="aggregate-side self">Self importance <strong>${selfPct}%</strong></span>
-            <input id="aggregateSelfSlider" class="aggregate-slider" type="range" min="0" max="100" step="1" value="${selfPct}" aria-label="Self importance for aggregate recommendation">
+            <span class="aggregate-slider-wrap">
+              <input id="aggregateSelfSlider" class="aggregate-slider" type="range" min="0" max="100" step="1" value="${selfPct}" aria-label="Self importance for aggregate recommendation">
+            </span>
             <span class="aggregate-side other">Other-party <strong>${otherPct}%</strong></span>
           </div>
           <div class="aggregate-rec-row aggregate-result-row">

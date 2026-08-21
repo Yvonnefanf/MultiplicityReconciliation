@@ -100,6 +100,9 @@
       // What this session has been opening; same screen as multiplicity.
       multioptimal: { condition: "multioptimal", neutralModelNames: true },
       multistakeholder: { condition: "multioptimal" },
+      // Aggregate builds on the stakeholder comparison and introduces just one
+      // new control: the importance slider that combines their two models.
+      aggregate: { condition: "aggregate" },
       // The final walkthrough stage keeps the stakeholder comparison on the
       // left and introduces the negotiation workspace on the right.
       negotiatev2: { condition: "negotiatev2" },

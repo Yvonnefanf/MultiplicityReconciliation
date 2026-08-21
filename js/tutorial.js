@@ -63,6 +63,14 @@
       { n: "6b", selector: ".multi-optimal-table > .multi-optimal-corner", index: 1, place: "inside", title: "{other}'s scores, 100% is perfect" },
     ];
 
+    // Aggregate is the next walkthrough step. The comparison screen has already
+    // been taught, so all of its callouts recede to grey and only the new
+    // importance slider is introduced in blue.
+    const TUTORIAL_AGGREGATE_BADGES = [
+      ...TUTORIAL_MULTI_OPTIMAL_BADGES.map((item) => ({ ...item, muted: true })),
+      { n: 7, selector: ".aggregate-slider-wrap", place: "tight-left", title: "Adjust how much each stakeholder's model influences the aggregate recommendation" },
+    ];
+
     // Negotiation is the fourth tutorial section. Everything already explained
     // on the stakeholder-comparison screen remains numbered but steps back to
     // grey; only D and the new negotiation controls are blue.
@@ -95,6 +103,7 @@
       multiplicity: TUTORIAL_MULTI_OPTIMAL_BADGES,
       multistakeholder: TUTORIAL_MULTI_OPTIMAL_BADGES,
       multioptimal: TUTORIAL_MULTI_OPTIMAL_BADGES,
+      aggregate: TUTORIAL_AGGREGATE_BADGES,
       negotiatev2: TUTORIAL_NEGOTIATE_V2_BADGES,
     };
 
