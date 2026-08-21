@@ -218,12 +218,12 @@
               <td>${row.label}</td>
               <td><span class="badge class-${row.pred_class}">${label}</span></td>
               <td>${fmtProb(row.pred_prob)}</td>
-              <td>${fmtPct(row.local_consistency)}</td>
-              <td>${fmtPct(row.race_counterfactual_fairness)}</td>
-              <td>${fmtPct(row.gender_counterfactual_fairness)}</td>
-              <td>${fmtPct(row.sensitive_counterfactual_fairness)}</td>
-              <td>${fmtPct(row.tpr)}</td>
-              <td>${fmtPct(row.tnr)}</td>
+              <td>${fmtPerformancePct(row.local_consistency)}</td>
+              <td>${fmtPerformancePct(row.race_counterfactual_fairness)}</td>
+              <td>${fmtPerformancePct(row.gender_counterfactual_fairness)}</td>
+              <td>${fmtPerformancePct(row.sensitive_counterfactual_fairness)}</td>
+              <td>${fmtPerformancePct(row.tpr)}</td>
+              <td>${fmtPerformancePct(row.tnr)}</td>
             </tr>
           `;
         }).join("");

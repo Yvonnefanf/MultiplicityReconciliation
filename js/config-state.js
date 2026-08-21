@@ -273,6 +273,11 @@
     const LOW_JOINT_SALIENCE_THRESHOLD = 0.035;
     const MAX_COUNTER_IMPACT = 0.008;
     const fmtPct = (value) => value == null ? "-" : `${(value * 100).toFixed(1)}%`;
+    // Criterion performance is presented as an easy-to-scan whole percent in
+    // every UI surface. Calculations still use the original unrounded values.
+    const fmtPerformancePct = (value) => value == null || !Number.isFinite(Number(value))
+      ? "-"
+      : `${Math.round(Number(value) * 100)}%`;
     const fmtProb = (value) => value == null ? "-" : Number(value).toFixed(3);
 
     const degreeAdjustmentOptions = [

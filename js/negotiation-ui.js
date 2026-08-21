@@ -1434,10 +1434,10 @@
     function nv2CandidateOptionTitle(candidate) {
       if (!candidate) return "";
       const sacrifice = candidate.sacrifice
-        ? `Your ${candidate.sacrifice.label}: ${fmtPct(candidate.sacrifice.before)} -> ${fmtPct(candidate.sacrifice.after)} (${nv2PointLabel(candidate.sacrifice.amount)} lower)`
+        ? `Your ${candidate.sacrifice.label}: ${fmtPerformancePct(candidate.sacrifice.before)} -> ${fmtPerformancePct(candidate.sacrifice.after)} (${nv2PointLabel(candidate.sacrifice.amount)} lower)`
         : "No measurable drop on your criteria";
       const payback = candidate.payback
-        ? `Their ${candidate.payback.label}: ${fmtPct(candidate.payback.before)} -> ${fmtPct(candidate.payback.after)} (${nv2PointLabel(candidate.payback.amount)} higher)`
+        ? `Their ${candidate.payback.label}: ${fmtPerformancePct(candidate.payback.before)} -> ${fmtPerformancePct(candidate.payback.after)} (${nv2PointLabel(candidate.payback.amount)} higher)`
         : `Joint utility improves by ${nv2PointLabel(candidate.jointGain)}`;
       return `${nv2ModelTag(candidate.model)} (${nv2PredictionLabel(candidate.model)}). ${sacrifice}. ${payback}.`;
     }
@@ -2265,13 +2265,13 @@
       `).join("");
       const packageRows = selected ? nv2PackageRowsHtml([
         selected.sacrifice
-          ? { role: "You give up", issue: selected.sacrifice.label, value: `${fmtPct(selected.sacrifice.before)} -> ${fmtPct(selected.sacrifice.after)}` }
+          ? { role: "You give up", issue: selected.sacrifice.label, value: `${fmtPerformancePct(selected.sacrifice.before)} -> ${fmtPerformancePct(selected.sacrifice.after)}` }
           : { role: "You give up", issue: "nothing measurable", value: "no major criterion drop" },
         selected.payback
-          ? { role: "They gain", issue: selected.payback.label, value: `${fmtPct(selected.payback.before)} -> ${fmtPct(selected.payback.after)}` }
+          ? { role: "They gain", issue: selected.payback.label, value: `${fmtPerformancePct(selected.payback.before)} -> ${fmtPerformancePct(selected.payback.after)}` }
           : { role: "They gain", issue: "overall fit", value: `+${nv2PointLabel(selected.otherGain)}` },
         selected.demandKey
-          ? { role: "You ask", issue: criteriaLabels[selected.demandKey] || selected.demandKey, value: `${fmtPct(nv2MetricValue(targetModel, selected.demandKey))} -> ${fmtPct(nv2MetricValue(offerModel, selected.demandKey))}` }
+          ? { role: "You ask", issue: criteriaLabels[selected.demandKey] || selected.demandKey, value: `${fmtPerformancePct(nv2MetricValue(targetModel, selected.demandKey))} -> ${fmtPerformancePct(nv2MetricValue(offerModel, selected.demandKey))}` }
           : null,
       ]) : "";
       const previewLine = selected

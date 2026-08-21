@@ -417,12 +417,12 @@
       const max = Math.max(...values);
       const spread = Math.max(0, Number(stats?.spread) || 0);
       const label = stats?.item?.label || "Group";
-      const meanText = hasMean ? `${(Math.max(0, Math.min(1, meanValue)) * 100).toFixed(1)}%` : "-";
+      const meanText = hasMean ? fmtPerformancePct(Math.max(0, Math.min(1, meanValue))) : "-";
       const title = `${label} - ${stats?.item?.metricLabel || "metric"}: ${values.length} models`
-        + `${hasMean ? ` | mean ${(meanValue * 100).toFixed(1)}%` : ""}`
-        + ` | range ${(min * 100).toFixed(1)}% to ${(max * 100).toFixed(1)}%`
-        + ` | SD +/- ${(spread * 100).toFixed(1)}pt`
-        + `${hasOverall ? ` | ${baselineLabel} ${(overallValue * 100).toFixed(1)}%` : ""}`;
+        + `${hasMean ? ` | mean ${fmtPerformancePct(meanValue)}` : ""}`
+        + ` | range ${fmtPerformancePct(min)} to ${fmtPerformancePct(max)}`
+        + ` | SD +/- ${Math.round(spread * 100)}pt`
+        + `${hasOverall ? ` | ${baselineLabel} ${fmtPerformancePct(overallValue)}` : ""}`;
       return renderPerformanceValueCell(meanText, title, title, [
         "distribution",
         `class-${stats?.item?.classId}`,
@@ -435,23 +435,23 @@
       const hasValue = Number.isFinite(rawValue);
       const value = hasValue ? Math.max(0, Math.min(1, rawValue)) : null;
       const valuePct = hasValue ? Math.max(0, Math.min(100, value * 100)) : 0;
-      const pct = hasValue ? valuePct.toFixed(1) : "-";
+      const pct = hasValue ? String(Math.round(valuePct)) : "-";
       const delta = Number(stats?.delta);
       const spread = Math.max(0, Number(stats?.spread) || 0);
       const isComparable = Number.isFinite(delta);
       const absDelta = isComparable ? Math.abs(delta) : 0;
       const direction = !isComparable || absDelta < 0.005 ? "same" : delta > 0 ? "better" : "worse";
-      const deltaMagnitude = isComparable ? Math.abs(delta * 100).toFixed(1).replace(/\.0$/, "") : "-";
+      const deltaMagnitude = isComparable ? String(Math.round(Math.abs(delta * 100))) : "-";
       const hoverDirection = direction === "better" ? "better" : direction === "worse" ? "worse" : "similar";
       const comparisonLabel = stats?.comparisonLabel || baselineLabel || "avg";
       const hoverDeltaText = isComparable ? `${hoverDirection} than ${comparisonLabel} by ${deltaMagnitude}%` : `${comparisonLabel} comparison unavailable`;
       const overallValue = Number(stats?.overallValue);
       const hasOverall = Number.isFinite(overallValue);
       const overallPct = hasOverall ? Math.max(0, Math.min(100, overallValue * 100)) : null;
-      const overallText = hasOverall ? `${overallPct.toFixed(1)}%` : "unavailable";
+      const overallText = hasOverall ? `${Math.round(overallPct)}%` : "unavailable";
       const valueScope = stats?.valueScope || "current performance";
       const title = hasValue
-        ? `${stats?.item?.label || "Group"}: ${valueScope} ${pct}%; ${hoverDeltaText}; ${comparisonLabel} ${overallText}; SD +/- ${(spread * 100).toFixed(1)}pt`
+        ? `${stats?.item?.label || "Group"}: ${valueScope} ${pct}%; ${hoverDeltaText}; ${comparisonLabel} ${overallText}; SD +/- ${Math.round(spread * 100)}pt`
         : `${stats?.item?.label || "Group"}: subgroup/local metric unavailable for this criterion; ${comparisonLabel} cannot be computed from available local fields`;
       const ariaLabel = `${stats?.item?.label || "Group"} ${valueScope} ${pct}${hasValue ? "%" : ""}`;
       return renderPerformanceValueCell(hasValue ? `${pct}%` : "-", title, ariaLabel, [
@@ -762,10 +762,10 @@
         const score = Number(criteria[key]) || 0;
         const contribution = weight * score;
         const label = criteriaLabels[key] || key;
-        return `${label}: ${Math.round(weight * 100)}% x ${(score * 100).toFixed(1)}% = ${(contribution * 100).toFixed(1)}pt`;
+        return `${label}: ${Math.round(weight * 100)}% x ${Math.round(score * 100)}% = ${Math.round(contribution * 100)}pt`;
       });
       const total = performanceTableReliability(item, rowWeights);
-      return `Weighted sum for ${item?.label || "prediction"}: ${parts.join("; ")}; Total = ${(total * 100).toFixed(1)}%`;
+      return `Weighted sum for ${item?.label || "prediction"}: ${parts.join("; ")}; Total = ${Math.round(total * 100)}%`;
     }
 
     function renderOptimalPredictionCell(item, rowWeights, bestValue, kind) {

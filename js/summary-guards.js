@@ -157,7 +157,7 @@
       return activeData.models[0];
     }
 
-    function singleMetric(label, value, formatter = fmtPct) {
+    function singleMetric(label, value, formatter = fmtPerformancePct) {
       return `
         <div class="single-model-metric">
           <strong>${escapeHtml(formatter(value))}</strong>
@@ -250,7 +250,7 @@
       const criterionHeaders = criteriaOrder.map((key) => {
         const inactive = isInactiveCriterion(key);
         const stats = criterionStats(key);
-        const title = `${fullLabels[key] || criteriaLabels[key]}: ${criteriaDescriptions[key] || ""} Range ${fmtPct(stats.spread)}; min ${fmtPct(stats.min)}, max ${fmtPct(stats.max)}.`;
+        const title = `${fullLabels[key] || criteriaLabels[key]}: ${criteriaDescriptions[key] || ""} Range ${fmtPerformancePct(stats.spread)}; min ${fmtPerformancePct(stats.min)}, max ${fmtPerformancePct(stats.max)}.`;
         const subnote = inactive
           ? `<span class="matrix-subnote">~${Math.round(stats.mean * 100)}% +/-2</span>`
           : `<span class="matrix-subnote">range ${Math.round(stats.spread * 100)}pt</span>`;
@@ -285,8 +285,8 @@
               const inactive = isInactiveCriterion(key);
               const isBestCriterion = !inactive && bestCriterionByKey[key] === group.class_id;
               const violation = (guardViolationsByGroup[group.class_id] || []).find((item) => item.key === key);
-              const vetoIcon = violation ? `<span class="veto-icon" aria-label="performance floor violated" title="${escapeHtml(`${violation.role_label}: floor ${fmtPct(violation.threshold)}`)}"></span>` : "";
-              return `<td class="matrix-cell matrix-criterion-col ${inactive ? "inactive" : ""} ${isBestCriterion && !violation ? "best" : ""} ${violation ? "veto" : ""}">${inactive ? "-" : `${fmtPct(group.criteria[key])}${violation ? vetoIcon : isBestCriterion ? bestIcon : ""}`}</td>`;
+              const vetoIcon = violation ? `<span class="veto-icon" aria-label="performance floor violated" title="${escapeHtml(`${violation.role_label}: floor ${fmtPerformancePct(violation.threshold)}`)}"></span>` : "";
+              return `<td class="matrix-cell matrix-criterion-col ${inactive ? "inactive" : ""} ${isBestCriterion && !violation ? "best" : ""} ${violation ? "veto" : ""}">${inactive ? "-" : `${fmtPerformancePct(group.criteria[key])}${violation ? vetoIcon : isBestCriterion ? bestIcon : ""}`}</td>`;
             }).join("")}
             <td class="matrix-benefit-col user-benefit-col benefit-cell user ${isUserBest ? "best" : ""}">${fmtPct(group.userReliability)}${isUserBest ? bestIcon : ""}</td>
             ${includeProxy ? `<td class="matrix-benefit-col proxy-benefit-col benefit-cell proxy ${isProxyBest ? "best" : ""}">${fmtPct(group.proxyReliability)}${isProxyBest ? bestIcon : ""}</td>` : ""}
@@ -533,4 +533,3 @@
         })),
       };
     }
-
