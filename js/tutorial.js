@@ -69,6 +69,7 @@
     const TUTORIAL_AGGREGATE_BADGES = [
       ...TUTORIAL_MULTI_OPTIMAL_BADGES.map((item) => ({ ...item, muted: true })),
       { n: 7, selector: ".aggregate-slider-wrap", place: "tight-left", title: "Adjust how much each stakeholder's model influences the aggregate recommendation" },
+      { n: 8, selector: ".aggregate-result", place: "tight-left", title: "The recommendation produced by aggregating the two models" },
     ];
 
     // Negotiation is the fourth tutorial section. Everything already explained

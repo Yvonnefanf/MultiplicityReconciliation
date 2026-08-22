@@ -151,14 +151,19 @@
       return studyCondition() === "singleoptimal";
     }
 
-    // The walkthrough always runs on one hand-picked case per dataset, never on
-    // ?case=, so every numbered callout describes the same screen. The case is
-    // chosen for disagreement -- see scripts/export_tutorial_case.py -- and is
-    // served from its own file rather than cases/<i>.json so re-exporting the
-    // case tree cannot quietly move the tutorial onto a different case.
+    // Every walkthrough stage pins its case and ignores ?case=. Most stages use
+    // the general disagreement case exported by scripts/export_tutorial_case.py.
+    // Aggregate needs a separate case: on the general COMPAS case its result
+    // does not flip until Self importance is about 3%, which makes the slider's
+    // role look misleadingly weak. These picks flip near the middle instead.
     const TUTORIAL_CASE_INDEX_BY_DATASET = { compas: 1120, acs_coverage: 1226 };
+    const AGGREGATE_TUTORIAL_CASE_INDEX_BY_DATASET = { compas: 19, acs_coverage: 1110 };
     function tutorialCaseIndex(dataset) {
-      return TUTORIAL_CASE_INDEX_BY_DATASET[dataset ?? (activeData?.dataset || datasetSelect?.value)] ?? null;
+      const key = dataset ?? (activeData?.dataset || datasetSelect?.value);
+      const casesByDataset = activeTutorialStage === "aggregate"
+        ? AGGREGATE_TUTORIAL_CASE_INDEX_BY_DATASET
+        : TUTORIAL_CASE_INDEX_BY_DATASET;
+      return casesByDataset[key] ?? null;
     }
 
     function tutorialStage() {

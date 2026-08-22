@@ -179,11 +179,15 @@
       const caseIndex = caseSelect.value;
       if (caseIndex === "") return;
       setLoading("Loading model predictions...");
-      // Three sources, same shape downstream: the walkthrough's pinned case, the
+      // Three sources, same shape downstream: a walkthrough's pinned case, the
       // study assignment addressed by (role, case id), or -- only when there is
-      // no assignment for this role -- the raw case tree.
+      // no assignment for this role -- the raw case tree. Aggregate has its own
+      // tutorial pick because the shared tutorial case flips only at an extreme
+      // slider value; other walkthrough stages keep using the exported case.
       activeData = isTutorialMode()
-        ? await fetchJson(`/api/${dataset}/tutorial-case`)
+        ? await fetchJson(tutorialStage() === "aggregate"
+          ? `/api/${dataset}/cases/${tutorialCaseIndex(dataset)}`
+          : `/api/${dataset}/tutorial-case`)
         : experimentIndex
           ? await fetchJson(`/api/${dataset}/exp/${experimentIndex.user_role}/${caseIndex}`)
           : await fetchJson(`/api/${dataset}/cases/${caseIndex}`);
