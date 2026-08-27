@@ -573,6 +573,7 @@
     function applyDatasetCopy(dataset) {
       const copy = DATASET_COPY[dataset] || DATASET_COPY.compas;
       activeDatasetCopyKey = DATASET_COPY[dataset] ? dataset : "compas";
+      document.body.setAttribute("data-dataset", activeDatasetCopyKey);
       Object.assign(criteriaLabels, copy.criteriaLabels);
       Object.assign(criteriaShortLabels, copy.criteriaShortLabels);
       Object.assign(criteriaAbbrLabels, copy.criteriaAbbrLabels);

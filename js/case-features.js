@@ -239,6 +239,16 @@
       return found ? String(found[0]) : String(fallback);
     }
 
+    function influenceAxisLabels(dataset, labelNames) {
+      if (dataset === "acs_coverage") {
+        return { low: "No Cover", high: "Cover" };
+      }
+      return {
+        low: labelNames?.[0] || "Type 1",
+        high: labelNames?.[1] || "Type 2",
+      };
+    }
+
     function renderPatternCell(value, mode, maxAbs, label, count) {
       if (!count) return `<span class="pattern-empty">No models</span>`;
       const numeric = Number(value) || 0;
@@ -521,8 +531,7 @@
         : "-";
       const predictionClassName = Number.isFinite(predictedClass) ? `class-${predictedClass}` : "unknown";
       const modelId = selectedModel?.seed ?? selectedModel?.id ?? selectedModel?.label ?? "-";
-      const lowLabel = labelNames?.[0] || "Type 1";
-      const highLabel = labelNames?.[1] || "Type 2";
+      const { low: lowLabel, high: highLabel } = influenceAxisLabels(dataset, labelNames);
       const evalMetricDefs = [
         { label: "Accuracy", localKeys: ["subgroup_accuracy", "local_accuracy"], modelKeys: ["subgroup_accuracy", "local_accuracy"], overallKeys: ["test_accuracy"], rankKey: "accuracy" },
         { label: "Fairness", localKeys: ["local_consistency"], modelKeys: ["local_consistency"], overallKeys: ["global_consistency", "test_consistency", "overall_consistency", "overall_local_consistency"], rankKey: "local_consistency" },
@@ -827,8 +836,7 @@
         ...perModelExtremes,
         0.001
       );
-      const lowLabel = labelNames?.[0] || "Type 1";
-      const highLabel = labelNames?.[1] || "Type 2";
+      const { low: lowLabel, high: highLabel } = influenceAxisLabels(dataset, labelNames);
       const evalMetricDefs = [
         { label: "Accuracy", localKey: "subgroup_accuracy", overallKey: "test_accuracy", rankKey: "accuracy" },
         { label: "Individual Fairness", localKey: "local_consistency", overallKey: "local_consistency", rankKey: "local_consistency" },
@@ -992,8 +1000,7 @@
         ...visiblePairs.flatMap((pair) => pair.values.map((value) => Math.abs(value))),
         0.001
       );
-      const lowLabel = labelNames?.[0] || "Type 1";
-      const highLabel = labelNames?.[1] || "Type 2";
+      const { low: lowLabel, high: highLabel } = influenceAxisLabels(dataset, labelNames);
       const evalMetricDefs = [
         { label: "Accuracy", localKeys: ["subgroup_accuracy", "local_accuracy"], modelKeys: ["subgroup_accuracy", "local_accuracy"], rankKey: "accuracy" },
         { label: "Individual Fairness", localKeys: ["local_consistency"], modelKeys: ["local_consistency"], rankKey: "local_consistency" },

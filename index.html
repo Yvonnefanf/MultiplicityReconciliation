@@ -18,7 +18,7 @@
       --brown: #49351d;
       --blue: #56718f;
       --orange: #b06e36;
-      --green: #52785e;
+      --green: #157633;
       --proxy: #f19647;
       --proxy-bg: #fff1e6;
       --proxy-border: #f6bb83;
@@ -301,7 +301,7 @@
     .single-influence-bar { display: block; height: 22px; position: absolute; top: 50%; transform: translateY(-50%); }
     .single-influence-bar.high { background: #ef2b2f; left: 50%; }
     .single-influence-bar.low { background: #3f87df; right: 50%; }
-    .single-influence-labels { color: #ef2b2f; display: flex; font-size: 14px; font-weight: 500; justify-content: space-between; line-height: 1; margin-top: -14px; }
+    .single-influence-labels { color: #ef2b2f; display: flex; font-size: 14px; font-weight: 500; justify-content: space-between; line-height: 1; margin-top: -14px; white-space: nowrap; }
     .single-influence-labels span:first-child { color: #3f87df; }
     .single-prediction-arrow { align-self: center; color: #000; font-size: 30px; font-weight: 500; white-space: nowrap; }
     .single-ai-prediction { align-items: center; align-self: center; display: grid; gap: 18px; justify-items: center; width: 200px; margin-top: -30px;}
@@ -1063,6 +1063,28 @@
     .badge { display: inline-flex; align-items: center; min-width: 72px; justify-content: center; border-radius: 999px; padding: 3px 8px; color: #fff; font-size: 12px; font-weight: 750; }
     .badge.class-0 { background: var(--blue); }
     .badge.class-1 { background: var(--orange); }
+    /* Welfare outcome theme: class 0 = No Need Cover; class 1 = Should Cover. */
+    body[data-dataset="acs_coverage"] .pattern-fill.low,
+    body[data-dataset="acs_coverage"] .single-influence-bar.low,
+    body[data-dataset="acs_coverage"] .shap-summary-dot.low,
+    body[data-dataset="acs_coverage"] .bar.class-0,
+    body[data-dataset="acs_coverage"] .badge.class-0 { background: #bebebe; }
+    body[data-dataset="acs_coverage"] .pattern-fill.high,
+    body[data-dataset="acs_coverage"] .single-influence-bar.high,
+    body[data-dataset="acs_coverage"] .shap-summary-dot.high,
+    body[data-dataset="acs_coverage"] .bar.class-1,
+    body[data-dataset="acs_coverage"] .badge.class-1 { background: var(--green); }
+    body[data-dataset="acs_coverage"] .single-prediction-result.class-0,
+    body[data-dataset="acs_coverage"] .single-influence-labels span:first-child,
+    body[data-dataset="acs_coverage"] .single-ai-box.class-0,
+    body[data-dataset="acs_coverage"] .multi-optimal-prediction-value.class-0,
+    body[data-dataset="acs_coverage"] .aggregate-result.class-0 { color: #bebebe; }
+    body[data-dataset="acs_coverage"] .single-prediction-result.class-1,
+    body[data-dataset="acs_coverage"] .single-influence-labels,
+    body[data-dataset="acs_coverage"] .single-ai-box.class-1,
+    body[data-dataset="acs_coverage"] .multi-optimal-prediction-value.class-1,
+    body[data-dataset="acs_coverage"] .aggregate-result.class-1 { color: var(--green); }
+    body[data-dataset="acs_coverage"] .badge.class-0 { color: #222; }
     .status { color: var(--muted); font-size: 14px; padding: 18px 0; }
     @media (max-width: 1180px) {
       body.reconcile-mode main { width: min(1200px, calc(100vw - 56px)); }
@@ -1219,16 +1241,16 @@
     </section>
   </main>
 
-  <script src="js/config-state.js?v=20260822-aggregate-tutorial"></script>
+  <script src="js/config-state.js?v=20260827-welfare-outcome-theme"></script>
   <script src="js/utils-salience.js?v=20260820-final-summative-study"></script>
-  <script src="js/case-features.js?v=20260821-whole-performance-percent"></script>
+  <script src="js/case-features.js?v=20260827-welfare-influence-labels"></script>
   <script src="js/persona-persistence.js?v=20260821-role-default-weights"></script>
   <script src="js/profiles-stakes.js?v=20260821-role-default-weights"></script>
   <script src="js/elicitation.js?v=20260821-role-default-weights"></script>
   <script src="js/negotiation-ui.js?v=20260821-whole-performance-percent"></script>
   <script src="js/summary-guards.js?v=20260821-whole-performance-percent"></script>
   <script src="js/negotiation-engine.js?v=20260803-negotiation-move-split"></script>
-  <script src="js/chat-decision.js?v=20260822-aggregate-tutorial"></script>
+  <script src="js/chat-decision.js?v=20260827-aggregate-slider-message"></script>
   <script src="js/main.js?v=20260822-aggregate-tutorial-case"></script>
   <script src="js/tutorial.js?v=20260822-aggregate-tutorial"></script>
 </body>
