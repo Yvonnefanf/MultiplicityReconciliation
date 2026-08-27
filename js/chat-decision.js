@@ -336,16 +336,33 @@
       `;
     }
 
+    function postAggregateSliderPercentage(selfPercentage) {
+      const params = new URLSearchParams(window.location.search);
+      window.parent.postMessage({
+        source: "multiplicity-reconciliation",
+        protocol: "aggregate",
+        type: "slider_percentage",
+        timestamp: new Date().toISOString(),
+        payload: {
+          caseId: params.get("case"),
+          persona: params.get("persona"),
+          appId: params.get("appId"),
+          selfPercentage,
+        },
+      }, "*");
+    }
+
     function wireAggregateRecommendationSlider() {
       const slider = document.getElementById("aggregateSelfSlider");
       if (slider && slider.dataset.aggregateSliderWired !== "true") {
         slider.dataset.aggregateSliderWired = "true";
-        const updateAggregateBannerInPlace = () => {
+        const updateAggregateBannerInPlace = (shouldPostPercentage = false) => {
           aggregateSelfShare = (Number(slider.value) || 0) / 100;
           const updated = aggregateRecommendation();
           const root = slider.closest(".aggregate-rec");
           const updatedSelfPct = Math.round(updated.selfShare * 100);
           const updatedOtherPct = 100 - updatedSelfPct;
+          if (shouldPostPercentage) postAggregateSliderPercentage(updatedSelfPct);
           const selfText = root?.querySelector(".aggregate-side.self strong");
           const otherText = root?.querySelector(".aggregate-side.other strong");
           const result = root?.querySelector(".aggregate-result");
@@ -359,7 +376,7 @@
           if (prob) prob.textContent = `weighted P(high) ${Number.isFinite(updated.highProb) ? fmtProb(updated.highProb) : "-"}`;
           if (root) root.title = aggregateRecommendationTooltip(updated);
         };
-        slider.addEventListener("input", updateAggregateBannerInPlace);
+        slider.addEventListener("input", () => updateAggregateBannerInPlace(true));
         slider.addEventListener("change", () => {
           updateAggregateBannerInPlace();
           renderReconciliation();
