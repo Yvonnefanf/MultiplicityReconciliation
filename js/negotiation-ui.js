@@ -105,6 +105,7 @@
           title,
           text: historyTextForExport(text),
           weights: event.weights,
+          utility: event.utility || null,
         });
       }
       renderHistory();
@@ -137,6 +138,7 @@
         <div class="history-item ${event.role}${event.actionable ? " actionable" : ""}${event.tutorialPart ? ` tutorial-history-${event.tutorialPart}` : ""}">
           <div class="history-title">${isSystem ? "" : `${turn}. `}${event.title}</div>
           <div>${event.text}</div>
+          ${event.utility ? nv2UtilityChangeHtml(event.utility) : ""}
           ${event.weights ? `<div class="history-weights">${shortWeights(event.weights)}</div>` : ""}
         </div>
       `;
@@ -837,6 +839,71 @@
     function nv2Utility(model, side) {
       if (!model || !nv2) return 0;
       return modelWeightedUtility(model, nv2.weights[side]);
+    }
+
+    function nv2UtilitySnapshot(model, previousModel = null) {
+      if (!model || !nv2) return null;
+      const utilityFor = (side) => {
+        const value = nv2Utility(model, side);
+        const previous = previousModel ? nv2Utility(previousModel, side) : value;
+        const best = Number(nv2.anchors?.[side]?.best);
+        return {
+          value,
+          delta: value - previous,
+          fromBest: Number.isFinite(best) ? value - best : null,
+        };
+      };
+      return { self: utilityFor("self"), other: utilityFor("other") };
+    }
+
+    function nv2UtilityMoveLabel(utility) {
+      const selfDelta = Number(utility?.self?.delta) || 0;
+      const otherDelta = Number(utility?.other?.delta) || 0;
+      const epsilon = 0.0005;
+      if (selfDelta > epsilon && otherDelta > epsilon) return { label: "Win–win", tone: "winwin" };
+      if (selfDelta < -epsilon && otherDelta < -epsilon) return { label: "Lose–lose", tone: "loss" };
+      if (selfDelta < -epsilon && otherDelta > epsilon) return { label: "Trade-off · you concede", tone: "tradeoff" };
+      if (selfDelta > epsilon && otherDelta < -epsilon) return { label: "Trade-off · they concede", tone: "tradeoff" };
+      if (selfDelta > epsilon) return { label: "You gain", tone: "gain" };
+      if (otherDelta > epsilon) return { label: "Other-party gains", tone: "gain" };
+      if (selfDelta < -epsilon) return { label: "You sacrifice", tone: "loss" };
+      if (otherDelta < -epsilon) return { label: "Other-party sacrifices", tone: "loss" };
+      return { label: "No utility change", tone: "neutral" };
+    }
+
+    function nv2UtilityDeltaLabel(delta) {
+      const points = Math.abs((Number(delta) || 0) * 100);
+      if (points < 0.05) return { text: "No change", tone: "neutral" };
+      return delta > 0
+        ? { text: `+${points.toFixed(1)} pp · Gain`, tone: "gain" }
+        : { text: `−${points.toFixed(1)} pp · Sacrifice`, tone: "loss" };
+    }
+
+    function nv2UtilityChangeHtml(utility) {
+      if (!utility?.self || !utility?.other) return "";
+      const move = nv2UtilityMoveLabel(utility);
+      const card = (label, item) => {
+        const delta = nv2UtilityDeltaLabel(item.delta);
+        const fromBestPoints = Number.isFinite(item.fromBest) ? Math.abs(item.fromBest * 100) : 0;
+        const fromBest = fromBestPoints < 0.05
+          ? "At own best"
+          : `${item.fromBest > 0 ? "+" : "−"}${fromBestPoints.toFixed(1)} pp from own best`;
+        return `
+          <div class="utility-party">
+            <div class="utility-party-head"><span>${label}</span><strong>${(item.value * 100).toFixed(1)}%</strong></div>
+            <span class="utility-delta ${delta.tone}">${delta.text}</span>
+            <span class="utility-baseline">${fromBest}</span>
+          </div>`;
+      };
+      return `
+        <div class="history-utility" aria-label="Utility change for both parties">
+          <div class="utility-move ${move.tone}">${move.label}</div>
+          <div class="utility-parties">
+            ${card("You", utility.self)}
+            ${card("Other-party", utility.other)}
+          </div>
+          <div class="utility-caption">Change vs this speaker's previous position</div>
+        </div>`;
     }
 
     // Estimate which final decision is better before the outcome is known.
@@ -1546,6 +1613,7 @@
             title: "My offer (example)",
             text: `I can move from my original position and offer model ${nv2ModelTag(tutorialSelfOffer)} if we keep my highest-priority concern protected.`,
             weights: null,
+            utility: nv2UtilitySnapshot(tutorialSelfOffer, selfBest),
             tutorialPart: "my-offer",
           },
           {
@@ -1553,6 +1621,7 @@
             title: "Other-party offer (example)",
             text: `That movement helps. I would counter with model ${nv2ModelTag(otherBest)}, which better protects my priorities.`,
             weights: null,
+            utility: nv2UtilitySnapshot(otherBest, otherBest),
             tutorialPart: "other-offer",
           }
         );
@@ -2030,13 +2099,15 @@
     function nv2AcceptPendingOffer() {
       if (!nv2 || negotiateV2Busy || nv2.status === "agreed" || !nv2.pending) return;
       const pending = nv2.pending;
+      const previousModel = nv2Position("self")?.model;
       nv2PushPosition("self", { version: nv2NextVersion(), model: pending.model, act: "accept" });
       nv2Settle(pending.model, pending.version, "user_accepted");
       addHistory(
         "user",
         `Self accepts · v${pending.version}`,
         `I accept model ${nv2ModelTag(pending.model)} (${escapeHtml(nv2PredictionLabel(pending.model))}) as the model we both stand behind.`,
-        null
+        null,
+        { utility: nv2UtilitySnapshot(pending.model, previousModel) }
       );
       addHistory("system", "Agreement reached", `Both sides now stand behind model ${nv2ModelTag(pending.model)}.`, null);
       nv2Rerender();
@@ -2114,7 +2185,13 @@
         voice: voiced.source,
       });
       nv2.pending = { from: "other", model: offerModel, version: versionIndex };
-      addHistory("proxy", `Other-party opening offer · v${versionIndex}`, `${voiced.text}${nv2VoiceTag(voiced)}`, null);
+      addHistory(
+        "proxy",
+        `Other-party opening offer · v${versionIndex}`,
+        `${voiced.text}${nv2VoiceTag(voiced)}`,
+        null,
+        { utility: nv2UtilitySnapshot(offerModel, previousModel) }
+      );
       negotiateV2Busy = false;
       nv2Rerender();
     }
@@ -2165,7 +2242,8 @@
           // A hold is two beats, not three: there is no move to announce.
           ? `Model ${nv2ModelTag(targetModel)} still leaves ${escapeHtml(criteriaLabels[draft.demandKey] || draft.demandKey)} ${nv2Shortfall(nv2MetricValue(previousModel, draft.demandKey) - nv2MetricValue(targetModel, draft.demandKey))} what I can sign off on. I am staying with model ${nv2ModelTag(offerModel)} — close that gap and I will look again.`
           : nv2SelfOfferText({ offerModel, previousModel, targetModel, demandKey: search.demandKey || draft.demandKey, giveKey: search.giveKey || draft.giveKey }),
-        null
+        null,
+        { utility: nv2UtilitySnapshot(offerModel, previousModel) }
       );
       nv2Rerender();
 
@@ -2194,7 +2272,13 @@
       if (decision.accept) {
         nv2PushPosition("other", { version: otherVersion, model: offerModel, act: "accept", voice: voiced.source });
         nv2Settle(offerModel, versionIndex, decision.reason);
-        addHistory("proxy", `Other-party accepts · v${otherVersion}`, text, null);
+        addHistory(
+          "proxy",
+          `Other-party accepts · v${otherVersion}`,
+          text,
+          null,
+          { utility: nv2UtilitySnapshot(offerModel, otherPrevious) }
+        );
         addHistory("system", "Agreement reached", `Both sides now stand behind model ${nv2ModelTag(offerModel)} (${escapeHtml(nv2PredictionLabel(offerModel))}).`, null);
       } else {
         nv2PushPosition("other", {
@@ -2206,7 +2290,13 @@
           voice: voiced.source,
         });
         nv2.pending = { from: "other", model: move.model, version: otherVersion };
-        addHistory("proxy", move.stonewalled ? `Other-party holds · v${otherVersion}` : `Other-party counter-offer · v${otherVersion}`, text, null);
+        addHistory(
+          "proxy",
+          move.stonewalled ? `Other-party holds · v${otherVersion}` : `Other-party counter-offer · v${otherVersion}`,
+          text,
+          null,
+          { utility: nv2UtilitySnapshot(move.model, otherPrevious) }
+        );
         // One firm round is a signal, not a breakdown — a participant should be
         // able to hold once and still come back with an offer. Two rounds where
         // neither side moves is a real deadlock.
