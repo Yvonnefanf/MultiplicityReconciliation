@@ -1023,6 +1023,23 @@
     @keyframes dots { 0% { content: ""; } 25% { content: "."; } 50% { content: ".."; } 75%, 100% { content: "..."; } }
     .history-title { font-weight: 850; margin-bottom: 3px; }
     .history-weights { color: var(--muted); font-variant-numeric: tabular-nums; }
+    .history-utility { border-top: 1px solid rgba(76, 72, 65, .14); margin-top: 8px; padding-top: 7px; }
+    .utility-move { border-radius: 999px; display: inline-flex; font-size: 10px; font-weight: 850; letter-spacing: .01em; margin-bottom: 6px; padding: 2px 7px; }
+    .utility-move.winwin, .utility-move.gain { background: #dff3e8; color: #17663c; }
+    .utility-move.tradeoff { background: #fff0d5; color: #8a5700; }
+    .utility-move.loss { background: #f8dfdf; color: #9a3434; }
+    .utility-move.neutral { background: rgba(98, 94, 87, .1); color: #68635b; }
+    .utility-parties { display: grid; gap: 6px; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .utility-party { background: rgba(255, 255, 255, .52); border: 1px solid rgba(76, 72, 65, .1); border-radius: 8px; min-width: 0; padding: 6px 7px; }
+    .utility-party-head { align-items: baseline; display: flex; gap: 5px; justify-content: space-between; }
+    .utility-party-head span { color: #6f6a62; font-size: 10px; font-weight: 750; }
+    .utility-party-head strong { color: #25231f; font-size: 13px; font-variant-numeric: tabular-nums; }
+    .utility-delta, .utility-baseline { display: block; font-size: 9px; font-variant-numeric: tabular-nums; line-height: 1.35; margin-top: 1px; }
+    .utility-delta { font-weight: 800; }
+    .utility-delta.gain { color: #177044; }
+    .utility-delta.loss { color: #a03a3a; }
+    .utility-delta.neutral, .utility-baseline, .utility-caption { color: #817b72; }
+    .utility-caption { font-size: 9px; line-height: 1.25; margin-top: 5px; }
     .history-offer { border-radius: 8px; margin: 4px 0; padding: 4px 8px; font-weight: 600; }
     .history-offer-self { background: #eaf1f6; border: 1px solid #c7d7e4; color: #223; }
     .history-offer-other { background: var(--proxy-bg); border: 1px solid var(--proxy-border); color: #2d271f; }
@@ -1247,7 +1264,7 @@
   <script src="js/persona-persistence.js?v=20260821-role-default-weights"></script>
   <script src="js/profiles-stakes.js?v=20260821-role-default-weights"></script>
   <script src="js/elicitation.js?v=20260821-role-default-weights"></script>
-  <script src="js/negotiation-ui.js?v=20260821-whole-performance-percent"></script>
+  <script src="js/negotiation-ui.js?v=20260903-utility-history"></script>
   <script src="js/summary-guards.js?v=20260821-whole-performance-percent"></script>
   <script src="js/negotiation-engine.js?v=20260803-negotiation-move-split"></script>
   <script src="js/chat-decision.js?v=20260827-aggregate-slider-message"></script>
